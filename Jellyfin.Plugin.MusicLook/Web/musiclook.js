@@ -15,7 +15,11 @@
   var jam = { code: null, state: null, version: 0, names: {}, startedIndex: -2, startedAt: 0, timer: null, busy: false };
 
   /* ---------- Hilfsfunktionen ---------- */
-  function client() { return window.ApiClient || null; }
+  function client() {
+    if (window.ApiClient) return window.ApiClient;
+    var sc = window.ServerConnections;
+    return sc && typeof sc.currentApiClient === 'function' ? sc.currentApiClient() : null;
+  }
   function uid() { var c = client(); return c && c.getCurrentUserId ? c.getCurrentUserId() : null; }
 
   function el(tag, cls, text) {
@@ -80,7 +84,12 @@
 
   function resolveItem(id) {
     if (typeCache[id]) return Promise.resolve(typeCache[id]);
-    return client().getItem(uid(), id).then(function (item) { typeCache[id] = item; return item; });
+    var c = client();
+    var req = typeof c.getItem === 'function'
+      ? c.getItem(uid(), id)
+      : call('GET', 'Items', { Ids: id, UserId: uid(), Fields: '', EnableImages: false, EnableUserData: false })
+        .then(function (r) { return r && r.Items && r.Items[0]; });
+    return req.then(function (item) { if (item) typeCache[id] = item; return item; });
   }
 
   function isMusicItem(item) {
@@ -176,7 +185,8 @@
 
   function createPlaylist(name, ids) {
     var parts = chunk(ids, 80);
-    return call('POST', 'Playlists', null, { Name: name, Ids: parts[0] || [], UserId: uid(), MediaType: 'Audio' })
+    // IsPublic must be false explicitly: Jellyfin creates playlists as public by default.
+    return call('POST', 'Playlists', null, { Name: name, Ids: parts[0] || [], UserId: uid(), MediaType: 'Audio', IsPublic: false })
       .then(function (r) {
         var pid = r && (r.Id || r.id);
         if (!pid) throw new Error('keine Playlist-ID erhalten');

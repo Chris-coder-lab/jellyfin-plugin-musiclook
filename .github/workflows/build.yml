@@ -1,5 +1,7 @@
 name: Build Music Look
 
+# Ein Tag wie v0.1.0.2 genuegt: der Workflow testet, baut (Version = Tag), legt das Release an
+# und traegt Pruefsumme und Download-URL selbst in manifest.json ein.
 on:
   push:
     tags: ["v*"]
@@ -10,9 +12,18 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Version bestimmen
+        run: |
+          VERSION="0.1.0.0"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Der Tag muss vier Zahlen haben, z.B. v0.1.0.2 (gefunden: $VERSION)"; exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Sortier-Logik testen (ffmpeg erzeugt echte MP3-Testdateien)
         run: |
@@ -24,12 +35,12 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Build
-        run: dotnet build Jellyfin.Plugin.MusicLook/Jellyfin.Plugin.MusicLook.csproj -c Release -o out
+        run: >
+          dotnet build Jellyfin.Plugin.MusicLook/Jellyfin.Plugin.MusicLook.csproj -c Release -o out
+          -p:Version=${VERSION} -p:AssemblyVersion=${VERSION} -p:FileVersion=${VERSION}
 
       - name: Package
         run: |
-          VERSION="0.1.0.0"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
           mkdir pkg
           cp out/Jellyfin.Plugin.MusicLook.dll pkg/
           (cd pkg && zip -r "../musiclook_${VERSION}.zip" .)
@@ -44,4 +55,18 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" musiclook_*.zip --title "${GITHUB_REF_NAME}" --notes "Music Look ${GITHUB_REF_NAME}"
+        run: |
+          gh release create "${GITHUB_REF_NAME}" "musiclook_${VERSION}.zip" --title "${GITHUB_REF_NAME}" --notes "Music Look ${VERSION}" \
+            || gh release upload "${GITHUB_REF_NAME}" "musiclook_${VERSION}.zip" --clobber
+
+      - name: Manifest automatisch aktualisieren
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          python3 scripts/update_manifest.py "musiclook_${VERSION}.zip" "${GITHUB_REPOSITORY_OWNER}" "${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "Manifest ${VERSION}" || echo "Manifest unveraendert"
+          git push origin main

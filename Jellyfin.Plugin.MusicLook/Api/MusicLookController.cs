@@ -14,7 +14,6 @@ namespace Jellyfin.Plugin.MusicLook.Api;
 [Route("MusicLook")]
 public class MusicLookController : ControllerBase
 {
-    private const string AuthPolicy = "DefaultAuthorization";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly JamService _jam;
@@ -43,7 +42,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Gets the public client configuration.</summary>
     [HttpGet("Config")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult Config()
     {
         var c = Plugin.Instance?.Configuration;
@@ -56,7 +55,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Lists the other users (id and name) for playlist sharing.</summary>
     [HttpGet("Users")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult Users()
     {
         var me = CurrentUserId();
@@ -65,17 +64,45 @@ public class MusicLookController : ControllerBase
             return Unauthorized();
         }
 
-        var list = _users.GetUsers()
+        var list = ListUsers()
             .Where(u => u.Id != me.Value)
-            .Select(u => new { id = u.Id, name = u.Username })
-            .OrderBy(u => u.name, StringComparer.CurrentCultureIgnoreCase)
+            .OrderBy(u => u.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(u => new { id = u.Id, name = u.Name })
             .ToList();
         return JsonResult(list);
     }
 
+    // Older Jellyfin versions expose a Users property, newer ones GetUsers(); reflection keeps the plugin
+    // independent of that difference (and of the namespace of the User entity).
+    private IEnumerable<(Guid Id, string Name)> ListUsers()
+    {
+        var type = _users.GetType();
+        var source = type.GetMethod("GetUsers", Type.EmptyTypes)?.Invoke(_users, null)
+                     ?? type.GetProperty("Users")?.GetValue(_users);
+        if (source is not System.Collections.IEnumerable items)
+        {
+            yield break;
+        }
+
+        foreach (var item in items)
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            var itemType = item.GetType();
+            if (itemType.GetProperty("Id")?.GetValue(item) is Guid id
+                && itemType.GetProperty("Username")?.GetValue(item) is string name)
+            {
+                yield return (id, name);
+            }
+        }
+    }
+
     /// <summary>Creates a Jam.</summary>
     [HttpPost("Jam")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamCreate()
     {
         if (!JamAllowed(out var me))
@@ -89,7 +116,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Joins a Jam.</summary>
     [HttpPost("Jam/{code}/Join")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamJoin([FromRoute] string code)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -102,7 +129,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Leaves a Jam.</summary>
     [HttpPost("Jam/{code}/Leave")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamLeave([FromRoute] string code)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -116,7 +143,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Gets the Jam state; returns 204 when unchanged since <paramref name="since"/>.</summary>
     [HttpGet("Jam/{code}")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamGet([FromRoute] string code, [FromQuery] long since = 0)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -130,7 +157,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Appends tracks (comma separated ids) to the Jam queue.</summary>
     [HttpPost("Jam/{code}/Add")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamAdd([FromRoute] string code, [FromQuery] string ids)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -159,7 +186,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Removes a queue entry.</summary>
     [HttpPost("Jam/{code}/Remove")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamRemove([FromRoute] string code, [FromQuery] int index)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -172,7 +199,7 @@ public class MusicLookController : ControllerBase
 
     /// <summary>Advances the queue (compare-and-set on <paramref name="from"/>).</summary>
     [HttpPost("Jam/{code}/Advance")]
-    [Authorize(Policy = AuthPolicy)]
+    [Authorize]
     public IActionResult JamAdvance([FromRoute] string code, [FromQuery] int from, [FromQuery] int? to = null)
     {
         if (!JamAllowed(out var me) || !JamService.IsValidCode(code))
@@ -203,7 +230,9 @@ public class MusicLookController : ControllerBase
 
     private Guid? CurrentUserId()
     {
-        var claim = User.Claims.FirstOrDefault(c => c.Type.EndsWith("UserId", StringComparison.OrdinalIgnoreCase));
+        // "Jellyfin-UserId" is the claim Jellyfin's own authentication handler sets.
+        var claim = User.FindFirst("Jellyfin-UserId")
+                    ?? User.Claims.FirstOrDefault(c => c.Type.EndsWith("UserId", StringComparison.OrdinalIgnoreCase));
         return claim is not null && Guid.TryParse(claim.Value, out var id) && id != Guid.Empty ? id : null;
     }
 
