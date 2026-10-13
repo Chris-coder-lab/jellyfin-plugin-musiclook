@@ -4,6 +4,7 @@ using Jellyfin.Plugin.MusicLook.Jam;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.MusicLook.Api;
@@ -64,7 +65,7 @@ public class MusicLookController : ControllerBase
             return Unauthorized();
         }
 
-        var list = _users.Users
+        var list = _users.GetUsers()
             .Where(u => u.Id != me.Value)
             .Select(u => new { id = u.Id, name = u.Username })
             .OrderBy(u => u.name, StringComparer.CurrentCultureIgnoreCase)
