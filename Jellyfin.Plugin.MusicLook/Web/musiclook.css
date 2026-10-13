@@ -1,0 +1,293 @@
+/* Music Look - Spotify-aehnlicher Look, nur aktiv im Musik-Bereich (body.ml-music). */
+
+body.ml-music {
+  --ml-bg: #121212;
+  --ml-surface: #181818;
+  --ml-elevated: #242424;
+  --ml-hover: #2c2c2c;
+  --ml-text: #ffffff;
+  --ml-muted: #b3b3b3;
+  --ml-accent: #1ed760;
+  --ml-radius: 12px;
+  --ml-font: "Figtree", "Inter", "Helvetica Neue", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font-family: var(--ml-font);
+  color: var(--ml-text);
+}
+
+body.ml-music,
+body.ml-music .skinBody,
+body.ml-music .mainAnimatedPage,
+body.ml-music .libraryPage,
+body.ml-music .page {
+  background: var(--ml-bg) !important;
+}
+
+body.ml-music .skinHeader {
+  background: rgba(18, 18, 18, 0.92) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Reiter als Chips */
+body.ml-music .emby-tabs-slider {
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+body.ml-music .emby-tab-button {
+  border-radius: 999px !important;
+  background: var(--ml-elevated);
+  color: var(--ml-text) !important;
+  padding: 0.55em 1.2em !important;
+  font-weight: 600;
+  border: 0 !important;
+  margin: 0 !important;
+  transition: background 0.15s ease;
+}
+
+body.ml-music .emby-tab-button:hover {
+  background: var(--ml-hover);
+}
+
+body.ml-music .emby-tab-button-active {
+  background: var(--ml-text) !important;
+  color: #000 !important;
+}
+
+body.ml-music .emby-tab-button-active .emby-button-foreground,
+body.ml-music .emby-tab-button .emby-button-foreground {
+  color: inherit !important;
+}
+
+body.ml-music .emby-tabs-slider .emby-tab-button::after,
+body.ml-music .emby-tab-button-active::after {
+  display: none !important;
+}
+
+/* Karten */
+body.ml-music .card .cardBox {
+  background: var(--ml-surface);
+  border-radius: var(--ml-radius);
+  padding: 10px;
+  transition: background 0.2s ease;
+}
+
+body.ml-music .card .cardBox:hover {
+  background: var(--ml-hover);
+}
+
+body.ml-music .card .cardImageContainer,
+body.ml-music .card .cardPadder {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+body.ml-music .card[data-type="MusicArtist"] .cardImageContainer {
+  border-radius: 50% !important;
+}
+
+body.ml-music .card[data-type="MusicArtist"] .cardText {
+  text-align: center;
+}
+
+body.ml-music .cardText {
+  color: var(--ml-muted);
+  font-size: 0.85em;
+}
+
+body.ml-music .cardText-first {
+  color: var(--ml-text);
+  font-weight: 700;
+}
+
+body.ml-music .cardOverlayFab-primary,
+body.ml-music .cardOverlayButton-br .cardOverlayFab-primary {
+  background: var(--ml-accent) !important;
+  color: #000 !important;
+  border-radius: 50% !important;
+}
+
+/* Listen / Titel */
+body.ml-music .listItem {
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+body.ml-music .listItem:hover {
+  background: var(--ml-hover);
+}
+
+body.ml-music .listItemBodyText {
+  font-weight: 600;
+}
+
+body.ml-music .secondary.listItemBodyText {
+  color: var(--ml-muted);
+  font-weight: 400;
+}
+
+/* Buttons / Eingaben */
+body.ml-music .raised,
+body.ml-music .button-submit {
+  border-radius: 999px !important;
+}
+
+body.ml-music .button-submit,
+body.ml-music .detailButton.raised {
+  background: var(--ml-accent) !important;
+  color: #000 !important;
+  font-weight: 700;
+}
+
+body.ml-music .emby-input,
+body.ml-music .emby-select,
+body.ml-music .searchfields-txtSearch {
+  border-radius: 999px !important;
+  background: var(--ml-elevated) !important;
+  border: 0 !important;
+  padding-left: 1em !important;
+}
+
+body.ml-music ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.ml-music ::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 999px; }
+body.ml-music ::-webkit-scrollbar-track { background: transparent; }
+
+body.ml-music h1, body.ml-music h2, body.ml-music h3, body.ml-music .sectionTitle {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Plus-Button auf Karten und Titelzeilen */
+.ml-plus {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--ml-muted, #b3b3b3);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--ml-text, #fff);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  z-index: 5;
+  transition: transform 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+body.ml-music .ml-plus { display: inline-flex; }
+.ml-plus:hover { transform: scale(1.1); border-color: var(--ml-accent, #1ed760); color: var(--ml-accent, #1ed760); }
+.ml-plus.ml-card { position: absolute; right: 14px; bottom: 74px; }
+.ml-plus.ml-row { margin-left: 8px; flex: 0 0 auto; }
+.ml-plus.ml-detail { width: 40px; height: 40px; margin: 0 8px; }
+
+.ml-pill {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.6em 1.3em;
+  background: var(--ml-elevated, #242424);
+  color: var(--ml-text, #fff);
+  font: 700 0.95em var(--ml-font, system-ui);
+  cursor: pointer;
+}
+body.ml-music .ml-pill { display: inline-flex; }
+.ml-pill:hover { background: var(--ml-hover, #2c2c2c); }
+.ml-pill.ml-primary { background: var(--ml-accent, #1ed760); color: #000; }
+
+/* Jam-Schalter */
+.ml-jam-fab {
+  display: none;
+  position: fixed;
+  right: 16px;
+  bottom: 96px;
+  z-index: 1000;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+body.ml-music .ml-jam-fab { display: inline-flex; }
+
+/* Bottom-Sheet */
+.ml-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: ml-fade 0.15s ease;
+}
+
+.ml-sheet {
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--ml-elevated, #242424);
+  color: var(--ml-text, #fff);
+  font-family: var(--ml-font, system-ui);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  animation: ml-up 0.2s ease;
+}
+
+@media (min-width: 700px) {
+  .ml-backdrop { align-items: center; }
+  .ml-sheet { border-radius: 20px; }
+}
+
+.ml-sheet h3 { margin: 0 0 12px; font-size: 1.2em; font-weight: 800; }
+.ml-sheet .ml-muted { color: var(--ml-muted, #b3b3b3); font-size: 0.9em; }
+
+.ml-row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ml-row-item:hover { background: var(--ml-hover, #2c2c2c); }
+.ml-row-item .ml-grow { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-row-item.ml-current .ml-grow { color: var(--ml-accent, #1ed760); font-weight: 700; }
+
+.ml-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7em 1em;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ml-bg, #121212);
+  color: inherit;
+  font: inherit;
+  margin: 8px 0;
+}
+
+.ml-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 110px;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #000;
+  border-radius: 999px;
+  padding: 0.7em 1.4em;
+  font: 700 0.95em var(--ml-font, system-ui);
+  z-index: 100001;
+  animation: ml-fade 0.15s ease;
+}
+
+@keyframes ml-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ml-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-backdrop, .ml-sheet, .ml-toast { animation: none; }
+}

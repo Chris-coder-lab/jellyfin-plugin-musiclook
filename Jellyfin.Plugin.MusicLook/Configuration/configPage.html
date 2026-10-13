@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Music Look</title>
+</head>
+<body>
+<div id="MusicLookConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="MusicLookConfigForm">
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="AccentColor">Akzentfarbe (Hex)</label>
+                    <input id="AccentColor" name="AccentColor" type="text" is="emby-input" pattern="^#[0-9a-fA-F]{6}$" />
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="JamMaxMembers">Max. Teilnehmer pro Jam (2-20)</label>
+                    <input id="JamMaxMembers" name="JamMaxMembers" type="number" min="2" max="20" is="emby-input" />
+                </div>
+                <label class="checkboxContainer">
+                    <input id="JamEnabled" name="JamEnabled" type="checkbox" is="emby-checkbox" />
+                    <span>Jam-Sitzungen aktivieren</span>
+                </label>
+                <br />
+                <h3>Automatisch einsortieren</h3>
+                <div class="fieldDescription">Alle MP3-Dateien in den Eingangsordner legen. Das Plugin liest die Tags (sonst den Dateinamen "Künstler - Titel") und verschiebt sie nach Künstler/Album in den Musikordner. Der Jellyfin-Dienst braucht Schreibrechte auf beide Ordner.</div>
+                <label class="checkboxContainer">
+                    <input id="InboxEnabled" name="InboxEnabled" type="checkbox" is="emby-checkbox" />
+                    <span>Eingangsordner automatisch einsortieren</span>
+                </label>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="InboxPath">Eingangsordner (absoluter Pfad)</label>
+                    <input id="InboxPath" name="InboxPath" type="text" is="emby-input" maxlength="500" />
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="LibraryPath">Musikordner der Jellyfin-Bibliothek (absoluter Pfad, darf nicht im Eingang liegen)</label>
+                    <input id="LibraryPath" name="LibraryPath" type="text" is="emby-input" maxlength="500" />
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="InboxIntervalSeconds">Prüfintervall in Sekunden (15-3600)</label>
+                    <input id="InboxIntervalSeconds" name="InboxIntervalSeconds" type="number" min="15" max="3600" is="emby-input" />
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="InboxMinAgeSeconds">Mindestalter einer Datei in Sekunden (5-3600)</label>
+                    <input id="InboxMinAgeSeconds" name="InboxMinAgeSeconds" type="number" min="5" max="3600" is="emby-input" />
+                </div>
+                <br />
+                <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                    <span>Speichern</span>
+                </button>
+            </form>
+        </div>
+    </div>
+    <script type="text/javascript">
+        (function () {
+            var pluginId = 'b1f0f4a2-6c5e-4d7a-9a3e-2f6a1c8d9e41';
+            var page = document.querySelector('#MusicLookConfigPage');
+            page.addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+                    document.querySelector('#AccentColor').value = c.AccentColor || '#1ed760';
+                    document.querySelector('#JamMaxMembers').value = c.JamMaxMembers || 8;
+                    document.querySelector('#JamEnabled').checked = c.JamEnabled !== false;
+                    document.querySelector('#InboxEnabled').checked = c.InboxEnabled === true;
+                    document.querySelector('#InboxPath').value = c.InboxPath || '';
+                    document.querySelector('#LibraryPath').value = c.LibraryPath || '';
+                    document.querySelector('#InboxIntervalSeconds').value = c.InboxIntervalSeconds || 60;
+                    document.querySelector('#InboxMinAgeSeconds').value = c.InboxMinAgeSeconds || 30;
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+            document.querySelector('#MusicLookConfigForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+                    var color = document.querySelector('#AccentColor').value;
+                    c.AccentColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1ed760';
+                    var max = parseInt(document.querySelector('#JamMaxMembers').value, 10);
+                    c.JamMaxMembers = Math.min(20, Math.max(2, isNaN(max) ? 8 : max));
+                    c.JamEnabled = document.querySelector('#JamEnabled').checked;
+                    c.InboxEnabled = document.querySelector('#InboxEnabled').checked;
+                    c.InboxPath = document.querySelector('#InboxPath').value.trim();
+                    c.LibraryPath = document.querySelector('#LibraryPath').value.trim();
+                    var iv = parseInt(document.querySelector('#InboxIntervalSeconds').value, 10);
+                    c.InboxIntervalSeconds = Math.min(3600, Math.max(15, isNaN(iv) ? 60 : iv));
+                    var age = parseInt(document.querySelector('#InboxMinAgeSeconds').value, 10);
+                    c.InboxMinAgeSeconds = Math.min(3600, Math.max(5, isNaN(age) ? 30 : age));
+                    ApiClient.updatePluginConfiguration(pluginId, c).then(Dashboard.processPluginConfigurationUpdateResult);
+                });
+                return false;
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>
