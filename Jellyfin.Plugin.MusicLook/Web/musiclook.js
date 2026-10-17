@@ -861,6 +861,7 @@
     jamAddIds: jamAddIds, mySession: mySession,
     jamState: function () { return { code: jam.code, state: jam.state }; },
     refresh: function () { updateContext(); },
+    forceMusic: function (on) { musicOn = null; setMusic(!!on); },
     uncloak: uncloak
   };
   window.MusicLook = api;

@@ -305,6 +305,61 @@
     OV.closeAll(function () { location.hash = target; });
   }
 
+  // Verlaesst die Spotify-Ansicht Richtung Jellyfin (Startseite / alle Bibliotheken) und prueft das Ergebnis nach, weil ein Browser
+  // (Firefox) den Seitenwechsel nach dem Schliessen der Ebenen verschlucken kann. Reihenfolge: Adresse erneut setzen,
+  // Ansicht zwangsweise ausblenden, zuletzt die Seite einmalig neu laden (das, was man sonst von Hand mit F5 tun muesste).
+  var leaveSeq = 0;
+  function goJellyfin(href) {
+    var target = href.charAt(0) === '#' ? href : '#' + href;
+    var from = location.hash, seq = ++leaveSeq;
+    function same() { return String(location.hash || '').toLowerCase() === target.toLowerCase(); }
+    function appShown() {
+      var r = document.getElementById('ml-app');
+      return document.body.classList.contains('ml-app-on') || !!(r && !r.hidden);
+    }
+    function blank() {
+      var n = 0, kids = document.body.children;
+      for (var i = 0; i < kids.length; i++) {
+        var k = kids[i];
+        if (k.id === 'ml-app' || /^(SCRIPT|STYLE|LINK)$/.test(k.tagName) || (k.classList && (k.classList.contains('ml-toast') || k.classList.contains('ml-full')))) continue;
+        n += String(k.innerText || '').replace(/\s+/g, '').length;
+      }
+      return n < 8;
+    }
+    function reloadOnce() {
+      var au = document.querySelectorAll('audio');
+      for (var i = 0; i < au.length; i++) if (!au[i].paused && !au[i].ended) return;   // laufende Wiedergabe hier nie unterbrechen
+      var now = Date.now(), last = 0;
+      try { last = +window.sessionStorage.getItem('ml.leaveReload') || 0; window.sessionStorage.setItem('ml.leaveReload', String(now)); } catch (e) { /* ohne Speicher */ }
+      if (now - last < 60000) return;
+      try { location.reload(); } catch (e) { /* ignorieren */ }
+    }
+    var moved = false;   // hat sich die Adresse seit dem Klick geaendert? (dann ist der Nutzer selbst weitergegangen)
+    function onNav() { if (location.hash !== from) moved = true; }
+    window.addEventListener('hashchange', onNav);
+    window.addEventListener('popstate', onNav);
+    function done() { window.removeEventListener('hashchange', onNav); window.removeEventListener('popstate', onNav); }
+    function check(step) {
+      if (seq !== leaveSeq) { done(); return; }
+      if (step >= 3) done();
+      if (!same()) {
+        // Nur kurz nach dem Klick und nur, wenn die Adresse unveraendert blieb: der Seitenwechsel ist verloren gegangen, also erneut.
+        if (step <= 1 && !moved && location.hash === from) {
+          try { location.assign(location.href.split('#')[0] + target); } catch (e) { location.hash = target; }
+        }
+        return;
+      }
+      if (appShown()) {
+        if (step >= 1 && ML.app && typeof ML.app.forceLeave === 'function') { try { ML.app.forceLeave(); } catch (e) { /* naechster Versuch */ } }
+        else { try { ML.refresh(); } catch (e) { /* naechster Versuch */ } }
+        return;
+      }
+      if (step >= 2 && blank()) reloadOnce();
+    }
+    go(target);
+    [350, 1100, 2600, 4200].forEach(function (ms, i) { setTimeout(function () { check(i); }, ms); });
+  }
+
   /* ---------- Verlauf fuer Ebenen ----------
      Jede Ebene (Player-Seite, Warteschlange, Menues) bekommt einen eigenen Eintrag im Browser-Verlauf. "Zurueck" (Geraetetaste,
      Wischgeste, Browser) schliesst dadurch erst die Ebene und bleibt auf der Playlist, statt die Seite zu verlassen. */
@@ -367,7 +422,8 @@
       var open = stack.splice(0);
       open.reverse().forEach(function (e) { e.closed = true; e.close(true); });
       queue.push(function () { back(applied - entryCount()); });
-      if (then) queue.push(function () { try { then(); } finally { next(); } });
+      // Erst nach dem Ereignis des Verlaufs ausfuehren: Firefox verschluckt sonst den Seitenwechsel, der mitten im popstate-Ereignis ausgeloest wird.
+      if (then) queue.push(function () { setTimeout(function () { try { then(); } finally { next(); } }, 40); });
       next();
     }
 
@@ -637,6 +693,7 @@
   }
   function sessionCall(s, path, params) { return call('POST', 'Sessions/' + s.Id + '/' + path, params || null); }
 
+  var playIntent = null;   // { key, ids }: zuletzt von hier gestartete Playlist
   var PLAY_CHUNK = 150;   // Die Titel stehen in der Adresse; so bleibt sie unter ca. 5 KB.
 
   // Wartet, bis der erste Titel laeuft, damit nachfolgende "PlayLast"-Befehle die Warteschlange erweitern statt neu zu starten.
@@ -657,6 +714,8 @@
     opts = opts || {};
     if (!ids.length) return Promise.resolve();
     start = clamp(start || 0, 0, ids.length - 1);
+    // Merkt, aus welcher Playlist (oder Lieblingssongs) hier gestartet wird; so ist die gruene Markierung auf diesem Geraet eindeutig.
+    playIntent = opts.ctx ? { key: String(opts.ctx), ids: (ids.length <= PLAY_CHUNK ? ids : ids.slice(start)).slice() } : null;
     if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto();
     var head, startIndex, rest = [];
     if (ids.length <= PLAY_CHUNK) { head = ids; startIndex = start; }
@@ -1300,7 +1359,7 @@
     heart.addEventListener('click', function (e) { e.stopPropagation(); toggleLike(track, ctx, i, heart); });
     row.appendChild(heart);
     row.appendChild(iconBtn('more_v', t('more'), 'ml-track-more', function () { trackMenu(track, ctx, i); }));
-    function play() { playIds(idsOf(ctx.tracks), i); }
+    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx) }); }
     row.addEventListener('click', play);
     row.addEventListener('dblclick', play);
     row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); play(); } });
@@ -1343,7 +1402,7 @@
     }
     var more = iconBtn('more_v', t('more'), 'ml-track-more', function () { trackMenu(track, ctx, i); });
     row.appendChild(more);
-    function play() { playIds(idsOf(ctx.tracks), i); }
+    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx) }); }
     row.addEventListener('click', play);
     row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); play(); } });
     return row;
@@ -1733,7 +1792,7 @@
     else p = Promise.resolve([]);
     p.then(function (tracks) {
       var ids = idsOf(tracks);
-      if (ids.length) playIds(ids, 0); else toast(t('nothingYet'));
+      if (ids.length) playIds(ids, 0, { ctx: item.Type === 'Playlist' ? nid(item.Id) : '' }); else toast(t('nothingYet'));
     }, function () { toast(t('playFailed')); });
   }
 
@@ -1820,7 +1879,7 @@
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
-        { icon: 'home', label: t('jellyfinHome'), run: function () { go('#/home'); } },
+        { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
         { hidden: !me.admin, icon: 'info', label: t('dashboardLbl'), run: function () { go('#/dashboard'); } },
         { icon: 'person', label: t('settingsLbl'), run: function () { go('#/mypreferencesmenu'); } }
       ]);
@@ -2450,14 +2509,22 @@
   }
 
   // Alles abspielen (bei Ordnern mit Unterordnern werden zuerst alle Titel darunter eingesammelt).
+  // Schluessel der Playlist, die diese Ansicht abspielt ('liked' = Lieblingssongs); Alben, Ordner usw. haben keinen.
+  function ctxKeyOf(ctx) {
+    if (!ctx) return '';
+    if (ctx.kind === 'liked') return 'liked';
+    if (ctx.kind === 'playlist' && ctx.pl && ctx.pl.id) return nid(ctx.pl.id);
+    return '';
+  }
   function playCtx(ctx, shuf) {
+    var key = ctxKeyOf(ctx);
     if (ctx.playAll && ctx.subs && ctx.subs.length) {
-      ctx.playAll().then(function (ids) { if (ids.length) playIds(shuf ? shuffled(ids) : ids, 0); }, function () { toast(t('playFailed')); });
+      ctx.playAll().then(function (ids) { if (ids.length) playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key }); }, function () { toast(t('playFailed')); });
       return;
     }
     if (!ctx.tracks.length) return;
     var ids = idsOf(ctx.tracks);
-    playIds(shuf ? shuffled(ids) : ids, 0);
+    playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key });
   }
 
   var TRACK_PAGE = 150;
@@ -3795,11 +3862,22 @@
       for (var i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
       return true;
     }
+    function sameOrder(a, b) {
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (nid(a[i]) !== nid(b[i])) return false;
+      return true;
+    }
+    // Ein langer Text wird in Teilen geladen; die Warteschlange ist dann das Ende der Playlist (ab dem gewaehlten Titel).
     function suffixIds(q, full) {
       if (q.length < 2 || q.length >= full.length || full.length <= PLAY_CHUNK) return false;
-      var tail = full.slice(full.length - q.length);
-      for (var i = 0; i < q.length; i++) if (nid(tail[i]) !== nid(q[i])) return false;
-      return true;
+      return sameOrder(q, full.slice(full.length - q.length));
+    }
+    // Wie sicher passt die Warteschlange zu einer Liste? 3 = gleiche Reihenfolge, 2 = gleiche Titel (gemischt) oder Ende einer langen Liste, 0 = passt nicht.
+    function matchLevel(q, full) {
+      if (!full || !full.length) return 0;
+      if (sameOrder(q, full)) return 3;
+      if (sameIds(q, full) || suffixIds(q, full)) return 2;
+      return 0;
     }
     function playlistIds(pl) {
       var c = plIdsCache[nid(pl.id)];
@@ -3823,26 +3901,59 @@
       P.ctxId = id;
       try { markContext(); } catch (e) { /* ignorieren */ }
     }
-    // Die Playlist, deren Titel genau die Warteschlange bilden, ist die laufende (Lieblingssongs inklusive).
+    function hashIds(ids) {
+      var h = 5381;
+      for (var i = 0; i < ids.length; i++) {
+        var s = nid(ids[i]);
+        for (var j = 0; j < s.length; j++) h = ((h * 33) ^ s.charCodeAt(j)) | 0;
+      }
+      return (h >>> 0).toString(36);
+    }
+    // Die von diesem Geraet gestartete Playlist gilt, solange die Warteschlange noch ihre Titel hat (auch gemischt oder noch halb geladen).
+    function intentMatches(ids) {
+      var it = playIntent;
+      if (!it || !it.key || !ids.length) return false;
+      if (sameIds(ids, it.ids) || sameOrder(ids, it.ids.slice(0, ids.length))) return true;
+      return ids.length > it.ids.length && sameOrder(ids.slice(0, it.ids.length), it.ids);   // hinten angehaengte Titel
+    }
+    // Welche Playlist (oder Lieblingssongs) laeuft? Auf dem eigenen Geraet steht das fest, auf anderen Geraeten wird es streng aus der
+    // Warteschlange abgeleitet: nur eine eindeutige Liste mit genau diesen Titeln zaehlt; bei Unsicherheit wird nichts markiert.
+    var ctxRetryAt = 0;
     function resolveContext() {
       var ids = (P.queue || []).map(function (x) { return x.Id; });
       if (!P.item || !ids.length) { ctxSig = ''; setCtx(''); return; }
-      var sig = ids.length + ':' + ids[0] + ':' + ids[ids.length - 1] + ':' + (P.fav ? 1 : 0);
+      if (intentMatches(ids)) { ctxSig = ''; setCtx(nid(playIntent.key)); return; }
+      playIntent = null;
+      if (ids.length < 2) { ctxSig = ''; setCtx(''); return; }   // ein einzelner Titel sagt nichts ueber die Playlist
+      var sig = ids.length + ':' + hashIds(ids) + ':' + likedVer;
       if (sig === ctxSig) return;
+      if (Date.now() < ctxRetryAt) return;
       ctxSig = sig;
       var tok = ++ctxTok;
+      var cur = P.ctxId;
       loadPlaylists(false).then(function (pls) {
-        var cands = pls.filter(function (p) { var n = p.item.ChildCount; return n != null && (n === ids.length || (n > ids.length && n > PLAY_CHUNK)); });
-        return cands.reduce(function (pr, p) {
-          return pr.then(function (found) {
-            if (found || tok !== ctxTok) return found;
-            return playlistIds(p).then(function (pid) { return sameIds(ids, pid) || suffixIds(ids, pid) ? nid(p.id) : ''; }, function () { return ''; });
-          });
-        }, Promise.resolve('')).then(function (found) {
-          if (found || tok !== ctxTok || !P.fav || ids.length < 2) return found;
-          return likedIds().then(function (lid) { return sameIds(ids, lid) ? 'liked' : ''; }, function () { return ''; });
+        var cands = pls.filter(function (p) { var n = p.item.ChildCount; return n != null && (n === ids.length || (n > ids.length && n > PLAY_CHUNK)); }).slice(0, 24);
+        var jobs = cands.map(function (p) {
+          return playlistIds(p).then(function (pid) { return { key: nid(p.id), level: matchLevel(ids, pid) }; }, function () { return { key: nid(p.id), level: 0, failed: true }; });
         });
-      }).then(function (found) { if (tok === ctxTok) setCtx(found || ''); }, function () { /* naechster Versuch */ });
+        jobs.push(likedIds().then(function (lid) { return { key: 'liked', level: matchLevel(ids, lid) }; }, function () { return { key: 'liked', level: 0, failed: true }; }));
+        return Promise.all(jobs);
+      }).then(function (res) {
+        if (tok !== ctxTok) return;
+        var best = 0, keys = [], failed = false;
+        res.forEach(function (r) {
+          if (r.failed) failed = true;
+          if (r.level > best) { best = r.level; keys = [r.key]; }
+          else if (r.level === best && r.level > 0) keys.push(r.key);
+        });
+        var found = best > 0 && keys.length === 1 ? keys[0] : '';
+        setCtx(found);
+        if (failed && !found) { ctxSig = ''; ctxRetryAt = Date.now() + 8000; } else ctxRetryAt = 0;   // unvollstaendig geladen: spaeter erneut pruefen
+      }, function () {
+        if (tok !== ctxTok) return;
+        ctxSig = ''; ctxRetryAt = Date.now() + 8000;   // Netzwerkfehler: spaeter erneut versuchen, bis dahin bleibt es wie es war
+        if (cur !== P.ctxId) setCtx(cur);
+      });
     }
 
     /* ---------- Anzeige ---------- */
@@ -4210,7 +4321,7 @@
     jf.setAttribute('aria-label', t('allLibs') + ' – ' + t('allLibsHint'));
     jf.appendChild(icon('apps'));
     jf.appendChild(el('span', null, t('allLibs')));
-    jf.addEventListener('click', function () { go('#/home'); });
+    jf.addEventListener('click', function () { goJellyfin('#/home'); });
     navBox.appendChild(jf);
     var libBox = el('div', 'ml-side-lib');
     var head = el('div', 'ml-side-libhead');
@@ -4340,7 +4451,18 @@
     state.trail = [];
     state.view++;
     bodyCls('ml-app-on', false);
+    bodyCls('ml-app-wide', false);
     Player.stop();
+  }
+  // Notausgang: blendet die Ansicht hart aus und stellt die Jellyfin-Seite wieder her (falls der normale Seitenwechsel haengt).
+  function forceLeave() {
+    try { hideApp(); } catch (e) { /* weiter */ }
+    toggleClassicFab(false);
+    if (root) root.hidden = true;
+    bodyCls('ml-app-on', false); bodyCls('ml-app-wide', false); bodyCls('ml-mini-on', false); bodyCls('ml-full-on', false);
+    ML.uncloak();
+    if (ML.forceMusic) ML.forceMusic(false);
+    try { ML.refresh(); } catch (e) { /* ignorieren */ }
   }
 
   function layout() {
@@ -4491,6 +4613,7 @@
     route: onRoute,
     ensure: ensureHealthy,
     layout: layout,
+    forceLeave: forceLeave,
     addToPlaylist: function (ids) { addToPlaylist(ids); }
   };
 
