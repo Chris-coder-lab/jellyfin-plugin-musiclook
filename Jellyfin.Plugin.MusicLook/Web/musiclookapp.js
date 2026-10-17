@@ -2567,9 +2567,22 @@
         var ctx = makeDetailCtx(host, { kind: 'album', album: res[0], tracks: grouped.tracks, groups: grouped.groups, canEdit: false });
         ctx.reload = function () { start(); };
         buildDetail(host, ctx);
+        focusTrack(host);
       }, function () { if (seq === state.view) renderDetailFailed(host, function () { renderDetailLoading(host); start(); }); });
     }
     start();
+  }
+
+  // Kam man ueber einen Titel (z. B. aus der Jellyfin-Suche) auf das Album, wird dieser Titel markiert und ins Bild gescrollt.
+  function focusTrack(host) {
+    var id = state.focusTrack;
+    state.focusTrack = '';
+    if (!id) return;
+    var row = ML.qsa('.ml-track', host).filter(function (r) { return nid(r.dataset.id) === nid(id); })[0];
+    if (!row) return;
+    row.classList.add('ml-focus');
+    try { row.scrollIntoView({ block: 'center' }); } catch (e) { /* aeltere Browser */ }
+    setTimeout(function () { row.classList.remove('ml-focus'); }, 3500);
   }
 
   // Hoerbuch-/Ordneransicht: Kapitel als Liste, Unterordner (z. B. einzelne Buecher einer Reihe) als Kacheln.
@@ -4078,9 +4091,10 @@
       if (isWide() && state.tab === 'library') state.tab = 'home';
       var mcat = isLib && route.id && !folderId && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
       if (mcat && state.autoChip !== route.id) { state.autoChip = route.id; state.chip = mcat; state.tab = 'home'; key = 'tab|home'; }
+      if (isDetail && route.params && route.params.mltrack && ID_RE.test(route.params.mltrack)) state.focusTrack = route.params.mltrack;
       var wasShown = root && !root.hidden;
       showApp();
-      if (wasShown && state.key === key) { updateNav(); return; }
+      if (wasShown && state.key === key) { state.focusTrack = ''; updateNav(); return; }
       rememberScroll();
       setPalette(root, null);
       noteTrail(key);

@@ -164,7 +164,7 @@
   function resolveItem(id) {
     id = String(id).replace(/-/g, '').toLowerCase();
     if (typeCache[id]) return Promise.resolve(typeCache[id]);
-    return call('GET', 'Items', { Ids: id, UserId: uid(), Fields: '', EnableImages: false, EnableUserData: false })
+    return call('GET', 'Items', { Ids: id, UserId: uid(), Fields: 'ParentId', EnableImages: false, EnableUserData: false })
       .then(function (r) {
         var item = r && r.Items && r.Items[0];
         if (item) { typeCache[id] = item; if (isMusicItem(item)) rememberMusic(item); }
@@ -193,14 +193,33 @@
       emitRoute({ kind: 'library', id: lib && ID_RE.test(lib) ? lib : null, params: hp.params });
       return;
     }
+    // Nur die Bibliotheksseite (#/music) und Detailseiten (#/details) sind Musik-Seiten. Andere Seiten wie die Jellyfin-Suche
+    // (#/search?parentId=<Musikbibliothek>) tragen zwar die ID der Bibliothek im Link, bleiben aber Jellyfin-Standard.
+    if (hp.path !== '#/details') { setMusic(false); emitRoute({ kind: 'none' }); return; }
     var id = currentItemId();
     if (!id) { setMusic(false); emitRoute({ kind: 'none' }); return; }
+    var fail = function () { if (seq === updateSeq) { setMusic(false); emitRoute({ kind: 'none' }); } };
     resolveItem(id).then(function (item) {
       if (seq !== updateSeq) return;
+      // Ein Titel (z. B. aus der Suche) oeffnet das Album in der Spotify-Ansicht, der Titel wird dort markiert.
+      if (item && item.Type === 'Audio' && isMusicItem(item)) {
+        var cand = String(item.AlbumId || item.ParentId || '').replace(/-/g, '').toLowerCase();
+        if (ID_RE.test(cand)) {
+          resolveItem(cand).then(function (alb) {
+            if (seq !== updateSeq) return;
+            if (alb && alb.Type === 'MusicAlbum') {
+              location.replace(location.href.split('#')[0] + '#/details?id=' + alb.Id + '&mltrack=' + item.Id);
+            } else fail();
+          }, fail);
+          return;
+        }
+        fail();
+        return;
+      }
       var music = isMusicItem(item);
       setMusic(music);
-      emitRoute(music && hp.path === '#/details' ? { kind: 'details', id: id, item: item, params: hp.params } : { kind: 'none' });
-    }, function () { if (seq === updateSeq) { setMusic(false); emitRoute({ kind: 'none' }); } });
+      emitRoute(music ? { kind: 'details', id: id, item: item, params: hp.params } : { kind: 'none' });
+    }, fail);
   }
 
   // Meldet die aktuelle Seite an die App-Ansicht (musiclookapp.js), falls sie geladen ist.

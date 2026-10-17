@@ -1041,3 +1041,6 @@ body.ml-full-on { overflow: hidden; }
   .ml-bar-speed[hidden] { display: none; }
   .ml-wide ~ .ml-toast, .ml-toast { bottom: 110px; }
 }
+
+/* Titel, der aus der Suche geoeffnet wurde */
+.ml-track.ml-focus { background: rgba(255, 255, 255, 0.14); border-radius: 8px; transition: background 0.6s; }
