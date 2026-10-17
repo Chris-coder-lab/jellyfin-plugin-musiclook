@@ -1212,7 +1212,9 @@
 
   /* ---------- Zustand ---------- */
   var state = { libraryId: null, tab: 'home', chip: 'all', libSeg: 'playlists', classic: false, key: '', view: 0 };
-  if (ML.safeStore('ml.classic') === '1') state.classic = true;
+  // Die klassische Ansicht gilt nur bis zum Neustart der App/des Tabs (sessionStorage); ein alter, dauerhaft gespeicherter Wert wird entfernt.
+  ML.safeStore('ml.classic', null);
+  try { if (window.sessionStorage.getItem('ml.classic') === '1') state.classic = true; } catch (e) { /* ohne Speicher: Spotify-Ansicht */ }
   var scrollMem = {};
   var root = null, scroller = null, content = null, nav = null, bottomBar = null, classicFab = null;
   var latestRoute = null;
@@ -3146,7 +3148,7 @@
 
   function setClassic(on) {
     state.classic = on;
-    ML.safeStore('ml.classic', on ? '1' : null);
+    try { if (on) window.sessionStorage.setItem('ml.classic', '1'); else window.sessionStorage.removeItem('ml.classic'); } catch (e) { /* nur fuer diese Sitzung merken */ }
     state.key = '';
     onRoute(ML.route());
   }

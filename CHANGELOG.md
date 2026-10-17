@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.1.0.7
+- Knopf „Spotify-Ansicht“ liegt jetzt über Jellyfins Wiedergabeleiste und war dort vorher verdeckt
+- „Klassische Ansicht“ gilt nur noch bis zum Neustart der App bzw. des Tabs; ein früher gespeicherter Wert wird beim Start entfernt
+
 ## 0.1.0.6
 - „Hörbücher“ korrekt benannt (Standard-Stichwörter angepasst, alter Wert wird migriert)
 - Suche: ohne Begriff alle Titel in einer alphabetischen Liste

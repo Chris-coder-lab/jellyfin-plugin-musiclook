@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v0.1.0.6 && git push origin v0.1.0.6`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v0.1.0.7 && git push origin v0.1.0.7`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -19,7 +19,7 @@ Jellyfin → Dashboard → Plugins → Repositories → neues Repository:
 Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfläche mit Strg+F5 neu laden (in der Android-App: App-Daten/Cache leeren).
 
 ## Funktionen
-**Wo das Plugin aktiv ist:** nur auf der Startseite einer Musik-Bibliothek (`#/music`) sowie auf den Seiten von Playlists und Alben. Dort ersetzt eine Overlay-Ansicht die Standardseite; über „Klassische Ansicht“ im Profilmenü (Avatar oben links) kommst du jederzeit zur Standard-Ansicht zurück (und mit „Spotify-Ansicht“ wieder zurück).
+**Wo das Plugin aktiv ist:** nur auf der Startseite einer Musik-Bibliothek (`#/music`) sowie auf den Seiten von Playlists und Alben. Dort ersetzt eine Overlay-Ansicht die Standardseite; über „Klassische Ansicht“ im Profilmenü (Avatar oben links) kommst du zur Standard-Ansicht (und mit dem grünen Knopf „Spotify-Ansicht“ unten rechts wieder zurück). Die klassische Ansicht gilt nur bis zum Neustart der App bzw. des Tabs.
 
 **Startseite (mobil wie Spotify):**
 - Oben Profilbild und Chips **Alle · Musik · Podcasts · Hörbücher**.

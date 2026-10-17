@@ -828,7 +828,7 @@ body.ml-full-on { overflow: hidden; }
 .ml-artist-hero .ml-hero-cover { width: min(56vw, 220px); }
 
 /* Zurueck zur App-Ansicht aus der klassischen Ansicht */
-.ml-classic-fab { position: fixed; right: 16px; bottom: 24px; z-index: 1000; border: 0; border-radius: 999px; padding: 10px 18px; background: var(--ml-accent, #1ed760); color: #000; font: 800 0.9rem var(--ml-font, system-ui); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); cursor: pointer; }
+.ml-classic-fab { position: fixed; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 100000; border: 0; border-radius: 999px; padding: 10px 18px; background: var(--ml-accent, #1ed760); color: #000; font: 800 0.9rem var(--ml-font, system-ui); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); cursor: pointer; }
 .ml-classic-fab[hidden] { display: none; }
 
 /* Breite Bildschirme */
