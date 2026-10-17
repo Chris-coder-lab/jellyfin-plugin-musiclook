@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.0.6.0
+- **Geräteübergreifend wie Spotify:** Spielt dein Handy (oder ein anderes Gerät mit demselben Benutzer) Musik und hier läuft nichts, zeigt der Browser automatisch den laufenden Titel mit „Auf <Gerät>“ und steuert ihn (Pause, Weiter, Spulen, Lautstärke). Umgekehrt sieht das Handy, was im Browser läuft. Startest du hier etwas Neues, läuft es auf diesem Gerät und das beobachtete Gerät wird gestoppt; „Dieses Gerät“ in der Geräteauswahl schaltet das automatische Mitverfolgen bis zum Neuladen ab
+- **Laufende Playlist ist grün:** Lieblingssongs und selbst erstellte Playlists werden in der Bibliothek/Seitenleiste, auf der Startseite (Schnellzugriff und Kacheln) grün markiert, mit Lautsprecher-Symbol, solange sie laufen oder pausiert sind – auch wenn sie auf einem anderen Gerät laufen (erkannt über die Warteschlange). Der große Abspielknopf der Playlist zeigt dann „Pause“
+- **Zurück zu Jellyfin:** Neuer Knopf „Alle Bibliotheken“ links über der Bibliothek (Computer) führt zur normalen Jellyfin-Startseite mit Filmen, Serien und allen anderen Bibliotheken (am Handy weiterhin im Profilmenü: „Jellyfin-Startseite“)
+
 ## 1.0.5.0
 - **Gerätewechsel zuverlässig:** Wählst du ein anderes Gerät (z. B. „Firefox“ oder „Mein Gerät“), wird die Wiedergabe dort gestartet und erst danach auf dem bisherigen Gerät gestoppt. Startet das Zielgerät nicht, wird der Befehl einmal wiederholt; reagiert es weiterhin nicht, läuft die Musik einfach auf dem bisherigen Gerät weiter und es gibt eine Meldung.
 - **Der Player verschwindet nie mehr:** Ist ein anderes Gerät gewählt, das gerade nichts spielt, bleibt die Player-Leiste mit „Nichts wird abgespielt – verbunden mit …“ sichtbar, die Geräte-Auswahl ist immer erreichbar (vorher verschwand die gesamte Leiste und kam nicht wieder)

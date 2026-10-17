@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.5.0 && git push origin v1.0.5.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.6.0 && git push origin v1.0.6.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -93,7 +93,7 @@ Dieselbe Logik gibt es als eigenständiges Skript für die NAS: `python3 tools/s
 - **Download = ZIP-Datei auf dem Gerät.** Ein Offline-Abspielen innerhalb von Jellyfin bietet die Web-Oberfläche nicht; laut Jellyfin-Forum hat auch die offizielle Android-App keinen Offline-Modus (Findroid als Fremd-App kann heruntergeladene Titel offline abspielen).
 - Jam synchronisiert die Warteschlange, nicht die Wiedergabeposition: Pause und Spulen sind pro Gerät.
 - Nicht umgesetzt: Hörerzahlen pro Monat bei Künstlern (Jellyfin kennt sie nicht), Umschalten zwischen Lautsprecher und Bluetooth (Sache des Betriebssystems).
-- Der Player folgt der Wiedergabe des Web-Clients auf dem eigenen Gerät; die Position wird alle paar Sekunden abgeglichen.
+- Der Player folgt der Wiedergabe des Web-Clients auf dem eigenen Gerät und zeigt, wenn dort nichts läuft, automatisch ein anderes Gerät desselben Benutzers, auf dem Musik läuft (Steuern klappt nur, wenn dessen App Fernsteuerung unterstützt). Die grün markierte Playlist wird aus der Warteschlange erkannt: Sie gilt nur, wenn die Warteschlange genau die Titel der Playlist enthält (nicht mehr, sobald Titel zur Warteschlange hinzugefügt oder entfernt wurden; Zufallsreihenfolge stört nicht); die Position wird alle paar Sekunden abgeglichen.
 - Playlist-Cover aus Titeln werden im Browser aus Alben-Covern zusammengesetzt; ein hochgeladenes Bild wird als JPEG bis 800 × 800 gespeichert.
 - Jellyfin 12.2 bringt bereits einen „Zur Playlist hinzufügen“-Knopf und einen Öffentlich/Privat-Schalter mit; die klassische Ansicht ergänzt das um den Plus-Button an Karten und das Teilen mit einzelnen Benutzern.
 - Pause, Spulen und Lautstärke wirken sofort nur auf diesem Gerät; Weiter, Zurück, Zufall und Wiederholen laufen weiter über Jellyfins Sitzungs-Schnittstelle.

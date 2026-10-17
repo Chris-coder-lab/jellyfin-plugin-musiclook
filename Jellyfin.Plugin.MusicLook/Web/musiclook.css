@@ -1160,3 +1160,14 @@ body.ml-full-on { overflow: hidden; }
 .ml-dev-row.ml-busy { opacity: 0.7; }
 .ml-dev-row.ml-busy .ml-dev-sub { color: var(--ml-accent, #1ed760); }
 .ml-mini.ml-idle .ml-mini-cover .ml-ic, .ml-bar-idle .ml-bar-cover .ml-ic { width: 100%; height: 100%; padding: 25%; box-sizing: border-box; background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+
+/* Version 1.0.6: laufende Playlist gruen wie bei Spotify, Knopf zurueck zu Jellyfin */
+.ml-list-row.ml-ctx-on .ml-row-title, .ml-quick.ml-ctx-on .ml-quick-title, .ml-tile.ml-ctx-on .ml-tile-title { color: var(--ml-accent, #1ed760); }
+.ml-list-row[data-ctx].ml-ctx-on::after {
+  content: ''; flex: 0 0 auto; width: 18px; height: 18px; margin-left: auto; margin-right: 6px; background: var(--ml-accent, #1ed760);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z'/></svg>") center / contain no-repeat;
+}
+.ml-list-row[data-ctx].ml-ctx-on:not(.ml-ctx-live)::after { opacity: 0.55; }
+.ml-quick.ml-ctx-on { box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.35); }
+.ml-side-jellyfin { margin-top: 2px; }
