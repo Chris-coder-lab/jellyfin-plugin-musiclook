@@ -225,6 +225,26 @@ def inside(child, parent):
         return False
 
 
+SIDECAR_EXTENSIONS = (".lrc", ".elrc", ".txt")
+
+
+def move_sidecars(src, dest, log=print):
+    """Songtext-Dateien mit exakt gleichem Namen (Song.lrc, Song.txt) wandern mit und heissen danach wie die MP3."""
+    try:
+        for side in sorted(Path(src).parent.iterdir()):
+            if side.stem.lower() != Path(src).stem.lower() or side.suffix.lower() not in SIDECAR_EXTENSIONS:
+                continue
+            if side.is_symlink() or not side.is_file():
+                continue
+            target = Path(dest).with_suffix(side.suffix.lower())
+            if target.exists():
+                continue
+            shutil.move(str(side), str(target))
+            log(f"SONGTEXT {side} -> {target}")
+    except OSError as e:
+        log(f"SONGTEXT nicht verschoben ({src}): {e}")
+
+
 def sort_inbox(inbox, library, min_age=30, dry_run=False, log=print):
     inbox, library = Path(inbox), Path(library)
     if inside(library, inbox) or inside(inbox, library):
@@ -265,6 +285,7 @@ def sort_inbox(inbox, library, min_age=30, dry_run=False, log=print):
             if not dry_run:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(src), str(dest))
+                move_sidecars(src, dest, log)
     if not dry_run:  # leere Unterordner im Eingang aufraeumen
         for root, dirs, files in os.walk(inbox, topdown=False, followlinks=False):
             p = Path(root)

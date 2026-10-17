@@ -54,7 +54,7 @@
 
   /* ---------- Zustand ---------- */
   var typeCache = {};
-  var config = { accentColor: '#1ed760', jamEnabled: true, spotifyHome: true, podcastKeywords: ['podcast', 'predigt'], audiobookKeywords: ['hörbuch', 'hörbüch', 'audiobook', 'hörspiel'] };
+  var config = { accentColor: '#1ed760', jamEnabled: true, spotifyHome: true, podcastKeywords: ['podcast', 'predigt'], audiobookKeywords: ['hörbuch', 'hörbücher', 'audiobook', 'hörspiel'] };
   var configLoaded = false;
   var configDone = false;
   var configWaiters = [];
@@ -213,7 +213,7 @@
       config.jamEnabled = c.jamEnabled !== false;
       config.spotifyHome = c.spotifyHome !== false;
       if (Array.isArray(c.podcastKeywords)) config.podcastKeywords = c.podcastKeywords.map(String);
-      if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String);
+      if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String).map(function (k) { return k.toLowerCase() === 'hörbüch' ? 'hörbücher' : k; });
       finishConfig();
       ensureJamButton();
     }, function () { configLoaded = false; });
@@ -231,6 +231,23 @@
   }
 
   /* ---------- Sheet ---------- */
+  // Haelt eine Vollbild-Ebene (Sheet-Hintergrund) im sichtbaren Bereich. Die Bildschirmtastatur verkleinert auf Handys nur den
+  // "visual viewport"; ohne diese Anpassung liegt ein unten verankertes Sheet unter der Tastatur. Gibt eine Aufraeum-Funktion zurueck.
+  function fitViewport(node) {
+    var vv = window.visualViewport;
+    if (!vv || !node) return function () { /* nichts zu tun */ };
+    function apply() {
+      node.style.bottom = 'auto';
+      node.style.top = Math.round(vv.offsetTop) + 'px';
+      node.style.height = Math.round(vv.height) + 'px';
+      node.style.setProperty('--ml-vvh', Math.round(vv.height) + 'px');
+    }
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    apply();
+    return function () { vv.removeEventListener('resize', apply); vv.removeEventListener('scroll', apply); };
+  }
+
   function openSheet(title) {
     var backdrop = el('div', 'ml-backdrop');
     var sheet = el('div', 'ml-sheet');
@@ -238,7 +255,9 @@
     sheet.setAttribute('aria-label', title);
     sheet.appendChild(el('h3', null, title));
     backdrop.appendChild(sheet);
+    var unfit = null;
     function close() {
+      if (unfit) { unfit(); unfit = null; }
       if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
       document.removeEventListener('keydown', onKey, true);
     }
@@ -246,6 +265,7 @@
     backdrop.addEventListener('click', function (e) { if (e.target === backdrop) close(); });
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(backdrop);
+    unfit = fitViewport(backdrop);
     return { sheet: sheet, close: close };
   }
 
@@ -771,7 +791,7 @@
     ID_RE: ID_RE,
     call: call, el: el, button: button, toast: toast, chunk: chunk, qsa: qsa, safeStore: safeStore,
     uid: uid, nid: nid, client: client, hashParts: hashParts, resolveItem: resolveItem, T: T,
-    openSheet: openSheet, rowButton: rowButton, openShareSheet: openShareSheet, openJamSheet: openJamSheet,
+    openSheet: openSheet, fitViewport: fitViewport, rowButton: rowButton, openShareSheet: openShareSheet, openJamSheet: openJamSheet,
     config: function () { return config; }, whenConfig: whenConfig,
     route: function () { return routeInfo; },
     isMusic: function () { return musicOn; },

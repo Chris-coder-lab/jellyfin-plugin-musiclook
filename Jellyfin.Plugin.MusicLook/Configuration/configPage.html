@@ -77,7 +77,7 @@
                     document.querySelector('#JamEnabled').checked = c.JamEnabled !== false;
                     document.querySelector('#SpotifyHome').checked = c.SpotifyHome !== false;
                     document.querySelector('#PodcastKeywords').value = c.PodcastKeywords != null ? c.PodcastKeywords : 'podcast,predigt';
-                    document.querySelector('#AudiobookKeywords').value = c.AudiobookKeywords != null ? c.AudiobookKeywords : 'hörbuch,hörbüch,audiobook,hörspiel';
+                    document.querySelector('#AudiobookKeywords').value = c.AudiobookKeywords != null ? c.AudiobookKeywords.replace(/(^|,)\s*hörbüch\s*(?=,|$)/gi, '$1hörbücher') : 'hörbuch,hörbücher,audiobook,hörspiel';
                     document.querySelector('#InboxEnabled').checked = c.InboxEnabled === true;
                     document.querySelector('#InboxPath').value = c.InboxPath || '';
                     document.querySelector('#LibraryPath').value = c.LibraryPath || '';

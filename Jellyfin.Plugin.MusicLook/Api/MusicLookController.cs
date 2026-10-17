@@ -92,6 +92,8 @@ public class MusicLookController : ControllerBase
             .Where(k => k.Length <= 40)
             .Take(20)
             .Select(k => k.ToLowerInvariant())
+            .Select(k => k == "hörbüch" ? "hörbücher" : k)   // frueherer Standardwert, der "Hörbücher" nur ueber einen Umweg traf
+            .Distinct()
             .ToArray();
 
     /// <summary>Lists the other users (id and name) for playlist sharing.</summary>

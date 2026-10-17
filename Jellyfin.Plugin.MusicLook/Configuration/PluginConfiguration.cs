@@ -15,7 +15,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public string PodcastKeywords { get; set; } = "podcast,predigt";
 
     /// <summary>Gets or sets the comma separated name parts that mark a library as "Audiobooks".</summary>
-    public string AudiobookKeywords { get; set; } = "hörbuch,hörbüch,audiobook,hörspiel";
+    public string AudiobookKeywords { get; set; } = "hörbuch,hörbücher,audiobook,hörspiel";
 
     /// <summary>Gets or sets a value indicating whether Jam sessions are enabled.</summary>
     public bool JamEnabled { get; set; } = true;

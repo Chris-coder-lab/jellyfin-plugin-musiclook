@@ -20,6 +20,8 @@ public static class InboxSorter
     /// <summary>Folder (inside the inbox) that receives identical duplicates.</summary>
     public const string DuplicatesDir = "_Duplikate";
 
+    private static readonly string[] SidecarExtensions = { ".lrc", ".elrc", ".txt" };
+
     private static readonly Regex InvalidChars = new(@"[<>:""/\\|?*\x00-\x1f]", RegexOptions.Compiled);
     private static readonly Regex Spaces = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex FileTrack = new(@"^([0-9]{1,3})\s*[-._)]\s*(?=\D)", RegexOptions.Compiled);
@@ -164,6 +166,7 @@ public static class InboxSorter
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                     File.Move(src, dest);
+                    MoveSidecars(src, dest, log);
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -179,6 +182,45 @@ public static class InboxSorter
         }
 
         return new SortResult(moved, dups, skipped);
+    }
+
+    /// <summary>
+    /// Moves lyric files with exactly the same base name as the MP3 (e.g. "Song.lrc", "Song.txt") along with it and renames
+    /// them to the new base name, so Jellyfin finds the lyrics next to the sorted file. Never overwrites.
+    /// </summary>
+    private static void MoveSidecars(string src, string dest, ILogger? log)
+    {
+        try
+        {
+            var srcDir = Path.GetDirectoryName(src)!;
+            var srcStem = Path.GetFileNameWithoutExtension(src);
+            foreach (var side in Directory.EnumerateFiles(srcDir).ToList())
+            {
+                if (!string.Equals(Path.GetFileNameWithoutExtension(side), srcStem, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var ext = Path.GetExtension(side).ToLowerInvariant();
+                if (Array.IndexOf(SidecarExtensions, ext) < 0 || IsLink(side))
+                {
+                    continue;
+                }
+
+                var target = Path.ChangeExtension(dest, ext);
+                if (File.Exists(target))
+                {
+                    continue;
+                }
+
+                File.Move(side, target);
+                log?.LogInformation("Music Look: Songtext {Src} -> {Dest}", side, target);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log?.LogWarning(ex, "Music Look: Songtext-Datei konnte nicht verschoben werden: {Src}", src);
+        }
     }
 
     private static int? ParseNumber(string? text)

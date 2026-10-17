@@ -154,6 +154,25 @@ class T(unittest.TestCase):
         self.assertEqual(self.tree(), ["A/B/T.mp3"])
         self.assertFalse((self.inbox / "Neu").exists())
 
+    def test_lyric_files_move_along_with_the_mp3(self):
+        make_mp3(self.inbox / "Mein Lied.mp3", {"title": "Hallo", "artist": "A", "album": "B", "track": "3"})
+        (self.inbox / "Mein Lied.lrc").write_text("[00:01.00]Hallo", encoding="utf-8")
+        (self.inbox / "mein lied.TXT").write_text("Hallo", encoding="utf-8")
+        (self.inbox / "Anderes Lied.lrc").write_text("gehoert zu keiner MP3", encoding="utf-8")
+        self.run_sort()
+        every = sorted(str(p.relative_to(self.lib)).replace(os.sep, "/") for p in self.lib.rglob("*") if p.is_file())
+        self.assertEqual(every, ["A/B/03 - Hallo.lrc", "A/B/03 - Hallo.mp3", "A/B/03 - Hallo.txt"])
+        self.assertTrue((self.inbox / "Anderes Lied.lrc").exists())
+
+    def test_lyric_file_never_overwrites(self):
+        (self.lib / "A" / "B").mkdir(parents=True)
+        (self.lib / "A" / "B" / "T.lrc").write_text("vorhanden", encoding="utf-8")
+        make_mp3(self.inbox / "x.mp3", {"title": "T", "artist": "A", "album": "B"})
+        (self.inbox / "x.lrc").write_text("neu", encoding="utf-8")
+        self.run_sort()
+        self.assertEqual((self.lib / "A" / "B" / "T.lrc").read_text(encoding="utf-8"), "vorhanden")
+        self.assertTrue((self.inbox / "x.lrc").exists())
+
     def test_dry_run_changes_nothing(self):
         make_mp3(self.inbox / "a.mp3", {"title": "T", "artist": "A", "album": "B"})
         self.assertEqual(self.run_sort(dry_run=True), (1, 0, 0))
