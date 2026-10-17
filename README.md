@@ -16,7 +16,7 @@
 Jellyfin → Dashboard → Plugins → Repositories → neues Repository:
 `https://raw.githubusercontent.com/Chris-coder-lab/jellyfin-plugin-musiclook/main/manifest.json`
 
-Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfläche mit Strg+F5 neu laden (in der Android-App: App-Daten/Cache leeren).
+Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfläche mit Strg + Shift + F5 neu laden und Cookies und website daten löschen und einmal neu anmelden (in der Android-App: App-Daten/Cache leeren).
 
 ## Funktionen
 - **Look:** Nur im Musik-Bereich. Abgerundete Karten und Listen, Reiter als Chips, Schrift Figtree (wird vom Plugin selbst ausgeliefert, keine externen Anfragen). Akzentfarbe in den Plugin-Einstellungen änderbar.
