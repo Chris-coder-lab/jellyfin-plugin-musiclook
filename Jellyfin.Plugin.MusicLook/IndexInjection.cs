@@ -12,6 +12,15 @@ public static class IndexHtml
 {
     private const string Marker = "MusicLook/client.js";
 
+    // Gleiche Logik wie im Kern (musiclook.js): #/music ist immer Musik, #/details nur fuer bekannte Musik-Elemente.
+    // Die Abdeckung faellt nach spaetestens 6 Sekunden von selbst weg, falls die App nicht startet.
+    private const string Cloak = "<style>html.ml-cloak{background:#121212!important}"
+        + "html.ml-cloak body>*:not(#ml-app):not(script):not(style):not(link){visibility:hidden!important}</style>"
+        + "<script>(function(){try{var h=location.hash||'',l=h.toLowerCase(),m=/^#\\/music(\\?|$)/.test(l);"
+        + "if(!m&&/^#\\/details\\?/.test(l)){var i=/[?&]id=([0-9a-f-]{32,36})/i.exec(h);"
+        + "if(i){var t=JSON.parse(localStorage.getItem('ml.mus1')||'{}');m=!!t[i[1].replace(/-/g,'').toLowerCase()];}}"
+        + "if(m){var e=document.documentElement;e.classList.add('ml-cloak');setTimeout(function(){e.classList.remove('ml-cloak')},6000);}}catch(x){}})();</script>";
+
     /// <summary>Inserts the tags before the closing body tag. Returns the same instance when nothing changes.</summary>
     /// <param name="html">The original index.html.</param>
     /// <param name="version">Plugin version, used only to bust browser caches.</param>
@@ -30,7 +39,11 @@ public static class IndexHtml
                  + "<script defer src=\"../" + Marker + "?v=" + v + "\"></script>"
                  + "<script defer src=\"../MusicLook/app.js?v=" + v + "\"></script>";
         var index = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-        return index < 0 ? html + tags : html.Insert(index, tags);
+        var patched = index < 0 ? html + tags : html.Insert(index, tags);
+
+        // Fruehe Abdeckung: auf bekannten Musik-Seiten blendet ein winziges Script im <head> das alte Layout aus, bis die App steht.
+        var head = patched.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+        return head < 0 ? patched : patched.Insert(head, Cloak);
     }
 
     /// <summary>Checks whether a request path addresses the web client's start page.</summary>

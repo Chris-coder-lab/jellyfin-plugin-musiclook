@@ -54,7 +54,27 @@
 
   /* ---------- Zustand ---------- */
   var typeCache = {};
-  var config = { accentColor: '#1ed760', jamEnabled: true, spotifyHome: true, podcastKeywords: ['podcast', 'predigt'], audiobookKeywords: ['hörbuch', 'hörbücher', 'audiobook', 'hörspiel'] };
+  // Bekannte Musik-Elemente merkt sich der Browser, damit eine Seite sofort als Musik erkannt wird (kein Aufblitzen des alten Layouts).
+  var MUS_KEY = 'ml.mus1';
+  function loadKnownMusic() {
+    try {
+      var m = JSON.parse(window.localStorage.getItem(MUS_KEY) || '{}');
+      Object.keys(m).forEach(function (k) { typeCache[k] = m[k]; });
+    } catch (e) { /* ungueltig oder gesperrt */ }
+  }
+  function rememberMusic(item) {
+    try {
+      var m = JSON.parse(window.localStorage.getItem(MUS_KEY) || '{}');
+      var key = String(item.Id).replace(/-/g, '').toLowerCase();
+      if (m[key]) return;
+      m[key] = { Id: item.Id, Type: item.Type, MediaType: item.MediaType, CollectionType: item.CollectionType };
+      var keys = Object.keys(m);
+      if (keys.length > 300) keys.slice(0, keys.length - 300).forEach(function (k) { delete m[k]; });
+      window.localStorage.setItem(MUS_KEY, JSON.stringify(m));
+    } catch (e) { /* ignorieren */ }
+  }
+  function uncloak() { document.documentElement.classList.remove('ml-cloak'); }
+  var config = { accentColor: '#1ed760', shareBaseUrl: '', jamEnabled: true, spotifyHome: true, podcastKeywords: ['podcast', 'predigt'], audiobookKeywords: ['hörbuch', 'hörbücher', 'audiobook', 'hörspiel'] };
   var configLoaded = false;
   var configDone = false;
   var configWaiters = [];
@@ -142,11 +162,12 @@
   }
 
   function resolveItem(id) {
+    id = String(id).replace(/-/g, '').toLowerCase();
     if (typeCache[id]) return Promise.resolve(typeCache[id]);
     return call('GET', 'Items', { Ids: id, UserId: uid(), Fields: '', EnableImages: false, EnableUserData: false })
       .then(function (r) {
         var item = r && r.Items && r.Items[0];
-        if (item) typeCache[id] = item;
+        if (item) { typeCache[id] = item; if (isMusicItem(item)) rememberMusic(item); }
         return item;
       });
   }
@@ -185,6 +206,7 @@
   // Meldet die aktuelle Seite an die App-Ansicht (musiclookapp.js), falls sie geladen ist.
   function emitRoute(route) {
     routeInfo = route;
+    if (!route || route.kind === 'none') uncloak();
     if (api.app && typeof api.app.route === 'function') {
       try { api.app.route(route); } catch (e) { if (window.console) console.error('Music Look app route', e); }
     }
@@ -212,6 +234,7 @@
       }
       config.jamEnabled = c.jamEnabled !== false;
       config.spotifyHome = c.spotifyHome !== false;
+      config.shareBaseUrl = typeof c.shareBaseUrl === 'string' ? c.shareBaseUrl : '';
       if (Array.isArray(c.podcastKeywords)) config.podcastKeywords = c.podcastKeywords.map(String);
       if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String).map(function (k) { return k.toLowerCase() === 'hörbüch' ? 'hörbücher' : k; });
       finishConfig();
@@ -797,9 +820,11 @@
     isMusic: function () { return musicOn; },
     jamAddIds: jamAddIds, mySession: mySession,
     jamState: function () { return { code: jam.code, state: jam.state }; },
-    refresh: function () { updateContext(); }
+    refresh: function () { updateContext(); },
+    uncloak: uncloak
   };
   window.MusicLook = api;
+  loadKnownMusic();
 
   /* ---------- Start ---------- */
   var scheduled = false;

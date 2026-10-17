@@ -31,6 +31,11 @@
                     <input id="AudiobookKeywords" name="AudiobookKeywords" type="text" is="emby-input" maxlength="200" />
                     <div class="fieldDescription">Bibliotheken, deren Name einen dieser Teile enthält, erscheinen unter „Hörbücher“.</div>
                 </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="ShareBaseUrl">Link-Adresse für „Teilen“ (öffentliche Adresse des Servers)</label>
+                    <input id="ShareBaseUrl" name="ShareBaseUrl" type="text" is="emby-input" maxlength="200" placeholder="https://musik.deinedomain.de" />
+                    <div class="fieldDescription">Beim Teilen entsteht daraus der Link (Adresse + /web/index.html#/details?id=…). Leer lassen, um die Adresse zu nutzen, mit der du gerade verbunden bist. Messenger wie WhatsApp machen nur Links mit einem echten Domainnamen anklickbar (nicht mit IP-Adresse oder Rechnername im Heimnetz).</div>
+                </div>
                 <label class="checkboxContainer">
                     <input id="JamEnabled" name="JamEnabled" type="checkbox" is="emby-checkbox" />
                     <span>Jam-Sitzungen aktivieren</span>
@@ -78,6 +83,7 @@
                     document.querySelector('#SpotifyHome').checked = c.SpotifyHome !== false;
                     document.querySelector('#PodcastKeywords').value = c.PodcastKeywords != null ? c.PodcastKeywords : 'podcast,predigt';
                     document.querySelector('#AudiobookKeywords').value = c.AudiobookKeywords != null ? c.AudiobookKeywords.replace(/(^|,)\s*hörbüch\s*(?=,|$)/gi, '$1hörbücher') : 'hörbuch,hörbücher,audiobook,hörspiel';
+                    document.querySelector('#ShareBaseUrl').value = c.ShareBaseUrl || '';
                     document.querySelector('#InboxEnabled').checked = c.InboxEnabled === true;
                     document.querySelector('#InboxPath').value = c.InboxPath || '';
                     document.querySelector('#LibraryPath').value = c.LibraryPath || '';
@@ -98,6 +104,7 @@
                     c.SpotifyHome = document.querySelector('#SpotifyHome').checked;
                     c.PodcastKeywords = document.querySelector('#PodcastKeywords').value.trim();
                     c.AudiobookKeywords = document.querySelector('#AudiobookKeywords').value.trim();
+                    c.ShareBaseUrl = document.querySelector('#ShareBaseUrl').value.trim();
                     c.InboxEnabled = document.querySelector('#InboxEnabled').checked;
                     c.InboxPath = document.querySelector('#InboxPath').value.trim();
                     c.LibraryPath = document.querySelector('#LibraryPath').value.trim();

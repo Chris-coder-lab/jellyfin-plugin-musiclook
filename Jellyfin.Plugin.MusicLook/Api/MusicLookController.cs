@@ -82,7 +82,8 @@ public class MusicLookController : ControllerBase
             jamEnabled = c?.JamEnabled ?? true,
             spotifyHome = c?.SpotifyHome ?? true,
             podcastKeywords = Keywords(c?.PodcastKeywords),
-            audiobookKeywords = Keywords(c?.AudiobookKeywords)
+            audiobookKeywords = Keywords(c?.AudiobookKeywords),
+            shareBaseUrl = (c?.ShareBaseUrl ?? string.Empty).Trim()
         });
     }
 

@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v0.1.0.7 && git push origin v0.1.0.7`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.1.0 && git push origin v1.0.1.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -55,8 +55,16 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 
 **Hintergrund:** Im Musik-Bereich wird das Hintergrundbild des Jellyfin-Themes („purple haze“) vollständig entfernt, damit nichts mehr durchscheint.
 
+**Computer-Ansicht (ab 900 px Fensterbreite):** links die Bibliothek mit Chips (Playlists · Alben · Künstler) und „+“ für neue Playlists, in der Mitte der Inhalt mit Farbverlauf und Titeltabelle (Nummer/Abspielen, Titel, Album, Dauer, Herz, Menü), rechts die Ansicht des laufenden Titels (Cover, Künstlerkarte), unten die Player-Leiste (Titel, Zufall, Zurück, Pause, Weiter, Wiederholen, Fortschritt, Lautstärke, Geräte, Warteschlange, Vollbild). Unter 900 px bleibt es die Handy-Ansicht. Das Profilmenü (unten links „Menü“) enthält zusätzlich Dashboard und Einstellungen.
+
+**Zurück-Taste:** Titelansicht, Warteschlange, Menüs und Dialoge sind eigene Schritte im Browserverlauf. „Zurück“ (auch die Zurück-Geste auf dem Handy) schließt zuerst sie und führt nie ungewollt zur Jellyfin-Startseite; der Pfeil in Playlists führt zur vorherigen Seite der App.
+
+**Teilen:** „Link kopieren“ erzeugt eine Adresse der Web-Oberfläche (`…/web/index.html#/details?id=…`) auf Basis der Serveradresse oder der Einstellung „Link-Adresse für Teilen“. WhatsApp macht aber nur Adressen mit echtem Domainnamen anklickbar (`https://musik.beispiel.de/…`), keine IP-Adressen wie `192.168.…` oder `localhost`; bei solchen Adressen zeigt der Dialog einen Hinweis.
+
+**Schnell beim Öffnen:** Playlists, Bibliotheken und Playlist-Cover werden im Browser gemerkt und sofort angezeigt, der Server aktualisiert sie im Hintergrund (wichtig bei laufendem Bibliotheksscan). Bekannte Musik-Seiten werden schon beim Laden abgedeckt, damit das alte Jellyfin-Layout nicht kurz aufblitzt.
+
 ## Plugin-Einstellungen
-Dashboard → Plugins → Music Look: Akzentfarbe, Spotify-Ansicht ein/aus, Stichwörter für Podcast- und Hörbuch-Bibliotheken (Standard Hörbuch: `hörbuch,hörbücher,audiobook,hörspiel`), Jam ein/aus und maximale Teilnehmer, Eingangsordner-Sortierung.
+Dashboard → Plugins → Music Look: Akzentfarbe, Spotify-Ansicht ein/aus, Stichwörter für Podcast- und Hörbuch-Bibliotheken (Standard Hörbuch: `hörbuch,hörbücher,audiobook,hörspiel`), Link-Adresse für „Teilen“, Jam ein/aus und maximale Teilnehmer, Eingangsordner-Sortierung.
 
 ## Alle MP3-Dateien einfach in einen Ordner legen
 Jellyfin erwartet pro Album einen eigenen Ordner; liegen mehrere Alben gemischt in einem Ordner, werden sie zu einem Sammel-Album zusammengefasst. Deshalb sortiert das Plugin auf Wunsch selbst:

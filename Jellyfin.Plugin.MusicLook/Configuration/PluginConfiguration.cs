@@ -17,6 +17,9 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the comma separated name parts that mark a library as "Audiobooks".</summary>
     public string AudiobookKeywords { get; set; } = "hörbuch,hörbücher,audiobook,hörspiel";
 
+    /// <summary>Gets or sets the public address of this server used for shared links (e.g. https://music.example.com). Empty: the address the client is using.</summary>
+    public string ShareBaseUrl { get; set; } = string.Empty;
+
     /// <summary>Gets or sets a value indicating whether Jam sessions are enabled.</summary>
     public bool JamEnabled { get; set; } = true;
 
