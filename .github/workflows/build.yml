@@ -18,7 +18,7 @@ jobs:
 
       - name: Version bestimmen
         run: |
-          VERSION="1.0.7.0"
+          VERSION="1.0.8.0"
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Der Tag muss vier Zahlen haben, z.B. v0.1.0.2 (gefunden: $VERSION)"; exit 1

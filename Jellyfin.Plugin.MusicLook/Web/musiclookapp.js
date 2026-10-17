@@ -663,7 +663,7 @@
     return itemsOf({ ParentId: id, IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'ParentIndexNumber,IndexNumber,SortName', Limit: 1000 });
   }
   function loadLikedTracks() {
-    return itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio,AudioBook', Recursive: true, SortBy: 'DatePlayed,SortName', SortOrder: 'Descending,Ascending', Limit: 2000, Fields: 'ParentId' });
+    return itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio,AudioBook', Recursive: true, SortBy: 'DateCreated,SortName', SortOrder: 'Descending,Ascending', Limit: 2000, Fields: 'ParentId' });
   }
   function loadItem(id, fields) {
     return itemsOf({ Ids: id, Fields: fields || 'Overview,ChildCount,Genres' }).then(function (a) { return a[0] || null; });
@@ -3891,7 +3891,7 @@
     }
     function likedIds() {
       if (likedCache.ids && Date.now() - likedCache.at < 60000 && likedCache.ver === likedVer) return Promise.resolve(likedCache.ids);
-      return itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio,AudioBook', Recursive: true, Limit: 2000, Fields: '' }).then(function (items) {
+      return loadLikedTracks().then(function (items) {
         likedCache = { at: Date.now(), ver: likedVer, ids: items.map(function (x) { return x.Id; }) };
         return likedCache.ids;
       });
@@ -4608,6 +4608,12 @@
     } catch (e) { if (window.console) console.error('Music Look ensure', e); }
     return false;
   }
+
+  // Fokusrahmen nur bei Bedienung mit der Tastatur zeigen (Tab), nie nach einem Klick oder Tipp.
+  document.addEventListener('keydown', function (e) { if (e.key === 'Tab') document.body.classList.add('ml-kbd'); }, true);
+  ['pointerdown', 'mousedown', 'touchstart'].forEach(function (ev) {
+    document.addEventListener(ev, function () { document.body.classList.remove('ml-kbd'); }, true);
+  });
 
   ML.app = {
     route: onRoute,

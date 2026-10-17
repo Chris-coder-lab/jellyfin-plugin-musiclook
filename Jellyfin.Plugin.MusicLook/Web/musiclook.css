@@ -1171,3 +1171,15 @@ body.ml-full-on { overflow: hidden; }
 .ml-list-row[data-ctx].ml-ctx-on:not(.ml-ctx-live)::after { opacity: 0.55; }
 .ml-quick.ml-ctx-on { box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.35); }
 .ml-side-jellyfin { margin-top: 2px; }
+
+/* Version 1.0.8: kein blaues Viereck um Knoepfe (Tipp-Markierung am Handy, Fokusrahmen nach Klick); Tastaturbedienung behaelt einen dezenten Rahmen */
+.ml-app, .ml-app *, .ml-full, .ml-full *, .ml-backdrop, .ml-backdrop *, .ml-toast, .ml-toast *, .ml-classic-fab, .ml-jam-fab, .ml-jam-fab * {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  -webkit-touch-callout: none;
+}
+.ml-app button, .ml-app [role="button"], .ml-app a, .ml-app input, .ml-app select, .ml-app [tabindex],
+.ml-full button, .ml-full [role="button"], .ml-full [tabindex], .ml-backdrop button, .ml-backdrop [role="button"], .ml-backdrop [tabindex],
+.ml-classic-fab, .ml-jam-fab { outline: none; }
+.ml-app button::-moz-focus-inner, .ml-full button::-moz-focus-inner, .ml-backdrop button::-moz-focus-inner { border: 0; padding: 0; }
+body.ml-kbd .ml-app button:focus-visible, body.ml-kbd .ml-app [role="button"]:focus-visible, body.ml-kbd .ml-app [tabindex]:focus-visible,
+body.ml-kbd .ml-full button:focus-visible, body.ml-kbd .ml-backdrop button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.75); outline-offset: 2px; }
