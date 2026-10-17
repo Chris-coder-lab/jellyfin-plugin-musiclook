@@ -674,7 +674,7 @@
           }, Promise.resolve());
         });
       });
-    }).then(function () { Player.kick(); return true; }, function () { toast(t('playFailed')); return false; });
+    }).then(function () { Player.kick(); return true; }, function () { if (!opts.quiet) toast(t('playFailed')); return false; });
   }
 
   function queueIds(ids) {
@@ -1513,7 +1513,7 @@
         aboutArtist: 'Über den Künstler', artistPage: 'Künstlerseite', albumsCount1: '1 Album', albumsCountN: '{0} Alben',
         devices: 'Geräte', thisDevice: 'Dieses Gerät', deviceIdle: 'Bereit', devicePlaying: 'Spielt: {0}', deviceActive: 'Aktives Gerät',
         devicesNone: 'Keine weiteren Geräte gefunden. Melde dich auf einem anderen Gerät mit diesem Konto an und öffne Jellyfin.',
-        deviceSwitched: 'Wiedergabe auf „{0}“', deviceFailed: 'Wechsel fehlgeschlagen', devicesLoading: 'Suche Geräte …',
+        deviceSwitched: 'Wiedergabe auf „{0}“', deviceFailed: 'Wechsel fehlgeschlagen', deviceSwitching: 'Wird übertragen …', remoteIdle: 'Nichts wird abgespielt', remoteIdleHint: 'Verbunden mit „{0}“ – zum Wechseln Geräte antippen', devicesLoading: 'Suche Geräte …',
         deviceNote: 'Lautsprecher und Bluetooth dieses Geräts stellst du in den Systemeinstellungen des Geräts ein.',
         connectedTo: 'Auf {0}', devicePick: 'Wiedergabegerät wählen',
         lyrics: 'Songtext', lyricsNone: 'Kein Songtext vorhanden. Lege eine .lrc- oder .txt-Datei mit exakt dem gleichen Namen wie die Musikdatei in deren Ordner.',
@@ -1536,7 +1536,7 @@
         aboutArtist: 'About the artist', artistPage: 'Artist page', albumsCount1: '1 album', albumsCountN: '{0} albums',
         devices: 'Devices', thisDevice: 'This device', deviceIdle: 'Ready', devicePlaying: 'Playing: {0}', deviceActive: 'Active device',
         devicesNone: 'No other devices found. Sign in with this account on another device and open Jellyfin.',
-        deviceSwitched: 'Playing on "{0}"', deviceFailed: 'Could not switch', devicesLoading: 'Looking for devices …',
+        deviceSwitched: 'Playing on "{0}"', deviceFailed: 'Could not switch', deviceSwitching: 'Switching …', remoteIdle: 'Nothing is playing', remoteIdleHint: 'Connected to "{0}" - tap devices to switch', devicesLoading: 'Looking for devices …',
         deviceNote: 'Speakers and Bluetooth of this device are chosen in the system settings of the device.',
         connectedTo: 'On {0}', devicePick: 'Choose playback device',
         lyrics: 'Lyrics', lyricsNone: 'No lyrics available. Put a .lrc or .txt file with exactly the same name as the music file in its folder.',
@@ -2772,6 +2772,7 @@
       queue: [], at: 0, fav: false, lyrics: undefined, targetId: null, targetName: '', misses: 0, pal: null
     };
     var pollTimer = null, tickTimer = null, fastUntil = 0, polling = false, running = false;
+    var lastPollAt = 0, pollStartedAt = 0, pollSeq = 0, transferBusy = false;
     var mini = null, full = null, ui = {}, fullOpen = false, seeking = false, lastItemId = '', heroCoverId = '';
     var panels = [], queuePanel = null, lyPanel = null, lyPanelIdx = -2, lyricIdx = -2, extrasFor = '', compact = false, scrollQueued = false;
     var queueNames = {}, lyricCache = {}, artistCache = {};
@@ -2857,9 +2858,32 @@
       });
     }
 
+    // Prueft, ob das Zielgeraet den Titel wirklich spielt (Sitzung meldet ihn oder das lokale Audio-Element laeuft damit).
+    function startedOn(target, toThis, itemId, tries) {
+      function look() {
+        if (toThis) {
+          var a = document.querySelector('audio.mediaPlayerAudio');
+          if (a && !a.paused && nid(a.currentSrc || a.src || '').indexOf(nid(itemId)) >= 0) return Promise.resolve(true);
+        }
+        var req = toThis ? ML.mySession() : call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) {
+          return (r || []).filter(function (x) { return x.Id === target.Id; })[0] || null;
+        });
+        return req.then(function (sess) { return !!(sess && sess.NowPlayingItem && nid(sess.NowPlayingItem.Id) === nid(itemId)); }, function () { return false; });
+      }
+      return look().then(function (ok) {
+        if (ok || tries <= 0) return ok;
+        return new Promise(function (r) { setTimeout(r, 500); }).then(function () { return startedOn(target, toThis, itemId, tries - 1); });
+      });
+    }
+
     // Uebertraegt die Wiedergabe (Warteschlange, Titel, Position) auf ein anderes Geraet und stoppt sie auf dem bisherigen.
+    // Das bisherige Geraet wird erst gestoppt, wenn das neue den Titel wirklich spielt; bei Ausbleiben wird einmal wiederholt,
+    // danach bleibt alles beim Alten (kein Zustand, in dem nirgends Musik laeuft und die Anzeige fehlt).
     function transferTo(target) {
+      if (transferBusy) return Promise.resolve(false);
+      transferBusy = true;
       var toThis = target.DeviceId === thisDeviceId();
+      function done(v) { transferBusy = false; return v; }
       return fetchState().then(function (cur) {
         var srcId = cur && cur.Id;
         if (srcId && srcId === target.Id) return true;
@@ -2871,8 +2895,22 @@
         if (np && idx < 0) { q = [np.Id]; idx = 0; }
         setTarget(toThis ? null : target.Id, toThis ? '' : deviceLabel(target));
         if (!np) { kick(); return true; }   // nichts zu uebertragen: nur das Ziel wechseln
-        return playIds(q, idx, { positionTicks: ps.PositionTicks || 0 }).then(function (ok) {
-          if (!ok) { setTarget(oldId, oldName); return false; }
+        var tries = 0;
+        function attempt() {
+          tries++;
+          return playIds(q, idx, { positionTicks: ps.PositionTicks || 0, quiet: true }).then(function (ok) {
+            if (!ok) return tries < 2 ? attempt() : false;
+            return startedOn(target, toThis, np.Id, 16).then(function (seen) { return seen ? true : (tries < 2 ? attempt() : false); });
+          });
+        }
+        return attempt().then(function (ok) {
+          if (!ok) {
+            // Ziel hat nicht reagiert: Ziel wieder entfernen, falls dort doch noch etwas startet, und beim bisherigen Geraet bleiben.
+            if (!toThis) call('POST', 'Sessions/' + target.Id + '/Playing/Stop').catch(function () { /* ignorieren */ });
+            setTarget(oldId, oldName);
+            kick();
+            return false;
+          }
           if (srcId) call('POST', 'Sessions/' + srcId + '/Playing/Stop').catch(function () { /* Quelle war schon still */ });
           if (ps.IsPaused) setTimeout(function () { command('Playing/Pause').catch(function () { /* ignorieren */ }); }, 1500);
           if (ps.RepeatMode && ps.RepeatMode !== 'RepeatNone') {
@@ -2881,7 +2919,7 @@
           kick();
           return true;
         });
-      });
+      }).then(done, function () { return done(false); });
     }
 
     function openDevices() {
@@ -2924,14 +2962,18 @@
           tx.appendChild(el('div', 'ml-dev-sub', sub.filter(Boolean).join(' • ')));
           row.appendChild(tx);
           row.addEventListener('click', function () {
-            if (busy || active) { if (active) ui2.close(); return; }
+            if (busy || transferBusy || active) { if (active && !busy) ui2.close(); return; }
             busy = true;
             row.disabled = true;
-            transferTo(s).then(function (ok) {
+            row.classList.add('ml-busy');
+            var subEl = row.querySelector('.ml-dev-sub');
+            if (subEl) subEl.textContent = t('deviceSwitching');
+            function fin(ok) {
               busy = false;
               if (ok) { toast(t('deviceSwitched', isThis ? t('thisDevice') : deviceLabel(s))); ui2.close(); }
-              else { row.disabled = false; toast(t('deviceFailed')); }
-            }, function () { busy = false; row.disabled = false; toast(t('deviceFailed')); });
+              else { row.disabled = false; row.classList.remove('ml-busy'); toast(t('deviceFailed')); refresh(); }
+            }
+            transferTo(s).then(fin, function () { fin(false); });
           });
           box.appendChild(row);
         });
@@ -3037,7 +3079,7 @@
         loadLyrics(P.item.Id).then(function (ly) { if (ly) { P.lyrics = ly; openLyricsPanel(); } else toast(t('lyricsNone')); });
       });
       ui.bQueue = iconBtn('queue', t('queueTitle'), 'ml-bar-icon', function () { if (queuePanel) queuePanel.close(); else openQueuePanel(); });
-      ui.bDevBtn = iconBtn('devices', t('devices'), 'ml-bar-icon', openDevices);
+      ui.bDevBtn = iconBtn('devices', t('devices'), 'ml-bar-icon ml-bar-devbtn', openDevices);
       ui.bSpeed = btn('ml-bar-speed'); ui.bSpeed.addEventListener('click', openSpeed);
       ui.bVolIc = iconBtn('volume', t('mute'), 'ml-bar-icon', function () {
         if (P.volume > 0) { lastVol = P.volume; setVolume(0); } else setVolume(lastVol || 60);
@@ -3682,10 +3724,47 @@
       if (np) setPalette(np, pal);
     }
 
+    // Verbunden mit einem anderen Geraet, das gerade nichts spielt: Mini-Player und Leiste bleiben, damit man Geraete wechseln kann.
+    function paintIdle(m) {
+      if (fullOpen) closeFull();
+      var name = P.targetName || '…';
+      m.hidden = false;
+      m.classList.add('ml-idle');
+      m.classList.add('ml-remote');
+      bodyCls('ml-mini-on', running);
+      ui.miniTitle.textContent = t('remoteIdle');
+      ui.miniSub.textContent = t('connectedTo', name);
+      ui.miniDev.hidden = true;
+      ui.miniCover.textContent = '';
+      ui.miniCover.appendChild(icon('devices'));
+      ui.miniToggle.disabled = true;
+      ui.miniFill.style.width = '0%';
+      lastItemId = ''; barCoverId = ''; npCoverId = ''; npFor = '';
+      if (bar && root && isWide()) {
+        bar.hidden = false;
+        bar.classList.add('ml-bar-idle');
+        ui.barTitle.textContent = t('remoteIdle');
+        ui.barArtist.textContent = '';
+        ui.barDev.textContent = t('connectedTo', name);
+        ui.barDev.hidden = false;
+        ui.barCover.textContent = '';
+        ui.barCover.appendChild(icon('devices'));
+        ui.bDevBtn.classList.add('ml-on');
+        ui.bPos.textContent = '0:00'; ui.bDur.textContent = '0:00';
+        ui.bSeek.value = '0'; paintRange(ui.bSeek);
+      }
+      if (np) np.hidden = true;
+      if (root) root.classList.remove('ml-has-np');
+    }
+
     function paint() {
       var has = !!P.item;
       if (!(isWide() && npRoom())) panels.filter(function (x) { return x.el.classList.contains('ml-panel-np'); }).forEach(function (x) { x.close(); });
       var m = ensureMini();
+      if (!has && P.targetId) { paintIdle(m); return; }   // Zielgeraet gewaehlt, es spielt aber (noch) nichts: Player bleibt sichtbar
+      m.classList.remove('ml-idle');
+      ui.miniToggle.disabled = false;
+      if (bar) bar.classList.remove('ml-bar-idle');
       m.hidden = !has;
       bodyCls('ml-mini-on', has && running);
       if (!has) {
@@ -3832,9 +3911,18 @@
     }
 
     function poll() {
-      if (polling || !running) return Promise.resolve();
-      polling = true;
-      return fetchState().then(applySession, function () { /* naechster Versuch */ }).then(function () { polling = false; schedule(); }, function () { polling = false; schedule(); });
+      if (!running) return Promise.resolve();
+      if (polling && Date.now() - pollStartedAt < 15000) return Promise.resolve();   // haengende Anfrage nach 15 s ueberholen
+      polling = true; pollStartedAt = Date.now();
+      var my = ++pollSeq;
+      function fin() { if (my !== pollSeq) return; polling = false; lastPollAt = Date.now(); schedule(); }
+      return fetchState().then(function (st) { if (my === pollSeq) applySession(st); }, function () { /* naechster Versuch */ }).then(fin, fin);
+    }
+    // Wird von aussen regelmaessig aufgerufen: stellt sicher, dass die Abfrage nie dauerhaft stehen bleibt.
+    function heartbeat() {
+      if (!running || document.hidden) return;
+      var late = Date.now() - lastPollAt;
+      if ((!polling && late > 20000) || (polling && Date.now() - pollStartedAt >= 15000)) poll();
     }
     function schedule() {
       clearTimeout(pollTimer);
@@ -3848,6 +3936,7 @@
     function start() {
       if (running) return;
       running = true;
+      lastPollAt = Date.now();
       ensureMini();
       if (bottomBar && mini.parentNode !== bottomBar) bottomBar.insertBefore(mini, bottomBar.firstChild);
       poll();
@@ -3911,7 +4000,7 @@
     });
 
     return {
-      start: start, stop: stop, kick: kick, currentId: currentId, refreshFavorite: refreshFavorite,
+      start: start, stop: stop, kick: kick, heartbeat: heartbeat, isRunning: function () { return running; }, hasUi: function () { return !!(mini && !mini.hidden) || !!P.item; }, currentId: currentId, refreshFavorite: refreshFavorite,
       open: openFull, close: closeFull, isOpen: function () { return fullOpen; },
       targetId: function () { return P.targetId; }, sessionNow: fetchState, openDevices: openDevices,
       mount: function () {
@@ -4228,8 +4317,31 @@
     else renderLibrary(content, seq);
   }
 
+  // Selbstheilung: Wird regelmaessig und nach Ereignissen (Geraetewechsel, Rueckkehr in den Tab ...) aufgerufen.
+  // Ist die aktuelle Seite eine Musik-Seite, muss die App sichtbar sein, Inhalt haben und der Player laufen; sonst wird sie neu aufgebaut.
+  function ensureHealthy() {
+    try {
+      var r = ML.route();
+      if (!r || r.kind === 'none') return false;
+      if (!root) { onRoute(r); return true; }
+      if (!document.body.contains(root)) document.body.appendChild(root);
+      var cfg = ML.config();
+      if (cfg && cfg.spotifyHome === false) return false;
+      if (state.classic) return false;
+      var broken = root.hidden || !document.body.classList.contains('ml-app-on') || !content || !content.firstChild;
+      if (broken) { state.key = ''; onRoute(r); return true; }
+      if (!Player.isRunning()) Player.start();
+      Player.heartbeat();
+      layout();
+      Player.mount();
+      Player.repaint();
+    } catch (e) { if (window.console) console.error('Music Look ensure', e); }
+    return false;
+  }
+
   ML.app = {
     route: onRoute,
+    ensure: ensureHealthy,
     layout: layout,
     addToPlaylist: function (ids) { addToPlaylist(ids); }
   };

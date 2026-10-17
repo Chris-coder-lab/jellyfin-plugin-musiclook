@@ -181,9 +181,23 @@
 
   function contextKey() { return location.hash + '|' + (client() && uid() ? uid() : ''); }
 
+  // Schlaegt das Erkennen der Seite fehl (z. B. kurzer Netzwerkfehler beim Geraetewechsel), wird es mehrmals wiederholt,
+  // statt die Spotify-Ansicht dauerhaft zu verlieren.
+  var retryTimer = null, retryN = 0, retryKey = '';
+  function retryLater() {
+    clearTimeout(retryTimer);
+    var waits = [700, 1500, 3000, 6000, 10000, 15000];
+    if (retryN >= waits.length) return;
+    var key = contextKey();
+    retryTimer = setTimeout(function () { if (contextKey() === key) updateContext(); }, waits[retryN++]);
+    lastKey = null;   // auch das naechste DOM-Ereignis darf einen neuen Versuch ausloesen
+  }
+
   function updateContext() {
     var seq = ++updateSeq;
-    lastKey = contextKey();
+    var ck = contextKey();
+    if (ck !== retryKey) { retryKey = ck; retryN = 0; clearTimeout(retryTimer); }
+    lastKey = ck;
     if (!client() || !uid()) { setMusic(false); emitRoute({ kind: 'none' }); return; }
     maybeResumeJam();
     var hp = hashParts();
@@ -198,7 +212,13 @@
     if (hp.path !== '#/details') { setMusic(false); emitRoute({ kind: 'none' }); return; }
     var id = currentItemId();
     if (!id) { setMusic(false); emitRoute({ kind: 'none' }); return; }
-    var fail = function () { if (seq === updateSeq) { setMusic(false); emitRoute({ kind: 'none' }); } };
+    // Fehler beim Abfragen: bleibt dieselbe Seite offen, bleibt die Ansicht stehen; in jedem Fall wird es erneut versucht.
+    var fail = function () {
+      if (seq !== updateSeq) return;
+      var same = routeInfo && routeInfo.kind === 'details' && nid(routeInfo.id) === nid(id);
+      if (!same) { setMusic(false); emitRoute({ kind: 'none' }); }
+      retryLater();
+    };
     resolveItem(id).then(function (item) {
       if (seq !== updateSeq) return;
       // Ein Titel (z. B. aus der Suche) oeffnet das Album in der Spotify-Ansicht, der Titel wird dort markiert.
@@ -216,6 +236,7 @@
         fail();
         return;
       }
+      retryN = 0;
       var music = isMusicItem(item);
       setMusic(music);
       emitRoute(music ? { kind: 'details', id: id, item: item, params: hp.params } : { kind: 'none' });
@@ -870,6 +891,20 @@
       }
     }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'aria-selected'] });
     updateContext();
+    // Waechter: prueft regelmaessig und nach Rueckkehr in den Tab, ob die Seite noch zur Ansicht passt, und baut sie sonst neu auf.
+    function guard() {
+      try {
+        if (!client() || !uid()) return;
+        if (contextKey() !== lastKey && lastKey !== null) { updateContext(); return; }
+        if (lastKey === null || (isLibraryRoute() && routeInfo.kind === 'none')) { updateContext(); return; }
+        if (api.app && typeof api.app.ensure === 'function') api.app.ensure();
+      } catch (e) { /* naechster Durchlauf */ }
+    }
+    setInterval(function () { if (!document.hidden) guard(); }, 2000);
+    ['visibilitychange', 'focus', 'pageshow', 'online', 'resume'].forEach(function (ev) {
+      (ev === 'visibilitychange' ? document : window).addEventListener(ev, function () { setTimeout(guard, 150); });
+    });
+    api.guard = guard;
   }
 
   if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);

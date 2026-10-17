@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.0.5.0
+- **Gerätewechsel zuverlässig:** Wählst du ein anderes Gerät (z. B. „Firefox“ oder „Mein Gerät“), wird die Wiedergabe dort gestartet und erst danach auf dem bisherigen Gerät gestoppt. Startet das Zielgerät nicht, wird der Befehl einmal wiederholt; reagiert es weiterhin nicht, läuft die Musik einfach auf dem bisherigen Gerät weiter und es gibt eine Meldung.
+- **Der Player verschwindet nie mehr:** Ist ein anderes Gerät gewählt, das gerade nichts spielt, bleibt die Player-Leiste mit „Nichts wird abgespielt – verbunden mit …“ sichtbar, die Geräte-Auswahl ist immer erreichbar (vorher verschwand die gesamte Leiste und kam nicht wieder)
+- **Selbstheilung der Ansicht:** Ein Wächter prüft alle 2 Sekunden und nach jeder Rückkehr in den Tab, ob die Spotify-Ansicht zur Seite passt (sichtbar, mit Inhalt, Player läuft) und baut sie sonst neu auf. Scheitert das Erkennen der Seite durch einen kurzen Server-/Netzwerkfehler, wird mehrfach neu versucht, statt die Ansicht dauerhaft zu verlieren
+- Hängende Abfragen des Players werden nach 15 Sekunden überholt und können die Anzeige nicht mehr einfrieren
+- Geräteliste: Zeile zeigt „Wird übertragen …“, Mehrfachklicks werden abgefangen
+
 ## 1.0.4.0
 - Vollansicht am Computer nimmt jetzt die Farbe des Covers an (vorher blieb sie grau, weil die Farbe nur aus der am Computer ausgeblendeten Mini-Leiste berechnet wurde); gilt auch für die rechte Spalte
 - Vollansicht am Handy: Der Farbverlauf liegt oben und scrollt mit; beim Herunterscrollen wird alles dunkel statt überall gleich gefärbt zu bleiben. Dabei behoben: Der Verlauf hatte dort eine harte Kante am unteren Ende
