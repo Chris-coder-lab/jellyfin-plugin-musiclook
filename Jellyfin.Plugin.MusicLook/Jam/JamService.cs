@@ -3,8 +3,11 @@ using System.Security.Cryptography;
 
 namespace Jellyfin.Plugin.MusicLook.Jam;
 
-/// <summary>One entry of a Jam queue. Only ids are stored, never titles, so nothing leaks past library permissions.</summary>
-public sealed record JamEntry(Guid ItemId, Guid AddedBy);
+/// <summary>
+/// One entry of a Jam queue. Only ids are stored, never titles, so nothing leaks past library permissions.
+/// <c>Seq</c> is unique per entry within a Jam, so clients can tell "the same song again" from "still the same entry".
+/// </summary>
+public sealed record JamEntry(Guid ItemId, Guid AddedBy, long Seq);
 
 /// <summary>Snapshot of a Jam handed to clients.</summary>
 public sealed record JamState(string Code, Guid Host, long Version, int Index, IReadOnlyList<JamEntry> Queue, IReadOnlyList<Guid> Members);
@@ -181,7 +184,7 @@ public sealed class JamService
             var oldCount = session.Queue.Count;
             foreach (var id in items)
             {
-                session.Queue.Add(new JamEntry(id, user));
+                session.Queue.Add(new JamEntry(id, user, ++session.NextSeq));
             }
 
             if (session.Index < 0 || session.Index >= oldCount)
@@ -334,6 +337,8 @@ public sealed class JamService
         public List<JamEntry> Queue { get; } = new();
 
         public int Index { get; set; } = -1;
+
+        public long NextSeq;
 
         public long Version { get; set; } = 1;
 

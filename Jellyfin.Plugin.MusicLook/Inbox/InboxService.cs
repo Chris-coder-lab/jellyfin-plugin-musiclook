@@ -1,3 +1,4 @@
+using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -6,12 +7,17 @@ namespace Jellyfin.Plugin.MusicLook.Inbox;
 /// <summary>Background service that periodically sorts the inbox folder into the music library folder.</summary>
 public sealed class InboxService : BackgroundService
 {
+    private static readonly TimeSpan MaxScanDelay = TimeSpan.FromMinutes(10);
+
     private readonly ILogger<InboxService> _logger;
+    private readonly ILibraryManager _library;
+    private DateTime? _pendingScanSince;
 
     /// <summary>Initializes a new instance of the <see cref="InboxService"/> class.</summary>
-    public InboxService(ILogger<InboxService> logger)
+    public InboxService(ILogger<InboxService> logger, ILibraryManager library)
     {
         _logger = logger;
+        _library = library;
     }
 
     /// <inheritdoc />
@@ -56,6 +62,20 @@ public sealed class InboxService : BackgroundService
             if (r.Moved + r.Duplicates > 0)
             {
                 _logger.LogInformation("Music Look: {Moved} einsortiert, {Dups} Duplikate, {Skipped} uebersprungen", r.Moved, r.Duplicates, r.Skipped);
+            }
+
+            // Network shares often do not report file changes, so ask Jellyfin to scan. The scan starts once the inbox
+            // is quiet (a run without moves) or after at most ten minutes, so a long upload does not trigger a scan every minute.
+            if (r.Moved > 0)
+            {
+                _pendingScanSince ??= DateTime.UtcNow;
+            }
+
+            if (_pendingScanSince is not null && (r.Moved == 0 || DateTime.UtcNow - _pendingScanSince.Value > MaxScanDelay))
+            {
+                _pendingScanSince = null;
+                _library.QueueLibraryScan();
+                _logger.LogInformation("Music Look: Bibliotheks-Scan angefordert");
             }
         }
         catch (Exception ex)

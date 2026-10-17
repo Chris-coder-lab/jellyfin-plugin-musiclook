@@ -40,6 +40,12 @@ public class MusicLookController : ControllerBase
     [ResponseCache(Duration = 300)]
     public IActionResult ClientCss() => Embedded("Web.musiclook.css", "text/css");
 
+    /// <summary>Gets the Figtree font (SIL Open Font License), served from the plugin so no external request is needed.</summary>
+    [HttpGet("figtree.woff2")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 86400)]
+    public IActionResult Font() => Embedded("Web.figtree.woff2", "font/woff2");
+
     /// <summary>Gets the public client configuration.</summary>
     [HttpGet("Config")]
     [Authorize]
@@ -73,7 +79,8 @@ public class MusicLookController : ControllerBase
     }
 
     // Older Jellyfin versions expose a Users property, newer ones GetUsers(); reflection keeps the plugin
-    // independent of that difference (and of the namespace of the User entity).
+    // independent of that difference (and of the namespace of the User entity). Hidden and disabled accounts
+    // are left out, exactly like Jellyfin's own public user list does.
     private IEnumerable<(Guid Id, string Name)> ListUsers()
     {
         var type = _users.GetType();
@@ -93,11 +100,39 @@ public class MusicLookController : ControllerBase
 
             var itemType = item.GetType();
             if (itemType.GetProperty("Id")?.GetValue(item) is Guid id
-                && itemType.GetProperty("Username")?.GetValue(item) is string name)
+                && itemType.GetProperty("Username")?.GetValue(item) is string name
+                && !HasPermission(item, "IsHidden")
+                && !HasPermission(item, "IsDisabled"))
             {
                 yield return (id, name);
             }
         }
+    }
+
+    // User.Permissions is a collection of entries with a Kind (enum) and a Value (bool).
+    private static bool HasPermission(object user, string kind)
+    {
+        if (user.GetType().GetProperty("Permissions")?.GetValue(user) is not System.Collections.IEnumerable permissions)
+        {
+            return false;
+        }
+
+        foreach (var permission in permissions)
+        {
+            if (permission is null)
+            {
+                continue;
+            }
+
+            var permissionType = permission.GetType();
+            if (string.Equals(permissionType.GetProperty("Kind")?.GetValue(permission)?.ToString(), kind, StringComparison.Ordinal)
+                && permissionType.GetProperty("Value")?.GetValue(permission) is true)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Creates a Jam.</summary>
@@ -173,7 +208,7 @@ public class MusicLookController : ControllerBase
                 return BadRequest();
             }
 
-            if (_library.GetItemById(id) is not Audio)
+            if (_library.GetItemById<Audio>(id, me) is null)
             {
                 return BadRequest();
             }
@@ -265,6 +300,7 @@ public class MusicLookController : ControllerBase
         }
 
         Response.Headers["X-Content-Type-Options"] = "nosniff";
-        return File(stream, contentType + "; charset=utf-8");
+        var isText = contentType.StartsWith("text/", StringComparison.Ordinal) || contentType == "application/javascript";
+        return File(stream, isText ? contentType + "; charset=utf-8" : contentType);
     }
 }

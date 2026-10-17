@@ -20,6 +20,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Web\musiclook.js" />
     <EmbeddedResource Include="Web\musiclook.css" />
+    <EmbeddedResource Include="Web\figtree.woff2" />
     <EmbeddedResource Include="Configuration\configPage.html" />
   </ItemGroup>
 

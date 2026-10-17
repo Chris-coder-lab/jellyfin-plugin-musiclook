@@ -1,25 +1,29 @@
 # Music Look (Jellyfin 12.x)
 
-Ändert nur den Look des Musik-Bereichs der Web-Oberfläche und ergänzt Plus-Button, Playlist-Teilen, Wischen zwischen Reitern und Jam.
+Ändert nur den Look des Musik-Bereichs der Web-Oberfläche (runde Ecken, Figtree-Schrift, Spotify-ähnliche Farben, Reiter als Chips) und ergänzt Plus-Button, Playlist-Teilen, Wischen zwischen Reitern und Jam.
 
 ## Voraussetzungen
-- Jellyfin 12.0 oder neuer
-- Plugin **File Transformation 3.0.0.0 oder neuer** (fügt das Script in die Web-Oberfläche ein)
+- Jellyfin 12.0 oder neuer (getestet gegen den Quellcode von 12.0 und 12.2)
+- Kein weiteres Plugin nötig: Das Plugin fügt sein Script selbst in die Startseite der Web-Oberfläche ein.
 - Funktioniert in der Web-Oberfläche und in der offiziellen Android-App (Web-Wrapper). Nicht in Swiftfin, Findroid oder nativen TV-Apps.
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Tag setzen: `git tag v0.1.0.0 && git push --tags`. Der Workflow baut die ZIP und legt ein Release an.
-3. `python3 scripts/update_manifest.py musiclook_0.1.0.0.zip DEIN-GITHUB-NAME 0.1.0.0` ausführen und `manifest.json` einchecken.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v0.1.0.3 && git push origin v0.1.0.3`.
+3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
 Jellyfin → Dashboard → Plugins → Repositories → neues Repository:
 `https://raw.githubusercontent.com/DEIN-GITHUB-NAME/jellyfin-plugin-musiclook/main/manifest.json`
 
-Dann im Katalog zuerst File Transformation, danach Music Look installieren und Jellyfin neu starten.
+Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfläche mit Strg+F5 neu laden (in der Android-App: App-Daten/Cache leeren).
 
-## Ohne File Transformation
-Im Log erscheint dann eine Warnung. Als Notlösung `/MusicLook/client.css` und `/MusicLook/client.js` manuell in die `index.html` des Web-Clients einbinden.
+## Funktionen
+- **Look:** Nur im Musik-Bereich. Abgerundete Karten und Listen, Reiter als Chips, Schrift Figtree (wird vom Plugin selbst ausgeliefert, keine externen Anfragen). Akzentfarbe in den Plugin-Einstellungen änderbar.
+- **Wischen:** Auf Musik-Seiten nach links/rechts wischen wechselt den Reiter.
+- **Plus-Button:** Bei Titeln, Alben und Künstlern. Wählt eine eigene Playlist oder legt eine neue an. Neue Playlists sind privat.
+- **Playlists teilen:** Eigene Playlist mit anderen Benutzern teilen (lesen oder mitbearbeiten). Ausgeblendete und deaktivierte Konten werden nicht angeboten.
+- **Jam:** Gemeinsame Warteschlange. Jemand startet einen Jam und bekommt einen 6-stelligen Code, andere treten bei und hängen Titel hinten an. Reihenfolge ist für alle gleich. Sitzungen liegen nur im Arbeitsspeicher und enden nach 6 Stunden ohne Aktivität oder beim Neustart von Jellyfin.
 
 ## Alle MP3-Dateien einfach in einen Ordner legen
 Jellyfin erwartet pro Album einen eigenen Ordner; liegen mehrere Alben gemischt in einem Ordner, werden sie zu einem Sammel-Album zusammengefasst. Deshalb sortiert das Plugin auf Wunsch selbst:
@@ -35,11 +39,20 @@ Ablauf pro MP3 (Eingang inklusive Unterordner):
 - Vorhandene Ordner werden ohne Beachtung der Groß-/Kleinschreibung weiterverwendet.
 - Nichts wird überschrieben oder gelöscht. Gleicher Name, anderer Inhalt: `(2)` am Dateinamen. Identische Datei: `Eingang/_Duplikate`.
 - Dateien jünger als 30 Sekunden (Upload läuft noch) werden übersprungen.
-- Danach muss Jellyfin die Bibliothek neu einlesen (Scan).
+- Nach dem Einsortieren stößt das Plugin einen Bibliotheks-Scan an, sobald der Eingang ruhig ist (spätestens nach 10 Minuten).
 
 Dieselbe Logik gibt es als eigenständiges Skript für die NAS: `python3 tools/sort_inbox.py EINGANG MUSIK --dry-run` (ohne `--dry-run` wird verschoben, `--watch 60` wiederholt alle 60 Sekunden). Tests: `cd tools && python3 -m unittest test_sort_inbox` (braucht ffmpeg).
 
+## Grenzen
+- Jellyfin 12.2 bringt bereits einen „Zur Playlist hinzufügen“-Knopf in Titel- und Albumlisten und einen Öffentlich/Privat-Schalter im Playlist-Editor mit. Das Plugin ergänzt das um den Plus-Button an Karten und das Teilen mit einzelnen Benutzern.
+- Jam synchronisiert die Warteschlange, nicht die Wiedergabeposition: Pause und Spulen sind pro Gerät.
+- Cover aus der Datei oder per Spotify-ID gibt es nicht; Jellyfin liest eingebettete Cover und `cover.jpg` im Albumordner selbst.
+- Das Plugin ist nur gegen den Quellcode von Jellyfin und im Browser mit einer nachgebauten Seite geprüft, nicht in einer laufenden Jellyfin-12-Installation.
+
 ## Sicherheit
 - Jam-Endpunkte nur für angemeldete Benutzer, Mitgliedschaft wird pro Anfrage geprüft.
-- Jam speichert nur Titel-IDs (keine Titel), Codes aus 6 zufälligen Zeichen, Begrenzung bei Fehlversuchen, 6 Stunden Lebensdauer.
-- Das Script sendet nichts nach außen.
+- Jam speichert nur Titel-IDs (keine Titel). Beim Hinzufügen wird geprüft, dass der Benutzer den Titel sehen darf. Codes aus 6 zufälligen Zeichen, Begrenzung bei Fehlversuchen.
+- Das Script sendet nichts nach außen; die Schrift kommt vom eigenen Server.
+
+## Lizenzen
+Die Schrift Figtree steht unter der SIL Open Font License 1.1 (`FONT-LICENSE-OFL.txt`).

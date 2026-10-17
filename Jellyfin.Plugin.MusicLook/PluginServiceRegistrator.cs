@@ -1,6 +1,7 @@
 using Jellyfin.Plugin.MusicLook.Jam;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.MusicLook;
@@ -12,7 +13,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<JamService>();
-        serviceCollection.AddHostedService<InjectionService>();
+        serviceCollection.AddTransient<IStartupFilter, IndexInjectionStartupFilter>();
         serviceCollection.AddHostedService<Inbox.InboxService>();
     }
 }

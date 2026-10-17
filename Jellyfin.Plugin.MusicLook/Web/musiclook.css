@@ -1,33 +1,140 @@
-/* Music Look - Spotify-aehnlicher Look, nur aktiv im Musik-Bereich (body.ml-music). */
+/* Music Look - Spotify-aehnlicher Look. Wirkt nur im Musik-Bereich (html/body mit Klasse ml-music).
+   Schrift: Figtree (SIL Open Font License), vom Server mitgeliefert. */
 
+@font-face {
+  font-family: "Figtree";
+  src: url("figtree.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+html.ml-music,
 body.ml-music {
   --ml-bg: #121212;
   --ml-surface: #181818;
   --ml-elevated: #242424;
-  --ml-hover: #2c2c2c;
+  --ml-hover: #2a2a2a;
   --ml-text: #ffffff;
   --ml-muted: #b3b3b3;
-  --ml-accent: #1ed760;
   --ml-radius: 12px;
   --ml-font: "Figtree", "Inter", "Helvetica Neue", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
-  font-family: var(--ml-font);
-  color: var(--ml-text);
 }
 
-body.ml-music,
+html.ml-music { --ml-accent: #1ed760; }
+
+/* ---------- Hintergrund und Schrift ---------- */
+html.ml-music,
+html.ml-music body,
 body.ml-music .skinBody,
 body.ml-music .mainAnimatedPage,
 body.ml-music .libraryPage,
-body.ml-music .page {
-  background: var(--ml-bg) !important;
+body.ml-music .page,
+body.ml-music .backgroundContainer {
+  background-color: var(--ml-bg) !important;
 }
 
-body.ml-music .skinHeader {
-  background: rgba(18, 18, 18, 0.92) !important;
-  backdrop-filter: blur(12px);
+body.ml-music [id^="backdropImage"] { display: none !important; }
+
+body.ml-music {
+  color: var(--ml-text);
+  font-family: var(--ml-font);
 }
 
-/* Reiter als Chips */
+body.ml-music :where(button, input, select, textarea, a, p, h1, h2, h3, h4, h5, h6, li, label, div, span, td, th):not(.material-icons) {
+  font-family: var(--ml-font);
+}
+
+body.ml-music h1,
+body.ml-music h2,
+body.ml-music h3,
+body.ml-music .sectionTitle {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Kopfzeile (neues Layout) ---------- */
+body.ml-music header.MuiAppBar-root {
+  background-color: rgba(18, 18, 18, 0.94) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--ml-text);
+}
+
+/* Reiter als Chips (werden vom Script aus dem Reiter-Menue gebaut) */
+.ml-chips { display: none; }
+
+body.ml-chips-on .ml-chips {
+  display: flex;
+  gap: 8px;
+  padding: 6px 16px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ml-chips-on .ml-chips::-webkit-scrollbar { display: none; }
+
+body.ml-chips-on button[aria-controls="library-view-menu"] { display: none; }
+
+.ml-chip {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 15px;
+  background: var(--ml-elevated, #242424);
+  color: var(--ml-text, #fff);
+  font: 600 0.9rem var(--ml-font, system-ui);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ml-chip:hover { background: var(--ml-hover, #2a2a2a); }
+
+.ml-chip.ml-active {
+  background: var(--ml-accent, #1ed760);
+  color: #000;
+}
+
+/* Knoepfe und Symbole der Bibliotheks-Werkzeugleiste */
+body.ml-music .MuiButton-containedPrimary {
+  background-color: var(--ml-accent) !important;
+  color: #000 !important;
+  font-weight: 700;
+}
+
+body.ml-music .MuiButtonGroup-root .MuiButton-root,
+body.ml-music .MuiButton-root {
+  border-radius: 999px !important;
+}
+
+body.ml-music .MuiChip-root {
+  background-color: var(--ml-elevated);
+  color: var(--ml-text);
+  border-radius: 999px;
+}
+
+body.ml-music .MuiMenu-paper,
+body.ml-music .MuiPopover-paper,
+body.ml-music .MuiDialog-paper {
+  background-color: #282828 !important;
+  background-image: none !important;
+  border-radius: 14px !important;
+}
+
+body.ml-music .MuiMenuItem-root.Mui-selected {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--ml-accent);
+}
+
+body.ml-music .MuiDrawer-paper {
+  background-color: var(--ml-bg) !important;
+  background-image: none !important;
+}
+
+/* ---------- Altes Layout: Reiterleiste als Chips ---------- */
 body.ml-music .emby-tabs-slider {
   gap: 8px;
   padding: 8px 12px;
@@ -44,50 +151,54 @@ body.ml-music .emby-tab-button {
   transition: background 0.15s ease;
 }
 
-body.ml-music .emby-tab-button:hover {
-  background: var(--ml-hover);
-}
+body.ml-music .emby-tab-button:hover { background: var(--ml-hover); }
 
 body.ml-music .emby-tab-button-active {
-  background: var(--ml-text) !important;
+  background: var(--ml-accent) !important;
   color: #000 !important;
 }
 
 body.ml-music .emby-tab-button-active .emby-button-foreground,
-body.ml-music .emby-tab-button .emby-button-foreground {
-  color: inherit !important;
-}
+body.ml-music .emby-tab-button .emby-button-foreground { color: inherit !important; }
 
 body.ml-music .emby-tabs-slider .emby-tab-button::after,
-body.ml-music .emby-tab-button-active::after {
-  display: none !important;
+body.ml-music .emby-tab-button-active::after { display: none !important; }
+
+body.ml-music .skinHeader {
+  background: rgba(18, 18, 18, 0.94) !important;
+  backdrop-filter: blur(12px);
 }
 
-/* Karten */
-body.ml-music .card .cardBox {
+/* ---------- Karten ---------- */
+body.ml-music .card .cardBox:not(.visualCardBox) {
   background: var(--ml-surface);
   border-radius: var(--ml-radius);
   padding: 10px;
+  box-sizing: border-box;
   transition: background 0.2s ease;
 }
 
-body.ml-music .card .cardBox:hover {
-  background: var(--ml-hover);
+body.ml-music .card .cardBox:not(.visualCardBox):hover { background: var(--ml-hover); }
+
+body.ml-music .card .cardScalable {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 body.ml-music .card .cardImageContainer,
-body.ml-music .card .cardPadder {
-  border-radius: 8px !important;
-  overflow: hidden;
-}
+body.ml-music .card .cardOverlayContainer,
+body.ml-music .card .cardPadder { border-radius: 8px !important; }
 
-body.ml-music .card[data-type="MusicArtist"] .cardImageContainer {
-  border-radius: 50% !important;
-}
+body.ml-music .card[data-type="MusicArtist"] .cardScalable,
+body.ml-music .card[data-type="MusicArtist"] .cardImageContainer,
+body.ml-music .card[data-type="MusicArtist"] .cardOverlayContainer,
+body.ml-music .card[data-type="MusicArtist"] .cardPadder { border-radius: 50% !important; }
 
-body.ml-music .card[data-type="MusicArtist"] .cardText {
-  text-align: center;
-}
+body.ml-music .card[data-type="MusicArtist"] .cardText { text-align: center; }
+
+body.ml-music .card .cardTextCentered { text-align: left; }
+body.ml-music .card[data-type="MusicArtist"] .cardTextCentered { text-align: center; }
 
 body.ml-music .cardText {
   color: var(--ml-muted);
@@ -100,39 +211,60 @@ body.ml-music .cardText-first {
 }
 
 body.ml-music .cardOverlayFab-primary,
-body.ml-music .cardOverlayButton-br .cardOverlayFab-primary {
+body.ml-music .cardOverlayContainer > .cardOverlayFab-primary {
   background: var(--ml-accent) !important;
   color: #000 !important;
   border-radius: 50% !important;
 }
 
-/* Listen / Titel */
+/* ---------- Listen und Titelzeilen ---------- */
 body.ml-music .listItem {
   border-radius: 8px;
   transition: background 0.15s ease;
 }
 
-body.ml-music .listItem:hover {
-  background: var(--ml-hover);
-}
+body.ml-music .listItem:hover { background: rgba(255, 255, 255, 0.08); }
 
-body.ml-music .listItemBodyText {
-  font-weight: 600;
-}
+body.ml-music .listItemImage { border-radius: 4px; }
+
+body.ml-music .listItemBodyText { font-weight: 600; }
 
 body.ml-music .secondary.listItemBodyText {
   color: var(--ml-muted);
   font-weight: 400;
 }
 
-/* Buttons / Eingaben */
-body.ml-music .raised,
-body.ml-music .button-submit {
-  border-radius: 999px !important;
+/* Wo das Plus sitzt, entfaellt die vorhandene Schaltflaeche "Zu Playlist hinzufuegen" */
+body.ml-music .listItem.ml-has-plus [data-action="addtoplaylist"] { display: none; }
+
+/* ---------- Detailseite ---------- */
+body.ml-music .detailImageContainer .cardBox,
+body.ml-music .detailImageContainer .cardScalable,
+body.ml-music .detailImageContainer .cardImageContainer,
+body.ml-music .detailImageContainer img {
+  border-radius: 12px !important;
+  overflow: hidden;
 }
 
-body.ml-music .button-submit,
-body.ml-music .detailButton.raised {
+body.ml-music .itemName,
+body.ml-music h1.itemName { font-weight: 800; }
+
+body.ml-music .mainDetailButtons .btnPlay,
+body.ml-music .mainDetailButtons .btnShuffle {
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+
+body.ml-music .mainDetailButtons .btnPlay {
+  background: var(--ml-accent) !important;
+  color: #000 !important;
+}
+
+/* ---------- Buttons / Eingaben ---------- */
+body.ml-music .raised,
+body.ml-music .button-submit { border-radius: 999px !important; }
+
+body.ml-music .button-submit {
   background: var(--ml-accent) !important;
   color: #000 !important;
   font-weight: 700;
@@ -147,16 +279,18 @@ body.ml-music .searchfields-txtSearch {
   padding-left: 1em !important;
 }
 
+/* ---------- Wiedergabeleiste ---------- */
+body.ml-music .nowPlayingBar {
+  background: var(--ml-surface) !important;
+  border-radius: 14px 14px 0 0;
+  border-top: 0 !important;
+}
+
 body.ml-music ::-webkit-scrollbar { width: 10px; height: 10px; }
 body.ml-music ::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 999px; }
 body.ml-music ::-webkit-scrollbar-track { background: transparent; }
 
-body.ml-music h1, body.ml-music h2, body.ml-music h3, body.ml-music .sectionTitle {
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-
-/* Plus-Button auf Karten und Titelzeilen */
+/* ---------- Plus-Schaltflaeche ---------- */
 .ml-plus {
   display: none;
   align-items: center;
@@ -165,22 +299,44 @@ body.ml-music h1, body.ml-music h2, body.ml-music h3, body.ml-music .sectionTitl
   height: 32px;
   border-radius: 50%;
   border: 2px solid var(--ml-muted, #b3b3b3);
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   color: var(--ml-text, #fff);
-  font-size: 20px;
-  line-height: 1;
+  font: 400 20px/1 var(--ml-font, system-ui);
   cursor: pointer;
   padding: 0;
   z-index: 5;
-  transition: transform 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: transform 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.15s ease;
 }
 
 body.ml-music .ml-plus { display: inline-flex; }
-.ml-plus:hover { transform: scale(1.1); border-color: var(--ml-accent, #1ed760); color: var(--ml-accent, #1ed760); }
-.ml-plus.ml-card { position: absolute; right: 14px; bottom: 74px; }
-.ml-plus.ml-row { margin-left: 8px; flex: 0 0 auto; }
+
+.ml-plus:hover,
+.ml-plus:focus-visible {
+  transform: scale(1.1);
+  border-color: var(--ml-accent, #1ed760);
+  color: var(--ml-accent, #1ed760);
+}
+
+/* Auf Karten oben rechts im Bild; mit Maus erst beim Ueberfahren, auf Touch-Geraeten immer */
+.ml-plus.ml-card {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+}
+
+.card:hover .ml-plus.ml-card,
+.card:focus-within .ml-plus.ml-card,
+.ml-plus.ml-card:focus-visible { opacity: 1; }
+
+@media (hover: none) {
+  .ml-plus.ml-card { opacity: 1; }
+}
+
+.ml-plus.ml-row { flex: 0 0 auto; margin: 0 6px; }
 .ml-plus.ml-detail { width: 40px; height: 40px; margin: 0 8px; }
 
+/* ---------- Pillen ---------- */
 .ml-pill {
   display: none;
   align-items: center;
@@ -193,22 +349,23 @@ body.ml-music .ml-plus { display: inline-flex; }
   font: 700 0.95em var(--ml-font, system-ui);
   cursor: pointer;
 }
-body.ml-music .ml-pill { display: inline-flex; }
-.ml-pill:hover { background: var(--ml-hover, #2c2c2c); }
-.ml-pill.ml-primary { background: var(--ml-accent, #1ed760); color: #000; }
 
-/* Jam-Schalter */
+body.ml-music .ml-pill { display: inline-flex; }
+.ml-sheet .ml-pill { display: inline-flex; margin: 4px 6px 4px 0; }
+.ml-pill:hover { background: var(--ml-hover, #2a2a2a); }
+.ml-pill.ml-primary { background: var(--ml-accent, #1ed760); color: #000; }
+.ml-pill:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- Jam-Schalter ---------- */
 .ml-jam-fab {
-  display: none;
   position: fixed;
   right: 16px;
   bottom: 96px;
   z-index: 1000;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
-body.ml-music .ml-jam-fab { display: inline-flex; }
 
-/* Bottom-Sheet */
+/* ---------- Bottom-Sheet ---------- */
 .ml-backdrop {
   position: fixed;
   inset: 0;
@@ -225,6 +382,7 @@ body.ml-music .ml-jam-fab { display: inline-flex; }
   max-width: 520px;
   max-height: 80vh;
   overflow: auto;
+  box-sizing: border-box;
   background: var(--ml-elevated, #242424);
   color: var(--ml-text, #fff);
   font-family: var(--ml-font, system-ui);
@@ -240,12 +398,14 @@ body.ml-music .ml-jam-fab { display: inline-flex; }
 
 .ml-sheet h3 { margin: 0 0 12px; font-size: 1.2em; font-weight: 800; }
 .ml-sheet .ml-muted { color: var(--ml-muted, #b3b3b3); font-size: 0.9em; }
+.ml-sheet .ml-subtitle { margin: 14px 0 4px; font-weight: 700; }
 
 .ml-row-item {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 0;
   border-radius: 10px;
@@ -255,7 +415,8 @@ body.ml-music .ml-jam-fab { display: inline-flex; }
   text-align: left;
   cursor: pointer;
 }
-.ml-row-item:hover { background: var(--ml-hover, #2c2c2c); }
+
+.ml-row-item:hover { background: var(--ml-hover, #2a2a2a); }
 .ml-row-item .ml-grow { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ml-row-item.ml-current .ml-grow { color: var(--ml-accent, #1ed760); font-weight: 700; }
 
@@ -289,5 +450,5 @@ body.ml-music .ml-jam-fab { display: inline-flex; }
 @keyframes ml-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .ml-backdrop, .ml-sheet, .ml-toast { animation: none; }
+  .ml-backdrop, .ml-sheet, .ml-toast, .ml-plus, .ml-chip { animation: none; transition: none; }
 }
