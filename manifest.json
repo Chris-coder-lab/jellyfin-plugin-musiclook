@@ -13,8 +13,8 @@
         "changelog": "Erste Version fuer Jellyfin 12.x.",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v1.0.2.0/musiclook_1.0.2.0.zip",
-        "checksum": "E0133530E215B18D798815CC58C8DE54",
-        "timestamp": "2026-10-17T14:42:31Z"
+        "checksum": "EB59E0B76288F19EC59B7735A3EC06F2",
+        "timestamp": "2026-10-17T14:44:20Z"
       },
       {
         "version": "1.0.1.0",
