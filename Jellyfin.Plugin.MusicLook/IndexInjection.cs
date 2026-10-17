@@ -27,7 +27,8 @@ public static class IndexHtml
 
         // Relative to /web/ (or <baseurl>/web/), so a configured base URL keeps working.
         var tags = "<link rel=\"stylesheet\" href=\"../MusicLook/client.css?v=" + v + "\">"
-                 + "<script defer src=\"../" + Marker + "?v=" + v + "\"></script>";
+                 + "<script defer src=\"../" + Marker + "?v=" + v + "\"></script>"
+                 + "<script defer src=\"../MusicLook/app.js?v=" + v + "\"></script>";
         var index = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
         return index < 0 ? html + tags : html.Insert(index, tags);
     }
