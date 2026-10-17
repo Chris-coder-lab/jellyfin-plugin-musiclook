@@ -8,6 +8,15 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the accent colour (hex, e.g. #1ed760).</summary>
     public string AccentColor { get; set; } = "#1ed760";
 
+    /// <summary>Gets or sets a value indicating whether the Spotify-style start page replaces the music library page.</summary>
+    public bool SpotifyHome { get; set; } = true;
+
+    /// <summary>Gets or sets the comma separated name parts that mark a library as "Podcasts".</summary>
+    public string PodcastKeywords { get; set; } = "podcast,predigt";
+
+    /// <summary>Gets or sets the comma separated name parts that mark a library as "Audiobooks".</summary>
+    public string AudiobookKeywords { get; set; } = "hörbuch,hörbüch,audiobook,hörspiel";
+
     /// <summary>Gets or sets a value indicating whether Jam sessions are enabled.</summary>
     public bool JamEnabled { get; set; } = true;
 

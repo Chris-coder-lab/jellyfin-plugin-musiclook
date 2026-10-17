@@ -18,6 +18,20 @@
                     <input id="JamMaxMembers" name="JamMaxMembers" type="number" min="2" max="20" is="emby-input" />
                 </div>
                 <label class="checkboxContainer">
+                    <input id="SpotifyHome" name="SpotifyHome" type="checkbox" is="emby-checkbox" />
+                    <span>Spotify-Startseite in Musikbibliotheken verwenden (ausgeschaltet: klassische Jellyfin-Ansicht mit neuem Look)</span>
+                </label>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="PodcastKeywords">Podcast-Bibliotheken: Namensbestandteile, getrennt durch Komma</label>
+                    <input id="PodcastKeywords" name="PodcastKeywords" type="text" is="emby-input" maxlength="200" />
+                    <div class="fieldDescription">Bibliotheken, deren Name einen dieser Teile enthält, erscheinen unter „Podcasts“.</div>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="AudiobookKeywords">Hörbuch-Bibliotheken: Namensbestandteile, getrennt durch Komma</label>
+                    <input id="AudiobookKeywords" name="AudiobookKeywords" type="text" is="emby-input" maxlength="200" />
+                    <div class="fieldDescription">Bibliotheken, deren Name einen dieser Teile enthält, erscheinen unter „Hörbücher“.</div>
+                </div>
+                <label class="checkboxContainer">
                     <input id="JamEnabled" name="JamEnabled" type="checkbox" is="emby-checkbox" />
                     <span>Jam-Sitzungen aktivieren</span>
                 </label>
@@ -61,6 +75,9 @@
                     document.querySelector('#AccentColor').value = c.AccentColor || '#1ed760';
                     document.querySelector('#JamMaxMembers').value = c.JamMaxMembers || 8;
                     document.querySelector('#JamEnabled').checked = c.JamEnabled !== false;
+                    document.querySelector('#SpotifyHome').checked = c.SpotifyHome !== false;
+                    document.querySelector('#PodcastKeywords').value = c.PodcastKeywords != null ? c.PodcastKeywords : 'podcast,predigt';
+                    document.querySelector('#AudiobookKeywords').value = c.AudiobookKeywords != null ? c.AudiobookKeywords : 'hörbuch,hörbüch,audiobook,hörspiel';
                     document.querySelector('#InboxEnabled').checked = c.InboxEnabled === true;
                     document.querySelector('#InboxPath').value = c.InboxPath || '';
                     document.querySelector('#LibraryPath').value = c.LibraryPath || '';
@@ -78,6 +95,9 @@
                     var max = parseInt(document.querySelector('#JamMaxMembers').value, 10);
                     c.JamMaxMembers = Math.min(20, Math.max(2, isNaN(max) ? 8 : max));
                     c.JamEnabled = document.querySelector('#JamEnabled').checked;
+                    c.SpotifyHome = document.querySelector('#SpotifyHome').checked;
+                    c.PodcastKeywords = document.querySelector('#PodcastKeywords').value.trim();
+                    c.AudiobookKeywords = document.querySelector('#AudiobookKeywords').value.trim();
                     c.InboxEnabled = document.querySelector('#InboxEnabled').checked;
                     c.InboxPath = document.querySelector('#InboxPath').value.trim();
                     c.LibraryPath = document.querySelector('#LibraryPath').value.trim();
