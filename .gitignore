@@ -1,0 +1,9 @@
+bin/
+obj/
+out/
+pkg/
+*.zip
+__pycache__/
+*.pyc
+.vs/
+.idea/
