@@ -54,8 +54,11 @@
 
   /* ---------- Zustand ---------- */
   var typeCache = {};
-  var config = { accentColor: '#1ed760', jamEnabled: true };
+  var config = { accentColor: '#1ed760', jamEnabled: true, spotifyHome: true, podcastKeywords: ['podcast', 'predigt'], audiobookKeywords: ['hörbuch', 'hörbüch', 'audiobook', 'hörspiel'] };
   var configLoaded = false;
+  var configDone = false;
+  var configWaiters = [];
+  var routeInfo = { kind: 'none' };
   var resumed = false;
   var jam = { code: null, state: null, version: 0, names: {}, startedSeq: null, timer: null, busy: false };
   var musicOn = false;
@@ -160,15 +163,34 @@
   function updateContext() {
     var seq = ++updateSeq;
     lastKey = contextKey();
-    if (!client() || !uid()) { setMusic(false); return; }
+    if (!client() || !uid()) { setMusic(false); emitRoute({ kind: 'none' }); return; }
     maybeResumeJam();
-    if (isLibraryRoute()) { setMusic(true); return; }
+    var hp = hashParts();
+    if (isLibraryRoute()) {
+      setMusic(true);
+      var lib = hp.params.topparentid || hp.params.parentid;
+      emitRoute({ kind: 'library', id: lib && ID_RE.test(lib) ? lib : null, params: hp.params });
+      return;
+    }
     var id = currentItemId();
-    if (!id) { setMusic(false); return; }
+    if (!id) { setMusic(false); emitRoute({ kind: 'none' }); return; }
     resolveItem(id).then(function (item) {
-      if (seq === updateSeq) setMusic(isMusicItem(item));
-    }, function () { if (seq === updateSeq) setMusic(false); });
+      if (seq !== updateSeq) return;
+      var music = isMusicItem(item);
+      setMusic(music);
+      emitRoute(music && hp.path === '#/details' ? { kind: 'details', id: id, item: item, params: hp.params } : { kind: 'none' });
+    }, function () { if (seq === updateSeq) { setMusic(false); emitRoute({ kind: 'none' }); } });
   }
+
+  // Meldet die aktuelle Seite an die App-Ansicht (musiclookapp.js), falls sie geladen ist.
+  function emitRoute(route) {
+    routeInfo = route;
+    if (api.app && typeof api.app.route === 'function') {
+      try { api.app.route(route); } catch (e) { if (window.console) console.error('Music Look app route', e); }
+    }
+  }
+
+  function appOn() { return document.body.classList.contains('ml-app-on'); }
 
   function setMusic(on) {
     if (on === musicOn) { if (on) decorate(); return; }
@@ -183,14 +205,29 @@
     if (configLoaded) return;
     configLoaded = true;
     call('GET', 'MusicLook/Config').then(function (c) {
-      if (!c) return;
+      if (!c) { finishConfig(); return; }
       if (/^#[0-9a-fA-F]{6}$/.test(c.accentColor || '')) {
         config.accentColor = c.accentColor;
         document.documentElement.style.setProperty('--ml-accent', c.accentColor);
       }
       config.jamEnabled = c.jamEnabled !== false;
+      config.spotifyHome = c.spotifyHome !== false;
+      if (Array.isArray(c.podcastKeywords)) config.podcastKeywords = c.podcastKeywords.map(String);
+      if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String);
+      finishConfig();
       ensureJamButton();
     }, function () { configLoaded = false; });
+  }
+
+  function finishConfig() {
+    configDone = true;
+    var waiters = configWaiters; configWaiters = [];
+    waiters.forEach(function (fn) { try { fn(config); } catch (e) { /* App-Fehler duerfen den Kern nicht stoeren */ } });
+  }
+
+  // Ruft fn auf, sobald die Konfiguration geladen ist (sofort, wenn sie schon da ist).
+  function whenConfig(fn) {
+    if (configDone) fn(config); else { configWaiters.push(fn); if (musicOn) loadConfig(); }
   }
 
   /* ---------- Sheet ---------- */
@@ -270,6 +307,12 @@
   }
 
   function openPlusSheet(itemId) {
+    if (api.app && typeof api.app.addToPlaylist === 'function') {
+      trackIds(itemId).then(function (ids) {
+        if (ids.length) api.app.addToPlaylist(ids); else toast(T('noTracks'));
+      }, function () { toast(T('loadFailed')); });
+      return;
+    }
     var ui = openSheet(T('addTitle'));
     var status = el('div', 'ml-muted', T('loadingTracks'));
     ui.sheet.appendChild(status);
@@ -391,7 +434,7 @@
   }
 
   function decorate() {
-    if (!musicOn) return;
+    if (!musicOn || appOn()) return;
     var i, nodes;
 
     nodes = qsa('.card[data-id][data-type]:not(.' + DONE + ')');
@@ -476,7 +519,7 @@
   }
 
   function syncChips() {
-    if (!musicOn || !isLibraryRoute()) { removeChips(); return; }
+    if (!musicOn || !isLibraryRoute() || appOn()) { removeChips(); return; }
     var tabs = libraryTabs();
     var host = document.querySelector('header.MuiAppBar-root');
     if (!host || tabs.length < 2 || tabs[0].legacy) { removeChips(); return; }
@@ -521,7 +564,7 @@
   }
 
   document.addEventListener('touchstart', function (e) {
-    if (!musicOn || !isLibraryRoute() || e.touches.length !== 1 || document.querySelector('.ml-backdrop') || scrollsHorizontally(e.target)) { touch = null; return; }
+    if (!musicOn || !isLibraryRoute() || appOn() || e.touches.length !== 1 || document.querySelector('.ml-backdrop') || scrollsHorizontally(e.target)) { touch = null; return; }
     touch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }, { passive: true });
 
@@ -550,7 +593,7 @@
       document.body.appendChild(b);
     }
     b.textContent = jam.code ? '● ' + T('jam') + ' ' + jam.code : T('jam');
-    b.style.display = musicOn ? '' : 'none';
+    b.style.display = musicOn && !appOn() ? '' : 'none';
   }
 
   function currentEntry() {
@@ -712,6 +755,32 @@
     call('POST', 'MusicLook/Jam/' + code + '/Join').then(function (st) { applyJamState(st, { silent: true }); }, function () { safeStore('ml.jamCode', null); });
   }
 
+  // Fuegt Titel einer Jam hinzu; startet vorher eine neue Jam, falls noch keine laeuft.
+  function jamAddIds(ids) {
+    if (!config.jamEnabled) return Promise.reject(new Error('jam disabled'));
+    var ensure = jam.code ? Promise.resolve() : call('POST', 'MusicLook/Jam').then(function (st) { applyJamState(st, { silent: true }); });
+    return ensure.then(function () {
+      return call('POST', 'MusicLook/Jam/' + jam.code + '/Add', { ids: ids.slice(0, 200).join(',') });
+    }).then(function (s) { if (s) applyJamState(s); });
+  }
+
+  /* ---------- Schnittstelle fuer musiclookapp.js ---------- */
+  var api = {
+    version: 2,
+    app: null,
+    ID_RE: ID_RE,
+    call: call, el: el, button: button, toast: toast, chunk: chunk, qsa: qsa, safeStore: safeStore,
+    uid: uid, nid: nid, client: client, hashParts: hashParts, resolveItem: resolveItem, T: T,
+    openSheet: openSheet, rowButton: rowButton, openShareSheet: openShareSheet, openJamSheet: openJamSheet,
+    config: function () { return config; }, whenConfig: whenConfig,
+    route: function () { return routeInfo; },
+    isMusic: function () { return musicOn; },
+    jamAddIds: jamAddIds, mySession: mySession,
+    jamState: function () { return { code: jam.code, state: jam.state }; },
+    refresh: function () { updateContext(); }
+  };
+  window.MusicLook = api;
+
   /* ---------- Start ---------- */
   var scheduled = false;
   function scheduleDecorate() {
@@ -721,6 +790,7 @@
       scheduled = false;
       // ApiClient/Anmeldung koennen erst nach dem Laden dieses Scripts bereitstehen
       if (contextKey() !== lastKey) updateContext(); else decorate();
+      if (api.app && typeof api.app.layout === 'function') { try { api.app.layout(); } catch (e) { /* ignorieren */ } }
     }, 200);
   }
 
