@@ -3060,6 +3060,7 @@
       if (np) return np;
       np = el('aside', 'ml-np');
       np.hidden = true;
+      if (P.pal) setPalette(np, P.pal);
       var head = el('div', 'ml-np-head');
       ui.npKicker = btn('ml-np-kicker');
       ui.npKicker.addEventListener('click', openAlbumOfCurrent);
@@ -3708,12 +3709,17 @@
       swapIcon(ui.miniToggle, paused ? 'play' : 'pause', paused ? t('play') : t('pause'));
       if (lastItemId !== id) {
         setCover(ui.miniCover, P.item, 96);
-        var mImg = ui.miniCover.querySelector('img');
-        if (mImg) {
-          (function (img, forId) {
-            function run() { if (P.item && P.item.Id === forId) applyPalette(coverPalette(img)); }
-            if (img.complete && img.naturalWidth) run(); else img.addEventListener('load', run, { once: true });
-          })(mImg, id);
+        // Farbe aus dem Cover mit einem eigenen, unsichtbaren Bild holen: Die Mini-Leiste ist am Computer ausgeblendet,
+        // ihr (lazy geladenes) Bild wuerde dort nie laden und Vollansicht/rechte Spalte blieben grau.
+        var pUrl = itemImg(P.item, 96);
+        if (pUrl) {
+          (function (forId) {
+            var img = new Image();
+            img.decoding = 'async';
+            img.onload = function () { if (P.item && P.item.Id === forId) applyPalette(coverPalette(img)); };
+            img.onerror = function () { if (P.item && P.item.Id === forId) applyPalette(null); };
+            img.src = pUrl;
+          })(id);
         } else applyPalette(null);
       }
 
