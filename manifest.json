@@ -4,17 +4,17 @@
     "name": "Music Look",
     "description": "Spotify-aehnlicher Look fuer den Musik-Bereich, Plus-Button fuer Playlists, Playlist-Teilen und Jam.",
     "overview": "Aendert nur den Look des Musik-Bereichs der Web-Oberflaeche (inkl. offizieller Android-App).",
-    "owner": "DEIN-GITHUB-NAME",
+    "owner": "Chris-coder-lab",
     "category": "General",
     "imageUrl": "",
     "versions": [
       {
-        "version": "0.1.0.0",
+        "version": "0.1.0.5",
         "changelog": "Erste Version fuer Jellyfin 12.x.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/DEIN-GITHUB-NAME/jellyfin-plugin-musiclook/releases/download/v0.1.0.0/musiclook_0.1.0.0.zip",
-        "checksum": "WIRD-VON-scripts/update_manifest.py-GESETZT",
-        "timestamp": "2026-10-13T00:00:00Z"
+        "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v0.1.0.5/musiclook_0.1.0.5.zip",
+        "checksum": "51AE2818396DFB2A3AFF73F75C4E153A",
+        "timestamp": "2026-10-17T11:10:21Z"
       }
     ]
   }
