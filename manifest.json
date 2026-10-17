@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.0.7.0",
+        "changelog": "- **Grün markiert jetzt die richtige Playlist:** Die Erkennung der laufenden Playlist ist deutlich strenger. Vorher konnte bei Lieblingssongs eine andere Playlist grün werden, wenn sie dieselben Titel enthielt (die erste passende gewann). Jetzt gilt: Auf dem eigenen Gerät steht fest, was gestartet wurde. Auf anderen Geräten zählt nur eine eindeutige Übereinstimmung (gleiche Reihenfolge schlägt gleiche Titel); ist es nicht eindeutig, wird lieber nichts markiert als das Falsche. Ein einzelner Titel in der Warteschlange markiert keine Playlist mehr, und eine geänderte Mitte der Warteschlange wird erkannt (vorher blieb die alte Markierung stehen)\n- **„Alle Bibliotheken“ zuverlässiger (Firefox):** Der Seitenwechsel zur Jellyfin-Startseite wird nicht mehr mitten im Verlaufs-Ereignis des Browsers ausgelöst (dort konnte ihn Firefox verschlucken) und danach geprüft: Kam er nicht an, wird er wiederholt; blieb die Spotify-Ansicht stehen, wird sie zwangsweise ausgeblendet; blieb die Seite leer, wird einmal neu geladen (nie, solange hier Musik läuft). Gilt auch für „Jellyfin-Startseite“ im Menü",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v1.0.7.0/musiclook_1.0.7.0.zip",
+        "checksum": "F442C81C5C7C73C1CC618A2602B0AB10",
+        "timestamp": "2026-10-17T19:07:18Z"
+      },
+      {
         "version": "1.0.6.0",
         "changelog": "- **Geräteübergreifend wie Spotify:** Spielt dein Handy (oder ein anderes Gerät mit demselben Benutzer) Musik und hier läuft nichts, zeigt der Browser automatisch den laufenden Titel mit „Auf <Gerät>“ und steuert ihn (Pause, Weiter, Spulen, Lautstärke). Umgekehrt sieht das Handy, was im Browser läuft. Startest du hier etwas Neues, läuft es auf diesem Gerät und das beobachtete Gerät wird gestoppt; „Dieses Gerät“ in der Geräteauswahl schaltet das automatische Mitverfolgen bis zum Neuladen ab\n- **Laufende Playlist ist grün:** Lieblingssongs und selbst erstellte Playlists werden in der Bibliothek/Seitenleiste, auf der Startseite (Schnellzugriff und Kacheln) grün markiert, mit Lautsprecher-Symbol, solange sie laufen oder pausiert sind – auch wenn sie auf einem anderen Gerät laufen (erkannt über die Warteschlange). Der große Abspielknopf der Playlist zeigt dann „Pause“\n- **Zurück zu Jellyfin:** Neuer Knopf „Alle Bibliotheken“ links über der Bibliothek (Computer) führt zur normalen Jellyfin-Startseite mit Filmen, Serien und allen anderen Bibliotheken (am Handy weiterhin im Profilmenü: „Jellyfin-Startseite“)",
         "targetAbi": "12.0.0.0",
