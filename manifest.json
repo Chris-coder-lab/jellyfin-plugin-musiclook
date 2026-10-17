@@ -13,8 +13,8 @@
         "changelog": "- **Schnell und stabil:** Läuft die Musik in diesem Browser, wirken Pause/Play, Spulen, Lautstärke und „Zurück zum Anfang“ sofort direkt auf das Audio, ohne Umweg über den Server. Pause oder Play von außen (Medientasten, Bluetooth, Jellyfin selbst) erscheint in der Anzeige ohne Verzögerung.\n- Läuft die Musik auf einem anderen Gerät, zeigt die Anzeige die Änderung sofort, der Befehl wird bei ausbleibender Reaktion einmal wiederholt, danach gibt es einen Hinweis statt stillem Hängenbleiben.\n- **Browser-/Computer-Ansicht deutlich überarbeitet (nach Spotify-Vorbild):** Farbverlauf überall weich nach Schwarz ohne Kante (Seiten, rechte Spalte, Vollansicht), Farbe reicht über die ganze Breite\n- Vollansicht am Computer mit zwei Spalten: Cover und Steuerung links, Songtext, Warteschlange und Künstler rechts\n- Warteschlange und Songtext öffnen sich am Computer in der rechten Spalte; in schmaleren Fenstern (unter 1180 px) als Vollbild-Ebene\n- Grüner Abspielknopf beim Darüberfahren über Kacheln, Typ-Zeile („Playlist“, „Album“ …) über dem Titel, Spotify-Reihenfolge der Knöpfe\n- Das Einschleusen der Seite schreibt Fehler jetzt ins Jellyfin-Protokoll\n- Im Update-Manifest steht der Änderungstext der jeweiligen Version (aus dieser Datei)",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v1.0.3.0/musiclook_1.0.3.0.zip",
-        "checksum": "9C77858F6C34A067C5720E5297C97610",
-        "timestamp": "2026-10-17T15:28:57Z"
+        "checksum": "F38B0587C9CB7238C20900AFF710640D",
+        "timestamp": "2026-10-17T15:33:29Z"
       },
       {
         "version": "1.0.2.0",
