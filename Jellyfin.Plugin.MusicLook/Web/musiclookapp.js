@@ -3142,8 +3142,10 @@
       ui.miniSub = el('div', 'ml-mini-sub');
       ui.miniDev = el('div', 'ml-mini-dev');
       add(txt, ui.miniTitle, ui.miniSub, ui.miniDev);
+      ui.miniText = txt;
       add(open, ui.miniCover, txt);
       open.addEventListener('click', openFull);
+      attachSwipe(open, function () { return [ui.miniCover, ui.miniText]; });
       ui.miniDevBtn = iconBtn('devices', t('devices'), 'ml-mini-devbtn', openDevices);
       ui.miniToggle = iconBtn('play', t('play'), 'ml-mini-play', toggle);
       ui.miniBar = el('div', 'ml-mini-progress');
@@ -3365,6 +3367,8 @@
       ui.fullCover = el('div', 'ml-full-cover');
       stage.appendChild(ui.fullCover);
       block.appendChild(stage);
+      ui.fullStage = stage;
+      attachSwipe(stage, function () { return [ui.fullCover, ui.fullText]; });
 
       ui.meta = el('div', 'ml-full-meta');
       var txt = el('div', 'ml-full-text');
@@ -3375,6 +3379,7 @@
         if (it && it.ArtistItems && it.ArtistItems.length) { closeFull(); openArtist(it.ArtistItems); }
       });
       add(txt, ui.fullTitle, ui.fullArtist);
+      ui.fullText = txt;
       ui.fullFav = iconBtn('heart_o', t('mLike'), 'ml-full-fav', toggleFav);
       ui.fullPlus = iconBtn('add', t('addPlus'), 'ml-full-plus', function () { if (P.item) addToPlaylist([P.item.Id]); });
       add(ui.meta, txt, ui.fullFav, ui.fullPlus);
@@ -3477,9 +3482,141 @@
     }
     function skip(cmd) {
       var a = audioEl();
+      skipDir = cmd === 'PreviousTrack' ? -1 : 1; skipAt = Date.now();
       // Wie bei Spotify: "Zurueck" springt nach ein paar Sekunden zuerst an den Anfang des Titels.
       if (cmd === 'PreviousTrack' && a && a.currentTime > 3 && canSeekLocal(a, 0)) { seekTo(0); return; }
       command('Playing/' + cmd).then(function () { kick(); }, function () { toast(t('playFailed')); });
+    }
+
+    /* ---------- Titelwechsel: neuer Titel gleitet von rechts herein, der alte nach links hinaus (Weiter/Zurueck und Wischen) ---------- */
+    var skipDir = 1, skipAt = 0, swipePend = null, swipeBlockUntil = 0;
+    var reduceMotion = false;
+    try { reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { reduceMotion = false; }
+    function canAnimate() { return !reduceMotion && !document.hidden && typeof Element !== 'undefined' && !!Element.prototype.animate; }
+    // Welche Teile wechseln: ist die Vollansicht offen, deren Cover und Text; sonst die Mini-Leiste (Handy).
+    function slideScope() {
+      if (fullOpen && full && !full.hidden) return { host: full, els: [ui.fullCover, ui.fullText] };
+      if (mini && !mini.hidden && !mini.classList.contains('ml-idle')) return { host: mini, els: [ui.miniCover, ui.miniText] };
+      return null;
+    }
+    function travelOf(r) { return Math.round(Math.min(r.width * 0.9 + 30, 380)); }
+    function dropLayer(layer) { if (layer && layer.parentNode) layer.parentNode.removeChild(layer); }
+    function beginSwap() {
+      var pend = swipePend;
+      swipePend = null;
+      if (pend) clearTimeout(pend.timer);
+      var sc = canAnimate() ? slideScope() : null;
+      if (!sc) { if (pend) clearHold(pend.els); return null; }
+      var dir = pend ? pend.dir : (Date.now() - skipAt < 15000 ? skipDir : 1);
+      var hr = sc.host.getBoundingClientRect();
+      var items = [];
+      var layer = null;
+      sc.els.forEach(function (t) {
+        if (!t) return;
+        var held = pend && pend.els.indexOf(t) >= 0;
+        var r = t.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > window.innerHeight) { if (held) clearHold([t]); return; }
+        var g = null;
+        if (!held) {
+          g = t.cloneNode(true);
+          g.classList.add('ml-ghost');
+          g.style.cssText = 'position:absolute;margin:0;left:' + Math.round(r.left - hr.left) + 'px;top:' + Math.round(r.top - hr.top) + 'px;width:' + Math.round(r.width) + 'px;height:' + Math.round(r.height) + 'px;';
+          if (!layer) { layer = el('div', 'ml-ghost-layer'); sc.host.appendChild(layer); }
+          layer.appendChild(g);
+        }
+        items.push({ t: t, g: g, d: travelOf(r), held: held });
+      });
+      return function run() {
+        var dur = 340, ease = 'cubic-bezier(0.22, 0.8, 0.3, 1)';
+        items.forEach(function (it) {
+          try {
+            if (it.g) it.g.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(' + (-dir * it.d) + 'px)', opacity: 0 }], { duration: dur, easing: ease, fill: 'forwards' });
+            if (it.held) clearHold([it.t]);
+            it.t.animate([{ transform: 'translateX(' + (dir * it.d) + 'px)', opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }], { duration: dur, easing: ease });
+          } catch (e) { /* ohne Animation weiter */ }
+        });
+        if (layer) setTimeout(function () { dropLayer(layer); }, dur + 120);
+      };
+    }
+    function clearHold(els) {
+      els.forEach(function (t) { if (t) { t.style.transform = ''; t.style.opacity = ''; t.style.transition = ''; } });
+    }
+    // Wischen: waehrend des Ziehens folgen Cover und Text dem Finger; nach genug Weg wird weitergeschaltet.
+    function attachSwipe(host, getEls) {
+      host.classList.add('ml-swipe');
+      var st = null;
+      function hasNext() {
+        if (!P.item) return false;
+        if (P.repeat === 'RepeatAll') return true;
+        var i = -1;
+        for (var k = 0; k < P.queue.length; k++) if (nid(P.queue[k].Id) === nid(P.item.Id)) { i = k; break; }
+        return i < 0 ? true : i < P.queue.length - 1;
+      }
+      function drag(dx) {
+        getEls().forEach(function (t) {
+          if (!t) return;
+          t.style.transition = 'none';
+          t.style.transform = 'translateX(' + Math.round(dx * 0.7) + 'px)';
+          t.style.opacity = String(Math.max(0.25, 1 - Math.abs(dx) / 420));
+        });
+      }
+      function snapBack() {
+        getEls().forEach(function (t) {
+          if (!t) return;
+          t.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+          t.style.transform = ''; t.style.opacity = '';
+          setTimeout(function () { if (!swipePend) t.style.transition = ''; }, 260);
+        });
+      }
+      function commit(dir) {
+        var els = getEls().filter(Boolean);
+        var d = Math.round(Math.min(window.innerWidth, 640) * 0.8);
+        els.forEach(function (t) {
+          t.style.transition = 'transform 0.18s ease-in, opacity 0.18s ease-in';
+          t.style.transform = 'translateX(' + (-dir * d) + 'px)'; t.style.opacity = '0';
+        });
+        var pend = { els: els, dir: dir, timer: null };
+        pend.timer = setTimeout(function () {   // Wechsel blieb aus: Ansicht wieder einblenden
+          if (swipePend !== pend) return;
+          swipePend = null;
+          els.forEach(function (t) { t.style.transition = 'transform 0.25s ease, opacity 0.25s ease'; t.style.transform = ''; t.style.opacity = ''; });
+          setTimeout(function () { clearHold(els); }, 300);
+        }, 3500);
+        swipePend = pend;
+        skip(dir > 0 ? 'NextTrack' : 'PreviousTrack');
+      }
+      host.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' || e.isPrimary === false || !P.item || swipePend) { st = null; return; }
+        st = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId, on: false, dx: 0 };
+      });
+      host.addEventListener('pointermove', function (e) {
+        if (!st || e.pointerId !== st.id) return;
+        var dx = e.clientX - st.x, dy = e.clientY - st.y;
+        if (!st.on) {
+          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.3) { st.on = true; try { host.setPointerCapture(e.pointerId); } catch (x) { /* ohne Capture */ } }
+          else { if (Math.abs(dy) > 14) st = null; return; }
+        }
+        st.dx = dx;
+        drag(dx);
+      });
+      function end(e, cancelled) {
+        if (!st || e.pointerId !== st.id) return;
+        var s = st; st = null;
+        if (!s.on) return;
+        swipeBlockUntil = Date.now() + 350;
+        var dx = s.dx, dt = Math.max(1, Date.now() - s.t), v = Math.abs(dx) / dt;
+        var far = Math.abs(dx) > 70 || (Math.abs(dx) > 35 && v > 0.45);
+        if (cancelled || !far) { snapBack(); return; }
+        var dir = dx < 0 ? 1 : -1;
+        var a = audioEl();
+        if (dir > 0 && !hasNext()) { snapBack(); return; }
+        if (dir < 0 && a && a.currentTime > 3) { snapBack(); skip('PreviousTrack'); return; }   // erst an den Anfang des Titels
+        commit(dir);
+      }
+      host.addEventListener('pointerup', function (e) { end(e, false); });
+      host.addEventListener('pointercancel', function (e) { end(e, true); });
+      // Nach dem Wischen soll kein Klick (Player oeffnen, Cover tippen) ausgeloest werden.
+      host.addEventListener('click', function (e) { if (Date.now() < swipeBlockUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
     }
 
     // Pause/Wiedergabe fuer andere Geraete: der Befehl ist idempotent, daher wird er einmal wiederholt, falls der Zustand ausbleibt.
@@ -4021,6 +4158,7 @@
       }
       var it = P.full || P.item;
       var id = P.item.Id;
+      var swap = lastItemId && lastItemId !== id ? beginSwap() : null;   // alten Titel merken, damit er herausgleiten kann
       var sub = firstArtist(it) || firstArtist(P.item);
       var paused = isPaused();
       var remote = !!P.targetId;
@@ -4078,6 +4216,7 @@
         updateExtras();
       }
       if (lastItemId !== id) { lastItemId = id; markPlaying(); applySpeed(); }
+      if (swap) swap();
       progress();
     }
 
@@ -4115,9 +4254,17 @@
     }
 
     /* ---------- Abfrage der Sitzung ---------- */
+    var gapSince = 0;
     function applySession(s) {
       var np = s && s.NowPlayingItem;
+      if (np) gapSince = 0;
+      else if (P.item) {
+        // Beim Titelwechsel meldet der Server kurz keinen Titel. Die Ansicht bleibt dann stehen, statt die Vollansicht zu schliessen.
+        if (!gapSince) gapSince = Date.now();
+        if (Date.now() - gapSince < 4500) { fastUntil = Math.max(fastUntil, Date.now() + 2500); return; }
+      }
       if (!np) {
+        gapSince = 0;
         ctxSig = ''; setCtx('');
         if (P.item) { P.item = null; P.full = null; P.lyrics = undefined; lastItemId = ''; heroCoverId = ''; extrasFor = ''; markPlaying(); }
         P.queue = [];

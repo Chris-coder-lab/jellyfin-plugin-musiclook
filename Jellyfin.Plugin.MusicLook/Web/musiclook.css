@@ -1183,3 +1183,11 @@ body.ml-full-on { overflow: hidden; }
 .ml-app button::-moz-focus-inner, .ml-full button::-moz-focus-inner, .ml-backdrop button::-moz-focus-inner { border: 0; padding: 0; }
 body.ml-kbd .ml-app button:focus-visible, body.ml-kbd .ml-app [role="button"]:focus-visible, body.ml-kbd .ml-app [tabindex]:focus-visible,
 body.ml-kbd .ml-full button:focus-visible, body.ml-kbd .ml-backdrop button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.75); outline-offset: 2px; }
+
+/* Version 1.0.9: Titelwechsel mit Wischen und Gleiten */
+.ml-swipe { touch-action: pan-y; }
+.ml-full-scroll { overflow-x: hidden; }
+.ml-mini { overflow: hidden; }
+.ml-ghost-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 6; }
+.ml-ghost { pointer-events: none; }
+.ml-ghost-layer .ml-ghost { box-sizing: border-box; }

@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.0.9.0
+- **Weiter/Zurück schließt die Liedansicht nicht mehr:** Beim Titelwechsel meldet der Server kurz „es läuft nichts“. Die Vollansicht deutete das als Ende der Wiedergabe, schloss sich und zeigte darunter wieder das Album. Jetzt bleibt die Ansicht stehen; ein echtes Ende wird erst nach einigen Sekunden erkannt
+- **Titelwechsel mit Gleiten:** Beim Weiter gleitet der neue Titel (Cover und Text) von rechts herein, der alte nach links hinaus; bei Zurück umgekehrt. Gilt für die Vollansicht und die Mini-Leiste, auch wenn der Wechsel von außen kommt (Medientasten, anderes Gerät, Liedende). Bei eingestellter „Bewegung reduzieren“ entfällt die Animation
+- **Wischen:** In der Vollansicht über das Cover und unten über die Mini-Leiste lässt sich nach links wischen (nächster Titel) und nach rechts (vorheriger Titel; nach mehr als 3 Sekunden springt es wie bei Spotify zuerst an den Anfang des Titels). Cover und Text folgen dem Finger; ein zu kurzer Wisch springt zurück, senkrechtes Scrollen bleibt unverändert, Tippen öffnet weiterhin die Vollansicht
+
 ## 1.0.8.0
 - **Kein blaues Viereck mehr um Knöpfe:** Die Tipp-Markierung des Handy-Browsers und der Fokusrahmen nach einem Klick sind in der Spotify-Ansicht (Player, Menüs, Vollansicht, Meldungen) abgeschaltet. Nur wer die Tab-Taste benutzt, sieht weiterhin einen dezenten weißen Rahmen
 - **Lieblingssongs behalten ihre Reihenfolge:** Die Liste war nach „zuletzt gespielt“ sortiert und änderte sich dadurch mit jedem gespielten Titel – auf Handy und Computer sah sie darum verschieden aus. Jetzt gilt eine feste Reihenfolge (zuletzt zur Bibliothek hinzugefügte Titel zuerst, dann nach Namen); dieselbe Reihenfolge nutzt die Erkennung der laufenden Playlist
