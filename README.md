@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.2.0 && git push origin v1.0.2.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.3.0 && git push origin v1.0.3.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -96,6 +96,7 @@ Dieselbe Logik gibt es als eigenständiges Skript für die NAS: `python3 tools/s
 - Der Player folgt der Wiedergabe des Web-Clients auf dem eigenen Gerät; die Position wird alle paar Sekunden abgeglichen.
 - Playlist-Cover aus Titeln werden im Browser aus Alben-Covern zusammengesetzt; ein hochgeladenes Bild wird als JPEG bis 800 × 800 gespeichert.
 - Jellyfin 12.2 bringt bereits einen „Zur Playlist hinzufügen“-Knopf und einen Öffentlich/Privat-Schalter mit; die klassische Ansicht ergänzt das um den Plus-Button an Karten und das Teilen mit einzelnen Benutzern.
+- Pause, Spulen und Lautstärke wirken sofort nur auf diesem Gerät; Weiter, Zurück, Zufall und Wiederholen laufen weiter über Jellyfins Sitzungs-Schnittstelle.
 - Das Plugin ist gegen den Quellcode von Jellyfin 12.0/12.2 und im Browser mit einer nachgebauten Seite geprüft (über 140 automatische Prüfungen im Browser, dazu 18 Tests des Sortierers), nicht in einer laufenden Jellyfin-12-Installation.
 
 ## Sicherheit

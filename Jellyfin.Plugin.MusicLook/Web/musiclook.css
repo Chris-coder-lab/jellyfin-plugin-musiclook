@@ -499,6 +499,8 @@ body.ml-full-on { overflow: hidden; }
 
 .ml-app {
   --ml-tile: 150px;
+  /* weicher, gleichmaessiger Auslauf (keine sichtbare Kante): Deckkraft sinkt in vielen kleinen Stufen auf 0 */
+  --ml-ease: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.94) 7%, rgba(0,0,0,.85) 16%, rgba(0,0,0,.72) 27%, rgba(0,0,0,.57) 39%, rgba(0,0,0,.42) 52%, rgba(0,0,0,.28) 65%, rgba(0,0,0,.16) 77%, rgba(0,0,0,.07) 88%, rgba(0,0,0,.02) 95%, transparent 100%);
   position: fixed;
   top: var(--ml-top, 0);
   left: var(--ml-left, 0);
@@ -517,10 +519,15 @@ body.ml-full-on { overflow: hidden; }
 .ml-app button { font-family: inherit; }
 .ml-app-scroll {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-  /* Farbverlauf von der Seitenfarbe (Cover) nach Schwarz - nie eine flache graue Flaeche */
+  /* Der Farbverlauf (Seitenfarbe aus dem Cover nach Schwarz) liegt als ::before unter dem Inhalt und scrollt mit */
+  position: relative; isolation: isolate;
   background-color: var(--ml-bg, #121212);
-  background-image: linear-gradient(to bottom, var(--ml-hero, #34423b) 0, var(--ml-hero-deep, #121212) 360px, #121212 640px);
-  background-repeat: no-repeat; background-attachment: local;
+}
+.ml-app-scroll::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: min(620px, 78vh); z-index: -1; pointer-events: none;
+  background: var(--ml-hero, #34423b);
+  -webkit-mask-image: var(--ml-ease); mask-image: var(--ml-ease);
+  transition: background-color 0.5s ease;
 }
 .ml-app-content { max-width: 1180px; margin: 0 auto; padding-bottom: 24px; }
 .ml-muted { color: var(--ml-muted, #b3b3b3); }
@@ -717,15 +724,15 @@ body.ml-full-on { overflow: hidden; }
 .ml-mini-fill { height: 100%; width: 0; background: #fff; }
 
 /* Vollbild-Player (Spotify-Stil: Farben folgen dem Cover) */
-.ml-full { --ml-top-h: 56px; position: fixed; inset: 0; z-index: 99000; display: flex; flex-direction: column; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); background-color: var(--ml-hero, #3d3d3d); transition: background-color 0.5s ease; color: #fff; font-family: var(--ml-font, system-ui); overflow: hidden; animation: ml-full-in 0.22s ease; }
+.ml-full { --ml-top-h: 56px; position: fixed; inset: 0; z-index: 99000; display: flex; flex-direction: column; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); background-color: var(--ml-hero, #3d3d3d); background-image: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.06) 14%, rgba(0,0,0,.16) 30%, rgba(0,0,0,.32) 47%, rgba(0,0,0,.52) 65%, rgba(0,0,0,.72) 83%, rgba(0,0,0,.88) 100%); transition: background-color 0.5s ease; color: #fff; font-family: var(--ml-font, system-ui); overflow: hidden; animation: ml-full-in 0.22s ease; }
 .ml-full[hidden] { display: none; }
 @keyframes ml-full-in { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
-.ml-full-top { position: relative; flex: 0 0 auto; height: var(--ml-top-h); z-index: 2; background-color: var(--ml-hero, #3d3d3d); transition: background-color 0.5s ease, box-shadow 0.2s ease; }
+.ml-full-top { position: relative; flex: 0 0 auto; height: var(--ml-top-h); z-index: 2; background-color: transparent; transition: background-color 0.3s ease, box-shadow 0.2s ease; }
 .ml-top-exp, .ml-top-cmp { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px; transition: opacity 0.18s ease; }
 .ml-top-cmp { opacity: 0; pointer-events: none; }
 .ml-compact .ml-top-exp { opacity: 0; pointer-events: none; }
 .ml-compact .ml-top-cmp { opacity: 1; pointer-events: auto; }
-.ml-compact .ml-full-top { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
+.ml-compact .ml-full-top { background-color: var(--ml-hero, #3d3d3d); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); }
 .ml-top-label { flex: 1 1 auto; min-width: 0; text-align: center; }
 .ml-top-kicker { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
 .ml-top-name { font-size: 0.9rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -735,7 +742,7 @@ body.ml-full-on { overflow: hidden; }
 .ml-cmp-play { background: #fff; color: #000; }
 .ml-cmp-play:hover { background: #fff; }
 .ml-full-scroll { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.ml-player-block { display: flex; flex-direction: column; box-sizing: border-box; min-height: calc(100vh - var(--ml-top-h) - env(safe-area-inset-top, 0px)); min-height: calc(100dvh - var(--ml-top-h) - env(safe-area-inset-top, 0px)); padding-bottom: 6px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.3) 100%); }
+.ml-player-block { display: flex; flex-direction: column; box-sizing: border-box; min-height: calc(100vh - var(--ml-top-h) - env(safe-area-inset-top, 0px)); min-height: calc(100dvh - var(--ml-top-h) - env(safe-area-inset-top, 0px)); padding-bottom: 6px; }
 .ml-full-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px 24px 14px; }
 .ml-full-cover { width: min(calc(100vw - 48px), 44vh, 440px); }
 .ml-full-cover .ml-cover { width: 100%; border-radius: 8px; box-shadow: 0 14px 50px rgba(0, 0, 0, 0.55); }
@@ -766,7 +773,7 @@ body.ml-full-on { overflow: hidden; }
 .ml-foot-btn.ml-on { background: var(--ml-accent, #1ed760); color: #000; }
 
 /* Karten unter dem Player */
-.ml-cards { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px calc(28px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0, #121212 260px), #121212; }
+.ml-cards { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px calc(28px + env(safe-area-inset-bottom, 0px)); }
 .ml-card { width: 100%; max-width: 560px; margin: 0 auto; box-sizing: border-box; padding: 16px; border-radius: 12px; overflow: hidden; background: var(--ml-hero-card, #2a2a2a); transition: background-color 0.5s ease; }
 .ml-card[hidden] { display: none; }
 .ml-card-plain { background: rgba(255, 255, 255, 0.07); }
@@ -989,7 +996,8 @@ body.ml-full-on { overflow: hidden; }
   .ml-trow.ml-playing .ml-trow-n, .ml-trow.ml-playing .ml-track-title { color: var(--ml-accent, #1ed760); }
 
   /* Wiedergabe-Ansicht rechts */
-  .ml-np { min-height: 0; flex-direction: column; border-radius: 8px; overflow: hidden; background-color: #121212; background-image: linear-gradient(to bottom, var(--ml-hero, #34423b) 0, #121212 440px); }
+  .ml-np { position: relative; isolation: isolate; min-height: 0; flex-direction: column; border-radius: 8px; overflow: hidden; background-color: #121212; }
+  .ml-np::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 420px; z-index: -1; pointer-events: none; background: var(--ml-hero, #34423b); -webkit-mask-image: var(--ml-ease); mask-image: var(--ml-ease); transition: background-color 0.5s ease; }
   .ml-np-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 8px 8px 18px; }
   .ml-np-kicker { min-width: 0; border: 0; background: none; padding: 0; color: #fff; font: 800 1rem var(--ml-font, system-ui); text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ml-np-kicker:hover { text-decoration: underline; }
@@ -1044,3 +1052,98 @@ body.ml-full-on { overflow: hidden; }
 
 /* Titel, der aus der Suche geoeffnet wurde */
 .ml-track.ml-focus { background: rgba(255, 255, 255, 0.14); border-radius: 8px; transition: background 0.6s; }
+
+
+/* =====================================================================
+   Version 1.0.3: Computer-Ansicht wie Spotify im Browser
+   ===================================================================== */
+.ml-hero-kind { display: none; }
+.ml-tile-art { position: relative; }
+.ml-tile-play { display: none; }
+
+@media (min-width: 900px) {
+  /* schmale Fenster: Seitenleiste etwas kleiner */
+  .ml-app.ml-wide { grid-template-columns: 280px minmax(0, 1fr); }
+  .ml-app.ml-wide.ml-has-np { grid-template-columns: 280px minmax(0, 1fr) 320px; }
+
+  /* duenne, dunkle Bildlaufleisten wie bei Spotify */
+  .ml-wide *, .ml-full * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.28) transparent; }
+  .ml-wide ::-webkit-scrollbar, .ml-full ::-webkit-scrollbar { width: 12px; height: 12px; }
+  .ml-wide ::-webkit-scrollbar-thumb, .ml-full ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+  .ml-wide ::-webkit-scrollbar-thumb:hover, .ml-full ::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.5); background-clip: content-box; }
+  .ml-wide ::-webkit-scrollbar-track, .ml-full ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Kachel: dunkle Karte mit Hover und gruenem Abspielknopf */
+  .ml-wide .ml-shelf-row { gap: 4px; }
+  .ml-wide .ml-tile { flex: 0 0 calc(var(--ml-tile) + 24px); width: calc(var(--ml-tile) + 24px); padding: 12px; box-sizing: border-box; border-radius: 8px; transition: background-color 0.2s ease; }
+  .ml-wide .ml-tile:hover { background: #1f1f1f; }
+  .ml-wide .ml-tile-cover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+  .ml-wide .ml-tile-play {
+    display: flex; align-items: center; justify-content: center; position: absolute; right: 8px; bottom: 8px; width: 48px; height: 48px; border-radius: 50%;
+    background: var(--ml-accent, #1ed760); color: #000; box-shadow: 0 8px 8px rgba(0, 0, 0, 0.3); cursor: pointer;
+    opacity: 0; transform: translateY(8px); transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.1s ease;
+  }
+  .ml-wide .ml-tile-play .ml-ic { width: 26px; height: 26px; }
+  .ml-wide .ml-tile:hover .ml-tile-play, .ml-wide .ml-tile:focus-within .ml-tile-play { opacity: 1; transform: none; }
+  .ml-wide .ml-tile-play:hover { transform: scale(1.06); background: #3be477; }
+  .ml-wide .ml-quick { transition: background-color 0.2s ease; }
+  .ml-wide .ml-quick:hover { background: #3a3a3a; }
+
+  /* Kopf einer Detailseite: Typ, grosser Titel, Aktionsleiste mit gruenem Abspielknopf zuerst */
+  .ml-wide .ml-hero { padding-top: 8px; align-items: end; }
+  .ml-wide .ml-hero-cover { box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5); }
+  .ml-wide .ml-hero-kind { display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.01em; }
+  .ml-wide .ml-hero-title { font-size: clamp(2rem, 4vw, 5.4rem); line-height: 1.04; letter-spacing: -0.03em; margin: 0 0 12px; }
+  .ml-wide .ml-actions { flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 16px; padding: 20px 24px 12px; }
+  .ml-wide .ml-actions-right { flex-direction: row-reverse; gap: 12px; }
+  .ml-wide .ml-play-btn { width: 56px; height: 56px; }
+  .ml-wide .ml-play-btn .ml-ic { width: 30px; height: 30px; }
+  .ml-wide .ml-actions-left, .ml-wide .ml-actions-right { display: flex; align-items: center; }
+  .ml-wide .ml-actions .ml-icon-btn { color: #b3b3b3; }
+  .ml-wide .ml-actions .ml-icon-btn:hover { color: #fff; background: transparent; }
+  .ml-wide .ml-actions .ml-play-btn { color: #000; }
+  .ml-wide .ml-actions .ml-play-btn:hover { background: #3be477; }
+  .ml-wide .ml-thead { margin-top: 8px; background: transparent; }
+
+  /* Vorlage fuer rechts: Warteschlange / Songtext in der Spalte */
+  .ml-np .ml-panel.ml-panel-np { position: absolute; inset: 0; z-index: 4; border-radius: 8px; padding-top: 0; background: #121212; background-image: none; animation: none; }
+  .ml-np .ml-panel-np .ml-panel-head { padding: 12px 8px 8px 12px; flex-direction: row-reverse; }
+  .ml-np .ml-panel-np .ml-panel-text { flex: 1 1 auto; min-width: 0; }
+  .ml-np .ml-panel-np .ml-panel-title { font-weight: 800; font-size: 1rem; }
+  .ml-np .ml-panel-np .ml-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 16px; }
+  .ml-np .ml-panel-np.ml-panel-lyrics { background: var(--ml-hero, #34423b); }
+  .ml-np .ml-panel-np .ml-queue-row { padding: 6px 8px; border-radius: 6px; }
+  .ml-np .ml-panel-np .ml-queue-row:hover { background: rgba(255, 255, 255, 0.1); }
+  .ml-np .ml-panel-np .ml-ly-big { font-size: 1.5rem; padding: 6px 12px; }
+
+  /* Vollansicht: zwei Spalten wie Spotify - links Cover und Bedienung, rechts Songtext, Warteschlange, Kuenstler, Credits */
+  .ml-full { --ml-top-h: 64px; background-image:
+      radial-gradient(ellipse 80% 70% at 22% 28%, rgba(255, 255, 255, 0.12), transparent 70%),
+      linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.05) 12%, rgba(0,0,0,.15) 28%, rgba(0,0,0,.32) 45%, rgba(0,0,0,.54) 63%, rgba(0,0,0,.76) 82%, rgba(0,0,0,.92) 100%); }
+  .ml-full .ml-top-exp { padding: 0 16px; }
+  .ml-full .ml-top-cmp { display: none; }
+  .ml-compact .ml-top-exp { opacity: 1; pointer-events: auto; }
+  .ml-compact .ml-full-top { background-color: transparent; box-shadow: none; }
+  .ml-full-scroll { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr); column-gap: clamp(32px, 5vw, 96px); align-items: start; padding: 0 clamp(32px, 6vw, 112px); }
+  .ml-player-block { position: sticky; top: 0; height: calc(100vh - var(--ml-top-h)); min-height: 560px; max-width: 680px; width: 100%; margin: 0 auto; justify-content: center; padding-bottom: 24px; }
+  .ml-full-stage { flex: 0 1 auto; padding: 0 0 28px; justify-content: flex-start; }
+  .ml-full-cover { width: min(100%, calc(100vh - 380px), 520px); min-width: 220px; }
+  .ml-full-cover .ml-cover { box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6); border-radius: 10px; }
+  .ml-full-meta, .ml-seek, .ml-controls, .ml-full-foot { max-width: none; margin-left: 0; margin-right: 0; }
+  .ml-full-meta { padding: 0; }
+  .ml-full-title { font-size: clamp(1.7rem, 2.6vw, 2.6rem); line-height: 1.1; letter-spacing: -0.02em; }
+  .ml-full-artist { font-size: 1.15rem; margin-top: 4px; }
+  .ml-seek { padding: 18px 0 0; }
+  .ml-controls { padding: 8px 0 0; max-width: 460px; }
+  .ml-full-foot { padding: 14px 0 0; }
+  .ml-cards { padding: 24px 0 72px; gap: 16px; align-self: start; }
+  .ml-cards .ml-card { max-width: none; background: rgba(0, 0, 0, 0.34); backdrop-filter: blur(6px); }
+  .ml-cards .ml-card.ml-card-plain { background: rgba(0, 0, 0, 0.28); }
+  .ml-cards .ml-lyrics-card { background: var(--ml-hero-card, #2a2a2a); }
+  .ml-cards .ml-ly-line { font-size: 1.6rem; }
+}
+
+/* Hohe, schmale Fenster und kleine Hoehen: Vollansicht darf scrollen statt zu quetschen */
+@media (min-width: 900px) and (max-height: 700px) {
+  .ml-full-cover { width: min(100%, 300px); }
+}

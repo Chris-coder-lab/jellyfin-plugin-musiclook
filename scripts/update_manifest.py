@@ -13,6 +13,26 @@ from pathlib import Path
 zip_path, user, version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 md5 = hashlib.md5(zip_path.read_bytes()).hexdigest().upper()  # Jellyfin erwartet MD5
 manifest_path = Path(__file__).resolve().parent.parent / "manifest.json"
+changelog_path = manifest_path.parent / "CHANGELOG.md"
+
+
+def changelog_for(ver):
+    """Liest den Abschnitt '## <ver>' aus CHANGELOG.md; ohne Abschnitt bleibt ein neutraler Text."""
+    try:
+        text = changelog_path.read_text(encoding="utf-8")
+    except OSError:
+        return f"Music Look {ver}"
+    lines, take = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if take:
+                break
+            take = line[3:].strip() == ver
+            continue
+        if take and line.strip():
+            lines.append(line.strip())
+    return "\n".join(lines) if lines else f"Music Look {ver}"
+
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 plugin = manifest[0]
 plugin["owner"] = user
@@ -22,6 +42,7 @@ if entry is None:
     entry["version"] = version
     plugin["versions"].insert(0, entry)
 entry["checksum"] = md5
+entry["changelog"] = changelog_for(version)
 repo = os.environ.get("GITHUB_REPOSITORY") or f"{user}/jellyfin-plugin-musiclook"  # in GitHub Actions gesetzt
 entry["sourceUrl"] = f"https://github.com/{repo}/releases/download/v{version}/{zip_path.name}"
 entry["timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
 
 namespace Jellyfin.Plugin.MusicLook;
@@ -83,13 +84,18 @@ public sealed class IndexInjectionMiddleware
 {
     private const int MaxPageBytes = 1024 * 1024;
 
+    private static int _reported;
+
     private readonly RequestDelegate _next;
+    private readonly ILogger<IndexInjectionMiddleware> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="IndexInjectionMiddleware"/> class.</summary>
     /// <param name="next">The next middleware.</param>
-    public IndexInjectionMiddleware(RequestDelegate next)
+    /// <param name="logger">The logger.</param>
+    public IndexInjectionMiddleware(RequestDelegate next, ILogger<IndexInjectionMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
     /// <summary>Handles one request.</summary>
@@ -145,11 +151,22 @@ public sealed class IndexInjectionMiddleware
                 if (!ReferenceEquals(patched, html))
                 {
                     body = Encoding.UTF8.GetBytes(patched);
+
+                    // Selbsttest-Hinweis im Log: einmal pro Serverstart, damit sichtbar ist, dass das Einschleusen greift.
+                    if (Interlocked.Exchange(ref _reported, 1) == 0)
+                    {
+                        _logger.LogInformation("Music Look {Version}: Script in die Web-Oberflaeche eingefuegt ({Path})", version, request.Path.Value);
+                    }
+                }
+                else if (!html.Contains("MusicLook/client.js", StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("Music Look: index.html konnte nicht angepasst werden (kein </body> gefunden)");
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // keep the original bytes
+                // Die Original-Seite wird ausgeliefert; der Fehler steht im Log.
+                _logger.LogWarning(ex, "Music Look: index.html konnte nicht angepasst werden");
             }
 
             var etag = "\"" + Convert.ToHexString(SHA256.HashData(body), 0, 8).ToLowerInvariant() + "\"";

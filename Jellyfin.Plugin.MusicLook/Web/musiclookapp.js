@@ -1721,9 +1721,34 @@
     return holder;
   }
 
+  // Direkt aus einer Kachel abspielen (Computer-Ansicht: gruener Knopf beim Daruberfahren, wie bei Spotify).
+  function playItemQuick(item) {
+    var p;
+    if (item.Type === 'Playlist') p = loadPlaylistTracks(item.Id);
+    else if (item.Type === 'MusicAlbum') p = loadAlbumTracks(item.Id);
+    else if (item.Type === 'MusicArtist') p = itemsOf({ ArtistIds: item.Id, IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'PlayCount,SortName', SortOrder: 'Descending,Ascending', Limit: 100 });
+    else if (item.Type === 'Audio') p = Promise.resolve([item]);
+    else p = Promise.resolve([]);
+    p.then(function (tracks) {
+      var ids = idsOf(tracks);
+      if (ids.length) playIds(ids, 0); else toast(t('nothingYet'));
+    }, function () { toast(t('playFailed')); });
+  }
+
   function tile(opts) {
     var b = btn('ml-tile' + (opts.round ? ' ml-round-tile' : ''));
-    b.appendChild(opts.coverEl || cover(opts.img, 'ml-tile-cover' + (opts.round ? ' ml-round' : '')));
+    var coverNode = opts.coverEl || cover(opts.img, 'ml-tile-cover' + (opts.round ? ' ml-round' : ''));
+    if (opts.play) {
+      var art = el('div', 'ml-tile-art');
+      art.appendChild(coverNode);
+      var pb = el('span', 'ml-tile-play');
+      pb.setAttribute('role', 'button');
+      pb.setAttribute('aria-label', t('play'));
+      pb.appendChild(icon('play'));
+      pb.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); opts.play(); });
+      art.appendChild(pb);
+      b.appendChild(art);
+    } else b.appendChild(coverNode);
     b.appendChild(el('div', 'ml-tile-title', opts.title));
     if (opts.sub) b.appendChild(el('div', 'ml-tile-sub', opts.sub));
     b.addEventListener('click', opts.onClick);
@@ -1735,14 +1760,15 @@
     var sub = item.Type === 'MusicAlbum' ? albumArtistLine(item) : item.Type === 'MusicArtist' ? t('artist') : item.Type === 'Audio' ? firstArtist(item) : '';
     return tile({
       title: item.Name, sub: sub, round: round, img: itemImg(item, 300),
-      onClick: function () { go(hrefFor(item)); }
+      onClick: function () { go(hrefFor(item)); },
+      play: function () { playItemQuick(item); }
     });
   }
 
   function playlistTile(pl) {
     var c = playlistCover(pl, 'ml-tile-cover', 300);
     var sub = pl.info.sharedWithMe && !pl.info.isOwner ? t('byOwner', pl.info.ownerName || '') : (pl.item.ChildCount != null ? countText(pl.item.ChildCount) : t('playlist'));
-    return tile({ title: pl.item.Name, sub: sub, coverEl: c, onClick: function () { go(hrefFor(pl.item)); } });
+    return tile({ title: pl.item.Name, sub: sub, coverEl: c, onClick: function () { go(hrefFor(pl.item)); }, play: function () { playItemQuick(pl.item); } });
   }
 
   function shelf(host, title, tiles, extraClass) {
@@ -2344,6 +2370,7 @@
 
     if (!edit) {
       var info = el('div', 'ml-hero-info');
+      info.appendChild(el('div', 'ml-hero-kind', ctx.kind === 'album' ? (ctx.book ? t('bookLabel') : t('album')) : t('playlist')));
       info.appendChild(el('h1', 'ml-hero-title', title));
       var desc = ctx.kind === 'playlist' ? (ctx.pl.item.Overview || '').trim() : '';
       if (desc) info.appendChild(el('p', 'ml-hero-desc', desc));
@@ -2677,6 +2704,7 @@
     if (img) pageColor(img);
 
     var info = el('div', 'ml-hero-info');
+    info.appendChild(el('div', 'ml-hero-kind', t('artist')));
     info.appendChild(el('h1', 'ml-hero-title', a.Name));
     var stats = [countText(ctx.tracks.length)];
     if (ctx.albums.length) stats.push(ctx.albums.length === 1 ? t('albumsCount1') : t('albumsCountN', ctx.albums.length));
@@ -2950,6 +2978,13 @@
       var it = P.full || P.item;
       if (it && it.AlbumId) go(albumHash(it));
     }
+    var npMq = null;
+    try { npMq = window.matchMedia('(min-width: 1180px)'); } catch (e) { npMq = null; }
+    function npRoom() { return npMq ? npMq.matches : true; }
+    if (npMq) {
+      var onNpMq = function () { if (running) paint(); };
+      if (npMq.addEventListener) npMq.addEventListener('change', onNpMq); else if (npMq.addListener) npMq.addListener(onNpMq);
+    }
     function setNpHidden(on) {
       npHidden = on;
       try { window.localStorage.setItem('ml.np', on ? '0' : '1'); } catch (e) { /* ignorieren */ }
@@ -2997,10 +3032,11 @@
 
       var right = el('div', 'ml-bar-right');
       ui.bLyrics = iconBtn('mic', t('lyrics'), 'ml-bar-icon', function () {
-        openFull();
-        loadLyrics(P.item.Id).then(function (ly) { if (ly) { P.lyrics = ly; openLyricsPanel(); } });
+        if (!P.item) return;
+        if (lyPanel) { lyPanel.close(); return; }
+        loadLyrics(P.item.Id).then(function (ly) { if (ly) { P.lyrics = ly; openLyricsPanel(); } else toast(t('lyricsNone')); });
       });
-      ui.bQueue = iconBtn('queue', t('queueTitle'), 'ml-bar-icon', function () { openFull(); openQueuePanel(); });
+      ui.bQueue = iconBtn('queue', t('queueTitle'), 'ml-bar-icon', function () { if (queuePanel) queuePanel.close(); else openQueuePanel(); });
       ui.bDevBtn = iconBtn('devices', t('devices'), 'ml-bar-icon', openDevices);
       ui.bSpeed = btn('ml-bar-speed'); ui.bSpeed.addEventListener('click', openSpeed);
       ui.bVolIc = iconBtn('volume', t('mute'), 'ml-bar-icon', function () {
@@ -3067,13 +3103,14 @@
       ui.bSpeed.textContent = speed === 1 ? '' : t('speedBadge', speed);
       ui.bSpeed.hidden = speed === 1;
       ui.bNpBtn.classList.toggle('ml-on', !npHidden);
+      ui.bNpBtn.hidden = !npRoom();
       swapIcon(ui.bVolIc, P.volume > 0 ? 'volume' : 'volume_off', t('mute'));
       if (document.activeElement !== ui.bVol) { ui.bVol.value = String(Math.round(P.volume)); paintRange(ui.bVol); }
     }
 
     function paintNp(it, sub) {
       if (!np) return;
-      var show = isWide() && !npHidden;
+      var show = isWide() && npRoom() && !npHidden;
       np.hidden = !show;
       if (root) root.classList.toggle('ml-has-np', show);
       if (!show) return;
@@ -3236,15 +3273,59 @@
     function command(path, params, body) {
       return withSession(function (s) { return call('POST', 'Sessions/' + s.Id + '/' + path, params || null, body); });
     }
-    function seekTo(sec) {
-      return command('Playing/Seek', { seekPositionTicks: Math.round(Math.max(0, sec) * 1e7) }).then(function () { P.pos = sec; P.at = Date.now(); kick(); });
+    // Laeuft die Musik auf diesem Geraet, steuern Pause, Spulen und Lautstaerke das Audio-Element des Web-Clients direkt.
+    // Das ist dasselbe, was Jellyfin selbst tut (player.pause()/unpause()/currentTime()), nur ohne Umweg ueber den Server:
+    // sofort, auch bei ausgelastetem Server, und es funktioniert auch ohne WebSocket-Verbindung.
+    function canSeekLocal(a, sec) {
+      if (!a) return false;
+      if (/\.m3u8/i.test(a.currentSrc || a.src || '')) return true;
+      try { return !!(a.seekable && a.seekable.length > 0 && a.seekable.end(a.seekable.length - 1) + 0.5 >= sec); } catch (e) { return false; }
     }
-    function skip(cmd) { command('Playing/' + cmd).then(function () { kick(); }, function () { toast(t('playFailed')); }); }
-    function toggle() {
-      var wasPaused = isPaused();
-      P.paused = !wasPaused; P.pos = position(); P.at = Date.now();
+    function seekTo(sec) {
+      sec = Math.max(0, sec);
+      var a = audioEl();
+      if (canSeekLocal(a, sec)) {
+        try { a.currentTime = sec; P.pos = sec; P.at = Date.now(); progress(); return Promise.resolve(); } catch (e) { /* weiter mit Server-Befehl */ }
+      }
+      return command('Playing/Seek', { seekPositionTicks: Math.round(sec * 1e7) }).then(function () { P.pos = sec; P.at = Date.now(); kick(); });
+    }
+    function skip(cmd) {
+      var a = audioEl();
+      // Wie bei Spotify: "Zurueck" springt nach ein paar Sekunden zuerst an den Anfang des Titels.
+      if (cmd === 'PreviousTrack' && a && a.currentTime > 3 && canSeekLocal(a, 0)) { seekTo(0); return; }
+      command('Playing/' + cmd).then(function () { kick(); }, function () { toast(t('playFailed')); });
+    }
+
+    // Pause/Wiedergabe fuer andere Geraete: der Befehl ist idempotent, daher wird er einmal wiederholt, falls der Zustand ausbleibt.
+    var pendingPause = null;
+    function remoteSetPaused(want) {
+      P.paused = want; P.pos = position(); P.at = Date.now();
+      var token = { want: want, until: Date.now() + 6000 };
+      pendingPause = token;
       paint();
-      command('Playing/' + (wasPaused ? 'Unpause' : 'Pause')).then(function () { kick(); }, function () { toast(t('playFailed')); });
+      function send() { return command('Playing/' + (want ? 'Pause' : 'Unpause')); }
+      send().then(function () { kick(); }, function () { /* Pruefung unten */ });
+      setTimeout(function () {
+        if (pendingPause !== token) return;
+        send().then(function () { kick(); }, function () { /* Pruefung unten */ });
+      }, 2500);
+      setTimeout(function () {
+        if (pendingPause !== token) return;
+        pendingPause = null;
+        toast(t('playFailed'));
+        kick();
+      }, 6000);
+    }
+    function toggle() {
+      var a = audioEl();
+      if (a) {
+        var res = null;
+        try { res = a.paused ? a.play() : a.pause(); } catch (e) { res = Promise.reject(e); }
+        paint();
+        if (res && typeof res.catch === 'function') res.catch(function () { remoteSetPaused(!a.paused); });
+        return;
+      }
+      remoteSetPaused(!isPaused());
     }
     function cycleRepeat() {
       var next = P.repeat === 'RepeatNone' ? 'RepeatAll' : P.repeat === 'RepeatAll' ? 'RepeatOne' : 'RepeatNone';
@@ -3256,7 +3337,14 @@
       command('Command', null, { Name: 'SetShuffleQueue', Arguments: { ShuffleMode: on ? 'Shuffle' : 'Sorted' } }).then(function () { kick(); });
     }
     function setVolume(v) {
+      v = Math.max(0, Math.min(100, Math.round(v)));
       P.volume = v;
+      var a = audioEl();
+      if (a) {
+        try { a.volume = Math.pow(v / 100, 3); } catch (e) { /* weiter mit Server-Befehl */ }   // gleiche Kurve wie Jellyfins Audio-Player
+        paint();
+        return;
+      }
       command('Command', null, { Name: 'SetVolume', Arguments: { Volume: String(v) } }).then(function () { kick(); });
     }
     function toggleFav() {
@@ -3271,7 +3359,9 @@
 
     /* ---------- Ebenen (Warteschlange, Songtext) ---------- */
     function openPanel(title, sub) {
-      ensureFull();
+      // Computer-Ansicht: Warteschlange und Songtext oeffnen sich in der rechten Spalte (wie bei Spotify), nicht im Vollbild.
+      var inNp = isWide() && npRoom() && !fullOpen;
+      if (inNp) { if (npHidden) setNpHidden(false); ensureNp(); } else { ensureFull(); if (!fullOpen) openFull(); }
       var p = el('div', 'ml-panel');
       var head = el('div', 'ml-panel-head');
       var handle = {
@@ -3284,7 +3374,7 @@
           if (handle.onClose) handle.onClose();
         }
       };
-      head.appendChild(iconBtn('down', t('close'), '', function () { handle.close(); }));
+      head.appendChild(iconBtn(inNp ? 'close' : 'down', t('close'), '', function () { handle.close(); }));
       var txt = el('div', 'ml-panel-text');
       txt.appendChild(el('div', 'ml-panel-title', title));
       if (sub) txt.appendChild(el('div', 'ml-panel-sub', sub));
@@ -3292,7 +3382,7 @@
       p.appendChild(head);
       handle.body = el('div', 'ml-panel-body');
       p.appendChild(handle.body);
-      full.appendChild(p);
+      if (inNp) { p.classList.add('ml-panel-np'); np.appendChild(p); } else full.appendChild(p);
       panels.push(handle);
       handle.entry = OV.push(handle.close);
       return handle;
@@ -3593,6 +3683,7 @@
 
     function paint() {
       var has = !!P.item;
+      if (!(isWide() && npRoom())) panels.filter(function (x) { return x.el.classList.contains('ml-panel-np'); }).forEach(function (x) { x.close(); });
       var m = ensureMini();
       m.hidden = !has;
       bodyCls('ml-mini-on', has && running);
@@ -3705,6 +3796,9 @@
       var changed = !P.item || nid(P.item.Id) !== nid(np.Id);
       var ps = s.PlayState || {};
       P.session = s; P.item = np;
+      if (pendingPause && Date.now() < pendingPause.until) {
+        if (!!ps.IsPaused === pendingPause.want) pendingPause = null; else ps = Object.assign({}, ps, { IsPaused: pendingPause.want });
+      } else pendingPause = null;
       P.paused = !!ps.IsPaused;
       P.pos = (ps.PositionTicks || 0) / 1e7; P.at = Date.now();
       P.dur = (np.RunTimeTicks || 0) / 1e7;
@@ -3789,14 +3883,19 @@
       fullEntry = null;
     }
 
-    // Titelwechsel/Pause im Audio-Element schneller anzeigen als mit der Abfrage.
-    ['play', 'pause', 'ended', 'loadedmetadata'].forEach(function (ev) {
+    // Das Audio-Element des Web-Clients meldet Pause, Titelwechsel, Lautstaerke und Spulen sofort (Ereignisse blubbern nicht, daher Capture).
+    // So bleibt die Anzeige auch dann richtig, wenn Medientasten, Bluetooth oder Jellyfin selbst etwas aendern.
+    ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'loadstart', 'volumechange', 'seeked'].forEach(function (ev) {
       document.addEventListener(ev, function (e) {
         var a = e.target;
         if (!a || !a.classList || !a.classList.contains('mediaPlayerAudio')) return;
         if (ev === 'loadedmetadata' && speed !== 1) applySpeed();
         if (!running) return;
-        if (ev === 'ended') kick(); else paint();
+        if (ev === 'volumechange') {
+          if (!P.targetId && isFinite(a.volume)) { P.volume = Math.min(100, Math.round(Math.pow(a.volume, 1 / 3) * 100)); paint(); }
+        } else if (ev === 'seeked') progress();
+        else if (ev === 'ended' || ev === 'loadstart') kick();
+        else paint();
       }, true);
     });
     document.addEventListener('visibilitychange', function () { if (!document.hidden && running) kick(); });
