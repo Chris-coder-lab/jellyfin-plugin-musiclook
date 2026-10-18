@@ -768,6 +768,16 @@
     return ML.jamAddIds(ids).then(function () { toast(t('jamAdded')); }, function () { toast(t('jamFailed')); });
   }
 
+  // Empfehlungen: Jellyfins Sofortmix (aehnliche Titel) zu einem Titel.
+  function loadSongMix(id, limit) {
+    return call('GET', 'Songs/' + id + '/InstantMix', { UserId: uid(), Limit: limit || 30 }).then(function (r) {
+      return ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')) && (i.Type === 'Audio' || i.MediaType === 'Audio' || !i.Type); });
+    });
+  }
+  // Autoplay: nach dem letzten Titel geht es mit passenden Titeln weiter (Standard: an).
+  function autoplayOn() { try { return window.localStorage.getItem('ml.autoplay') !== '0'; } catch (e) { return true; } }
+  function setAutoplay(on) { try { window.localStorage.setItem('ml.autoplay', on ? '1' : '0'); } catch (e) { /* nur fuer diese Sitzung */ } }
+
   function songRadio(track) {
     return call('GET', 'Songs/' + track.Id + '/InstantMix', { UserId: uid(), Limit: 100 }).then(function (r) {
       var ids = ((r && r.Items) || []).map(function (i) { return i.Id; }).filter(function (id) { return nid(id) !== nid(track.Id); });
@@ -1562,6 +1572,8 @@
   (function () {
     var extra = {
       de: {
+        forYouToday: 'Für heute empfohlen', forYouSub: 'Passend zu dem, was du zuletzt gehört hast', forUser: 'Für {0}', forUserSub: 'Deine Mixe – passend zu deinem Geschmack', stations: 'Empfohlene Sender', stationsSub: 'Radio zu Künstlern, die du magst',
+        topMixes: 'Deine Top-Mixtapes', topMixesSub: 'Zu deinen meistgehörten Künstlern', likedAlbums: 'Alben mit Songs, die dir gefallen', likedAlbumsSub: 'Mit deinen Lieblingssongs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} Mixtape', mixtapeSub: 'Ausgehend von „{0}“', andMore: ' und mehr', autoplayIsOn: 'Autoplay ist an', autoplayIsOff: 'Autoplay ist aus', autoQueue: 'Empfohlen – Autoplay',
         jellyfinHome: 'Jellyfin-Startseite', allLibs: 'Alle Bibliotheken', allLibsHint: 'Zurück zu Jellyfin: Filme, Serien und mehr', appMenu: 'Menü', emptyPlaylist: 'Diese Playlist ist leer.', addFirstSongs: 'Titel hinzufügen',
         upNext: 'Als Nächstes', openPlayer: 'Wiedergabe öffnen', collapse: 'Minimieren', seekLabel: 'Position', queueNow: 'Läuft gerade',
         backToSpotify: 'Spotify-Ansicht', likedSub: 'Playlist • {0}', moreTracks: 'Weitere Titel', noPlaylistsShared: 'Noch nichts mit dir geteilt.',
@@ -1585,6 +1597,8 @@
         addPlus: 'Zu Playlist hinzufügen', shareTrack: 'Teilen', queueTitle: 'Warteschlange', nextFrom: 'Als Nächstes aus der Warteschlange'
       },
       en: {
+        forYouToday: 'Recommended for today', forYouSub: 'Based on what you listened to lately', forUser: 'Made for {0}', forUserSub: 'Your mixes – picked for your taste', stations: 'Recommended stations', stationsSub: 'Radio for artists you like',
+        topMixes: 'Your top mixtapes', topMixesSub: 'For your most played artists', likedAlbums: 'Albums with songs you like', likedAlbumsSub: 'With your liked songs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} mixtape', mixtapeSub: 'Starting from "{0}"', andMore: ' and more', autoplayIsOn: 'Autoplay is on', autoplayIsOff: 'Autoplay is off', autoQueue: 'Recommended – Autoplay',
         jellyfinHome: 'Jellyfin home', allLibs: 'All libraries', allLibsHint: 'Back to Jellyfin: movies, shows and more', appMenu: 'Menu', emptyPlaylist: 'This playlist is empty.', addFirstSongs: 'Add tracks',
         upNext: 'Up next', openPlayer: 'Open player', collapse: 'Collapse', seekLabel: 'Position', queueNow: 'Playing now',
         backToSpotify: 'Spotify view', likedSub: 'Playlist • {0}', moreTracks: 'More tracks', noPlaylistsShared: 'Nothing shared with you yet.',
@@ -1878,6 +1892,7 @@
       openMenu({ title: me.name || t('yourLibraryTitle'), subtitle: '', coverEl: av }, [
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
+        { icon: 'radio', label: t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff'), run: function () { setAutoplay(!autoplayOn()); toast(t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff')); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
         { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
         { hidden: !me.admin, icon: 'info', label: t('dashboardLbl'), run: function () { go('#/dashboard'); } },
@@ -1972,6 +1987,164 @@
     });
   }
 
+  /* ---------- Startseite wie bei Spotify: Empfehlungen, Mixe, Sender ---------- */
+  // Grundlage der Empfehlungen: Sofortmixe (Jellyfin) zu zufaellig gewaehlten, zuletzt gehoerten Titeln und Lieblingssongs.
+  // Kurz zwischengespeichert, damit die Reihen beim Zurueckkehren nicht staendig wechseln.
+  var recCache = { at: 0, uid: '', data: null };
+  function loadRecs(playedP, likedP) {
+    if (recCache.uid === uid() && recCache.data && Date.now() - recCache.at < 20 * 60000) return Promise.resolve(recCache.data);
+    return Promise.all([playedP, likedP]).then(function (res) {
+      var played = res[0] || [], liked = res[1] || [];
+      var seeds = [], used = {};
+      function pick(list, n) {
+        var pool = list.filter(function (x) { return x && ID_RE.test(String(x.Id || '')) && !used[nid(x.Id)]; });
+        for (var k = 0; k < n && pool.length; k++) {
+          var i = Math.floor(Math.random() * pool.length), x = pool.splice(i, 1)[0];
+          used[nid(x.Id)] = 1; seeds.push(x);
+        }
+      }
+      pick(played.slice(0, 12), 2);
+      pick(liked, seeds.length ? 1 : 3);
+      if (seeds.length < 3) pick(played.slice(12), 3 - seeds.length);
+      if (!seeds.length) return null;
+      return Promise.all(seeds.map(function (sd) { return loadSongMix(sd.Id, 30).catch(function () { return []; }); })).then(function (lists) {
+        var recent = {};
+        played.slice(0, 10).forEach(function (x) { recent[nid(x.Id)] = 1; });
+        function gather(skipRecent) {
+          var out = [], seen = {};
+          seeds.forEach(function (sd) { seen[nid(sd.Id)] = 1; });
+          for (var n = 0; n < 30 && out.length < 20; n++) {
+            lists.forEach(function (l) {
+              var x = l[n];
+              if (!x || seen[nid(x.Id)] || (skipRecent && recent[nid(x.Id)]) || out.length >= 20) return;
+              seen[nid(x.Id)] = 1; out.push(x);
+            });
+          }
+          return out;
+        }
+        var today = gather(true);
+        if (today.length < 6) today = gather(false);
+        var data = { seeds: seeds, lists: lists, today: today };
+        if (today.length) recCache = { at: Date.now(), uid: uid(), data: data };
+        return data;
+      });
+    });
+  }
+
+  function artistsLine(tracks) {
+    var seen = {}, names = [];
+    tracks.forEach(function (x) { var a = firstArtist(x); if (a && !seen[a] && names.length < 3) { seen[a] = 1; names.push(a); } });
+    return names.length ? names.join(', ') + t('andMore') : '';
+  }
+  function playMixFrom(path, failKey) {
+    return call('GET', path, { UserId: uid(), Limit: 60 }).then(function (r) {
+      var ids = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); }).map(function (i) { return i.Id; });
+      if (!ids.length) { toast(t(failKey || 'radioFailed')); return; }
+      return playIds(ids, 0);
+    }, function () { toast(t(failKey || 'radioFailed')); });
+  }
+  function trackShelfTile(tr, ids, i) {
+    function go1() { playIds(ids, i); }
+    return tile({ title: tr.Name, sub: firstArtist(tr), img: itemImg(tr, 300), onClick: go1, play: go1 });
+  }
+  function mixTile(n, tracks) {
+    var ids = tracks.map(function (x) { return x.Id; });
+    var holder = cover(null, 'ml-tile-cover');
+    var pairs = pairsOf(tracks);
+    if (pairs.length) fillCover(holder, pairs);
+    function go1() { playIds(ids, 0); }
+    return tile({ title: t('mixN', n), sub: artistsLine(tracks), coverEl: holder, onClick: go1, play: go1 });
+  }
+  function radioTile(artist, track) {
+    function go1() { playMixFrom('Artists/' + artist.Id + '/InstantMix'); }
+    return tile({ title: artist.Name, sub: t('radioLbl'), round: true, img: itemImg(track, 300), onClick: go1, play: go1 });
+  }
+  function mixtapeTile(artistName, track) {
+    function go1() { playMixFrom('Songs/' + track.Id + '/InstantMix'); }
+    return tile({ title: t('mixtapeOf', artistName), sub: t('mixtapeSub', track.Name), img: itemImg(track, 300), onClick: go1, play: go1 });
+  }
+  function subShelf(host, title, sub, tiles, cls) {
+    var box = shelf(host, title, tiles, cls);
+    if (box && sub) box.insertBefore(el('div', 'ml-shelf-sub', sub), box.querySelector('.ml-shelf-row'));
+    return box;
+  }
+
+  // Fuellt die Reihen "Fuer heute empfohlen", "Fuer <Name>", "Empfohlene Sender", "Deine Top-Mixtapes" und "Alben mit Songs, die dir gefallen".
+  function fillForYou(slots, seq, data) {
+    var live = function () { return seq === state.view; };
+    loadRecs(data.playedP, data.likedP).then(function (recs) {
+      if (!live() || !recs) return;
+      if (recs.today.length) {
+        var ids = recs.today.map(function (x) { return x.Id; });
+        slots.today.textContent = '';
+        subShelf(slots.today, t('forYouToday'), t('forYouSub'), recs.today.map(function (tr, i) { return trackShelfTile(tr, ids, i); }), 'ml-rec-shelf');
+      }
+      var mixes = [];
+      recs.seeds.forEach(function (sd, i) {
+        var l = (recs.lists[i] || []).filter(function (x) { return nid(x.Id) !== nid(sd.Id); }).slice(0, 40);
+        if (l.length >= 3) mixes.push(mixTile(mixes.length + 1, [sd].concat(l)));
+      });
+      if (mixes.length) {
+        loadMe().then(function (me) {
+          if (!live()) return;
+          slots.user.textContent = '';
+          subShelf(slots.user, t('forUser', (me && me.name) || ''), t('forUserSub'), mixes, 'ml-mix-shelf');
+        }, function () { if (live()) { slots.user.textContent = ''; subShelf(slots.user, t('forYouToday'), '', mixes, 'ml-mix-shelf'); } });
+      }
+    }, function () { /* Reihen entfallen */ });
+
+    // Sender: Radio zu Kuenstlern aus zuletzt Gehoertem und Lieblingssongs
+    Promise.all([data.playedP, data.likedP]).then(function (res) {
+      if (!live()) return;
+      var seen = {}, list = [];
+      (res[0] || []).slice(0, 30).concat(res[1] || []).forEach(function (tr) {
+        var a = (tr.ArtistItems || [])[0];
+        if (!a || !ID_RE.test(String(a.Id || '')) || seen[nid(a.Id)]) return;
+        seen[nid(a.Id)] = 1; list.push({ a: a, tr: tr });
+      });
+      var picks = shuffled(list.slice()).slice(0, 10);
+      slots.stations.textContent = '';
+      subShelf(slots.stations, t('stations'), t('stationsSub'), picks.map(function (x) { return radioTile(x.a, x.tr); }), 'ml-station-shelf');
+    }, function () { /* Reihe entfaellt */ });
+
+    // Top-Mixtapes: Lieblingskuenstler nach Wiedergaben, Mix zu ihrem meistgespielten Titel
+    data.topP.then(function (top) {
+      if (!live()) return;
+      var seen = {}, tiles = [];
+      (top || []).forEach(function (tr) {
+        var name = firstArtist(tr);
+        if (!name || seen[name] || tiles.length >= 8 || !ID_RE.test(String(tr.Id || ''))) return;
+        seen[name] = 1; tiles.push(mixtapeTile(name, tr));
+      });
+      slots.top.textContent = '';
+      subShelf(slots.top, t('topMixes'), t('topMixesSub'), tiles, 'ml-mixtape-shelf');
+    }, function () { /* Reihe entfaellt */ });
+
+    // Alben mit Songs, die dir gefallen
+    data.likedP.then(function (liked) {
+      if (!live()) return;
+      var count = {}, order = [];
+      (liked || []).forEach(function (tr) {
+        var id = tr.AlbumId;
+        if (!id || !ID_RE.test(String(id))) return;
+        var k = nid(id);
+        if (!count[k]) { count[k] = 0; order.push(id); }
+        count[k]++;
+      });
+      order.sort(function (x, y) { return count[nid(y)] - count[nid(x)]; });
+      var ids = order.slice(0, 12);
+      if (!ids.length) return;
+      return itemsOf({ Ids: ids.join(','), Fields: 'ChildCount' }).then(function (albums) {
+        if (!live()) return;
+        var rank = {};
+        ids.forEach(function (id, i) { rank[nid(id)] = i; });
+        albums = albums.filter(function (a) { return a.Type === 'MusicAlbum'; }).sort(function (x, y) { return rank[nid(x.Id)] - rank[nid(y.Id)]; });
+        slots.likedAlbums.textContent = '';
+        subShelf(slots.likedAlbums, t('likedAlbums'), t('likedAlbumsSub'), albums.map(itemTile), 'ml-likedalbums-shelf');
+      });
+    }).then(null, function () { /* Reihe entfaellt */ });
+  }
+
   function fillMusic(body, seq, libs, pls, withMedia) {
     var mine = pls.filter(function (p) { return p.info.isOwner; });
     var shared = pls.filter(function (p) { return !p.info.isOwner; });
@@ -1985,6 +2158,10 @@
     });
     body.appendChild(grid);
 
+    // Reihenfolge wie bei Spotify: Wieder reinhoeren, Empfehlungen, Mixe, Sender, Mixtapes, Alben, dann die eigenen Playlists.
+    var slotPlayed = el('div'), slotToday = el('div'), slotUser = el('div'), slotStations = el('div'), slotTop = el('div'), slotLikedAlbums = el('div');
+    [slotPlayed, slotToday, slotUser, slotStations, slotTop, slotLikedAlbums].forEach(function (n) { body.appendChild(n); });
+
     // Deine Playlists (mit Kachel zum Anlegen)
     var newTile = tile({
       title: t('newPlaylist'), coverEl: (function () {
@@ -1995,16 +2172,21 @@
     if (!mine.length && mineBox) mineBox.appendChild(el('p', 'ml-muted ml-pad', t('noPlaylistsYet')));
     shelf(body, t('sharedPlaylists'), shared.map(playlistTile));
 
-    var slotPlayed = el('div'), slotAdded = el('div');
-    body.appendChild(slotPlayed); body.appendChild(slotAdded);
+    var slotAdded = el('div');
+    body.appendChild(slotAdded);
     var slotMedia = el('div');
     body.appendChild(slotMedia);
 
-    perLibrary(musicIds, { IncludeItemTypes: 'Audio', Recursive: true, Filters: 'IsPlayed', SortBy: 'DatePlayed', SortOrder: 'Descending', Limit: 40 },
+    var playedP = perLibrary(musicIds, { IncludeItemTypes: 'Audio', Recursive: true, Filters: 'IsPlayed', SortBy: 'DatePlayed', SortOrder: 'Descending', Limit: 40 },
       function (a, b) {
         var x = (a.UserData && a.UserData.LastPlayedDate) || '', y = (b.UserData && b.UserData.LastPlayedDate) || '';
         return x < y ? 1 : x > y ? -1 : 0;
-      }, 60).then(function (tracks) {
+      }, 60);
+    var likedP = itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio', Recursive: true, Limit: 300, Fields: 'ParentId' }).catch(function () { return []; });
+    var topP = perLibrary(musicIds, { IncludeItemTypes: 'Audio', Recursive: true, Filters: 'IsPlayed', SortBy: 'PlayCount', SortOrder: 'Descending', Limit: 60 }, null, 60);
+    fillForYou({ today: slotToday, user: slotUser, stations: slotStations, top: slotTop, likedAlbums: slotLikedAlbums }, seq,
+      { playedP: playedP.catch(function () { return []; }), likedP: likedP, topP: topP });
+    playedP.then(function (tracks) {
       if (seq !== state.view) return;
       var seen = {}, albums = [];
       tracks.forEach(function (tr) {
@@ -3743,7 +3925,10 @@
         box.textContent = '';
         var curIdx = queueIndex();
         var ids = q.map(function (x) { return x.Id; });
+        var firstAuto = -1;
+        q.forEach(function (x, i) { if (firstAuto < 0 && i > curIdx && autoAdded[nid(x.Id)]) firstAuto = i; });
         q.forEach(function (x, i) {
+          if (i === firstAuto) box.appendChild(el('div', 'ml-queue-sep', t('autoQueue')));
           var it = queueNames[nid(x.Id)] || (P.item && nid(P.item.Id) === nid(x.Id) ? P.item : null);
           var row = btn('ml-list-row ml-queue-row' + (i === curIdx ? ' ml-playing' : ''));
           row.appendChild(cover(it ? itemImg(it, 96) : null, 'ml-row-cover'));
@@ -4057,7 +4242,7 @@
     // Warteschlange abgeleitet: nur eine eindeutige Liste mit genau diesen Titeln zaehlt; bei Unsicherheit wird nichts markiert.
     var ctxRetryAt = 0;
     function resolveContext() {
-      var ids = (P.queue || []).map(function (x) { return x.Id; });
+      var ids = (P.queue || []).map(function (x) { return x.Id; }).filter(function (id) { return !autoAdded[nid(id)]; });   // Autoplay-Titel gehoeren nicht zur Playlist
       if (!P.item || !ids.length) { ctxSig = ''; setCtx(''); return; }
       if (intentMatches(ids)) { ctxSig = ''; setCtx(nid(playIntent.key)); return; }
       playIntent = null;
@@ -4254,6 +4439,29 @@
     }
 
     /* ---------- Abfrage der Sitzung ---------- */
+    // Autoplay: Laeuft der letzte Titel der Warteschlange, werden passende Titel (Sofortmix) angehaengt, damit die Musik nicht endet.
+    var autoKey = '', autoBusy = false, autoRetryAt = 0, autoAdded = {};
+    function maybeAutoplay(s) {
+      if (!autoplayOn() || autoBusy || !P.item || P.repeat !== 'RepeatNone' || Date.now() < autoRetryAt) return;
+      var q = P.queue || [];
+      if (!q.length || queueIndex() !== q.length - 1) return;
+      var key = s.Id + ':' + nid(P.item.Id) + ':' + q.length;
+      if (autoKey === key) return;
+      autoKey = key; autoBusy = true;
+      var seed = P.item.Id, have = {};
+      q.forEach(function (x) { have[nid(x.Id)] = 1; });
+      loadSongMix(seed, 40).then(function (items) {
+        var ids = [], seen = {};
+        items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
+        // Nur anhaengen, wenn sich inzwischen nichts geaendert hat (anderer Titel, andere Warteschlange, Autoplay aus).
+        if (!ids.length || !autoplayOn() || !P.item || nid(P.item.Id) !== nid(seed) || (P.queue || []).length !== q.length) return;
+        return sessionCall(s, 'Playing', { playCommand: 'PlayLast', itemIds: ids.join(',') }).then(function () {
+          ids.forEach(function (id) { autoAdded[nid(id)] = 1; });
+          kick();
+        });
+      }).then(function () { autoBusy = false; }, function () { autoBusy = false; autoKey = ''; autoRetryAt = Date.now() + 15000; });
+    }
+
     var gapSince = 0;
     function applySession(s) {
       var np = s && s.NowPlayingItem;
@@ -4284,6 +4492,7 @@
       P.shuffle = ps.PlaybackOrder === 'Shuffle';
       if (ps.VolumeLevel != null) P.volume = ps.VolumeLevel;
       P.queue = (s.NowPlayingQueue || []).map(function (x) { return { Id: x.Id, PlaylistItemId: x.PlaylistItemId }; });
+      if (P.queue.length && !P.queue.some(function (x) { return autoAdded[nid(x.Id)]; })) autoAdded = {};
       if (changed) {
         P.full = null; P.lyrics = undefined; extrasFor = ''; lyricIdx = -2;
         var id = np.Id;
@@ -4303,6 +4512,7 @@
       renderNpCards();
       resolveContext();
       markContext();
+      maybeAutoplay(s);
     }
 
     function poll() {

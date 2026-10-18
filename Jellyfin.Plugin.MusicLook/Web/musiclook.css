@@ -721,7 +721,7 @@ body.ml-full-on { overflow: hidden; }
 .ml-mini-title { font-size: 0.9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ml-mini-sub { font-size: 0.78rem; color: var(--ml-muted, #b3b3b3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ml-mini-progress { position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
-.ml-mini-fill { height: 100%; width: 0; background: #fff; }
+.ml-mini-fill { height: 100%; width: 0; background: var(--ml-accent, #1ed760); }
 
 /* Vollbild-Player (Spotify-Stil: Farben folgen dem Cover) */
 .ml-full { --ml-ease: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.94) 7%, rgba(0,0,0,.85) 16%, rgba(0,0,0,.72) 27%, rgba(0,0,0,.57) 39%, rgba(0,0,0,.42) 52%, rgba(0,0,0,.28) 65%, rgba(0,0,0,.16) 77%, rgba(0,0,0,.07) 88%, rgba(0,0,0,.02) 95%, transparent 100%); --ml-top-h: 56px; position: fixed; inset: 0; z-index: 99000; display: flex; flex-direction: column; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); background-color: var(--ml-bg, #121212); background-image: none; transition: background-color 0.5s ease; color: #fff; font-family: var(--ml-font, system-ui); overflow: hidden; animation: ml-full-in 0.22s ease; }
@@ -755,7 +755,7 @@ body.ml-full-on { overflow: hidden; }
 .ml-full-fav.ml-on { color: var(--ml-accent, #1ed760); }
 .ml-seek { padding: 10px 24px 0; }
 .ml-seek-times { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.78rem; color: #d6d6d6; font-variant-numeric: tabular-nums; }
-.ml-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 4px; margin: 10px 0; padding: 0; border: 0; border-radius: 2px; outline: 0; cursor: pointer; background: linear-gradient(to right, #fff var(--ml-fill, 0%), rgba(255, 255, 255, 0.3) var(--ml-fill, 0%)); }
+.ml-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 4px; margin: 10px 0; padding: 0; border: 0; border-radius: 2px; outline: 0; cursor: pointer; background: linear-gradient(to right, var(--ml-accent, #1ed760) var(--ml-fill, 0%), rgba(255, 255, 255, 0.3) var(--ml-fill, 0%)); }
 .ml-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); }
 .ml-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; }
 .ml-range:focus-visible { outline: 2px solid var(--ml-accent, #1ed760); outline-offset: 4px; }
@@ -1191,3 +1191,16 @@ body.ml-kbd .ml-full button:focus-visible, body.ml-kbd .ml-backdrop button:focus
 .ml-ghost-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 6; }
 .ml-ghost { pointer-events: none; }
 .ml-ghost-layer .ml-ghost { box-sizing: border-box; }
+
+/* Version 1.0.10: gruene Fortschrittsleiste wie bei Spotify (auch im Firefox, der den Balken sonst im Standard-Aussehen zeichnet) */
+.ml-range::-moz-range-track { height: 4px; border: 0; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.ml-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--ml-accent, #1ed760); }
+@-moz-document url-prefix() { .ml-range { background: transparent; } }
+.ml-seek-range, .ml-bar-seek .ml-range { accent-color: var(--ml-accent, #1ed760); }
+/* Jellyfins eigene Leiste (Seiten ausserhalb der Spotify-Ansicht, Klassisch) */
+.nowPlayingBar .mdl-slider-background-lower, .nowPlayingPage .mdl-slider-background-lower { background-color: var(--ml-accent, #1ed760) !important; }
+.nowPlayingBar .mdl-slider-background-upper, .nowPlayingPage .mdl-slider-background-upper { background-color: rgba(255, 255, 255, 0.3) !important; }
+.nowPlayingBar .emby-slider::-webkit-slider-thumb, .nowPlayingPage .emby-slider::-webkit-slider-thumb { background: #fff !important; }
+.nowPlayingBar .emby-slider::-moz-range-thumb, .nowPlayingPage .emby-slider::-moz-range-thumb { background: #fff !important; }
+.ml-shelf-sub { margin: -6px 0 10px; padding: 0 16px; font-size: 0.82rem; color: var(--ml-muted, #b3b3b3); }
+.ml-queue-sep { padding: 14px 16px 6px; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; color: var(--ml-accent, #1ed760); }

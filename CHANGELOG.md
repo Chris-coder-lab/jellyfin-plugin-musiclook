@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.0.10.0
+- **Autoplay wie in Jellyfin/Spotify:** Sobald der letzte Titel der Warteschlange läuft und nichts mehr folgt, hängt das Plugin passende Titel an (Jellyfin-Sofortmix zum laufenden Titel), sodass die Musik weiterläuft. Die Warteschlange zeigt sie unter dem Trenner „Empfohlen – Autoplay“. Es wird nichts angehängt bei „Wiederholen“, mitten in der Warteschlange oder wenn Autoplay aus ist; nichts wird doppelt angehängt. Ein-/ausschalten im Menü (Autoplay). Voraussetzung: Das Plugin läuft in einem geöffneten Browser, der die Wiedergabe beobachtet
+- **Neue Startseite wie bei Spotify:** „Zuletzt gespielt“ (Wieder reinhören) steht jetzt oben, darunter **Für heute empfohlen**, **Für <Benutzername>** (persönliche Mixe), **Empfohlene Sender** (Radio zu Künstlern, die du magst), **Deine Top-Mixtapes** (zu deinen meistgehörten Künstlern), **Alben mit Songs, die dir gefallen**, danach deine Playlists und geteilte Playlists. Die Empfehlungen entstehen aus deinen zuletzt gehörten Titeln und Lieblingssongs über Jellyfins Sofortmix und bleiben 20 Minuten gleich, damit die Reihen nicht ständig wechseln; fehlen Daten, entfällt die jeweilige Reihe
+- **Grüner Fortschrittsbalken wie bei Spotify:** Fortschritt, Lautstärke und Mini-Leiste sind grün gefüllt (Chrome/Safari und Firefox); Jellyfins eigene Leiste wird, soweit möglich, ebenfalls grün eingefärbt
+
 ## 1.0.9.0
 - **Weiter/Zurück schließt die Liedansicht nicht mehr:** Beim Titelwechsel meldet der Server kurz „es läuft nichts“. Die Vollansicht deutete das als Ende der Wiedergabe, schloss sich und zeigte darunter wieder das Album. Jetzt bleibt die Ansicht stehen; ein echtes Ende wird erst nach einigen Sekunden erkannt
 - **Titelwechsel mit Gleiten:** Beim Weiter gleitet der neue Titel (Cover und Text) von rechts herein, der alte nach links hinaus; bei Zurück umgekehrt. Gilt für die Vollansicht und die Mini-Leiste, auch wenn der Wechsel von außen kommt (Medientasten, anderes Gerät, Liedende). Bei eingestellter „Bewegung reduzieren“ entfällt die Animation
