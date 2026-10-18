@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.0.10.0",
+        "changelog": "- **Autoplay wie in Jellyfin/Spotify:** Sobald der letzte Titel der Warteschlange läuft und nichts mehr folgt, hängt das Plugin passende Titel an (Jellyfin-Sofortmix zum laufenden Titel), sodass die Musik weiterläuft. Die Warteschlange zeigt sie unter dem Trenner „Empfohlen – Autoplay“. Es wird nichts angehängt bei „Wiederholen“, mitten in der Warteschlange oder wenn Autoplay aus ist; nichts wird doppelt angehängt. Ein-/ausschalten im Menü (Autoplay). Voraussetzung: Das Plugin läuft in einem geöffneten Browser, der die Wiedergabe beobachtet\n- **Neue Startseite wie bei Spotify:** „Zuletzt gespielt“ (Wieder reinhören) steht jetzt oben, darunter **Für heute empfohlen**, **Für <Benutzername>** (persönliche Mixe), **Empfohlene Sender** (Radio zu Künstlern, die du magst), **Deine Top-Mixtapes** (zu deinen meistgehörten Künstlern), **Alben mit Songs, die dir gefallen**, danach deine Playlists und geteilte Playlists. Die Empfehlungen entstehen aus deinen zuletzt gehörten Titeln und Lieblingssongs über Jellyfins Sofortmix und bleiben 20 Minuten gleich, damit die Reihen nicht ständig wechseln; fehlen Daten, entfällt die jeweilige Reihe\n- **Grüner Fortschrittsbalken wie bei Spotify:** Fortschritt, Lautstärke und Mini-Leiste sind grün gefüllt (Chrome/Safari und Firefox); Jellyfins eigene Leiste wird, soweit möglich, ebenfalls grün eingefärbt",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v1.0.10.0/musiclook_1.0.10.0.zip",
+        "checksum": "6A32891E47117504184477FE772FEB13",
+        "timestamp": "2026-10-18T17:41:45Z"
+      },
+      {
         "version": "1.0.9.0",
         "changelog": "- **Weiter/Zurück schließt die Liedansicht nicht mehr:** Beim Titelwechsel meldet der Server kurz „es läuft nichts“. Die Vollansicht deutete das als Ende der Wiedergabe, schloss sich und zeigte darunter wieder das Album. Jetzt bleibt die Ansicht stehen; ein echtes Ende wird erst nach einigen Sekunden erkannt\n- **Titelwechsel mit Gleiten:** Beim Weiter gleitet der neue Titel (Cover und Text) von rechts herein, der alte nach links hinaus; bei Zurück umgekehrt. Gilt für die Vollansicht und die Mini-Leiste, auch wenn der Wechsel von außen kommt (Medientasten, anderes Gerät, Liedende). Bei eingestellter „Bewegung reduzieren“ entfällt die Animation\n- **Wischen:** In der Vollansicht über das Cover und unten über die Mini-Leiste lässt sich nach links wischen (nächster Titel) und nach rechts (vorheriger Titel; nach mehr als 3 Sekunden springt es wie bei Spotify zuerst an den Anfang des Titels). Cover und Text folgen dem Finger; ein zu kurzer Wisch springt zurück, senkrechtes Scrollen bleibt unverändert, Tippen öffnet weiterhin die Vollansicht",
         "targetAbi": "12.0.0.0",
