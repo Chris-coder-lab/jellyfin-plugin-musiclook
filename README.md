@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.1.2.0 && git push origin v1.1.2.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.2.0.0 && git push origin v1.2.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -65,34 +65,20 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 
 **Schnell beim Öffnen:** Playlists, Bibliotheken und Playlist-Cover werden im Browser gemerkt und sofort angezeigt, der Server aktualisiert sie im Hintergrund (wichtig bei laufendem Bibliotheksscan). Bekannte Musik-Seiten werden schon beim Laden abgedeckt, damit das alte Jellyfin-Layout nicht kurz aufblitzt.
 
-## Plugin-Einstellungen
-Dashboard → Plugins → Music Look: Akzentfarbe, Spotify-Ansicht ein/aus, Stichwörter für Podcast- und Hörbuch-Bibliotheken (Standard Hörbuch: `hörbuch,hörbücher,audiobook,hörspiel`), Link-Adresse für „Teilen“, Jam ein/aus und maximale Teilnehmer, Eingangsordner-Sortierung.
-
-## Alle MP3-Dateien einfach in einen Ordner legen
-Jellyfin erwartet pro Album einen eigenen Ordner; liegen mehrere Alben gemischt in einem Ordner, werden sie zu einem Sammel-Album zusammengefasst. Deshalb sortiert das Plugin auf Wunsch selbst:
-
-1. Dashboard → Plugins → Music Look: „Eingangsordner automatisch einsortieren“ aktivieren.
-2. Eingangsordner (hier legst du alles hinein) und Musikordner (der in Jellyfin als Musik-Bibliothek eingetragen ist) als absolute Pfade eintragen. Beide dürfen sich nicht überlappen.
-3. Der Jellyfin-Dienst braucht Schreibrechte auf beide Ordner (bei Docker: beide als Volume einbinden).
-
-Ablauf pro MP3 (Eingang inklusive Unterordner):
-- Quelle: ID3-Tags (v2.2/2.3/2.4, sonst v1), danach der Dateiname, z. B. `Künstler - Titel.mp3` oder `03 - Titel.mp3`.
-- Ziel mit Album-Tag: `Künstler/Album/05 - Titel.mp3` (mehrere Discs: `2-05 - Titel.mp3`). Künstlerordner = Album-Künstler, sonst erster Künstler.
-- Ohne Album-Tag: `Künstler/Titel - Single/Titel.mp3`. Ohne Künstler: `Unbekannter Künstler`.
-- Vorhandene Ordner werden ohne Beachtung der Groß-/Kleinschreibung weiterverwendet.
-- Nichts wird überschrieben oder gelöscht. Gleicher Name, anderer Inhalt: `(2)` am Dateinamen. Identische Datei: `Eingang/_Duplikate`.
-- Dateien jünger als 30 Sekunden (Upload läuft noch) werden übersprungen.
-- Nach dem Einsortieren stößt das Plugin einen Bibliotheks-Scan an, sobald der Eingang ruhig ist (spätestens nach 10 Minuten).
-
-Songtext-Dateien (`.lrc`, `.elrc`, `.txt`) mit gleichem Namen wie die MP3 wandern mit.
-
-**Sammelordner wie „Cinderella“:** Jellyfin benennt ein Album nach dem Album-Tag des ersten Titels im Ordner und fasst alle Dateien des Ordners dazu zusammen. Das Plugin legt von sich aus **keine** Playlists an. Liegen Titel aus verschiedenen Alben in einem Ordner, zeigt die Albumseite „Verschiedene Künstler“, einen Hinweis und die Titel nach Album-Tag gruppiert. Dauerhaft lösen: den Ordner in den Eingangsordner verschieben, dann sortiert das Plugin nach Tags in Künstler/Album.
-
-Dieselbe Logik gibt es als eigenständiges Skript für die NAS: `python3 tools/sort_inbox.py EINGANG MUSIK --dry-run` (ohne `--dry-run` wird verschoben, `--watch 60` wiederholt alle 60 Sekunden). Tests: `cd tools && python3 -m unittest test_sort_inbox` (braucht ffmpeg).
+## Downloads und Musik vom Gerät (alles in der Jellyfin-Oberfläche)
+Es wird **keine zusätzliche App** installiert. Downloads, Verwaltung und Abspielen vom Gerät laufen in der Spotify-Ansicht innerhalb der normalen Jellyfin-App bzw. Jellyfin-Weboberfläche.
+- **Herunterladen:** Bei Playlists, Alben, Lieblingssongs und Mixen gibt es einen Download-Knopf (Kreis mit Pfeil). Grün gefüllt heißt: alles ist auf dem Gerät. Einzelne Titel lädst du über das Drei-Punkte-Menü des Titels. Geladene Titel tragen ein grünes Symbol. Ändert sich eine geladene Playlist, zieht der Download beim nächsten Öffnen nach.
+- **Wohin:** Die Dateien liegen im Browser-Speicher (IndexedDB) des Geräts, nicht auf dem Server. Auf dem Server wird nichts verändert.
+- **Menü „Downloads und Speicher“** (Profilbild-Menü): belegter Platz der Downloads, Schätzung des freien Platzes des Browsers, laufende Downloads mit Abbruch, geladene Listen und Einzeltitel mit Löschen, „Alle Downloads löschen“, Qualität (Original oder platzsparend als MP3 mit 192 kbit/s, vom Server umgerechnet) und die Möglichkeit, dauerhaften Speicher anzufordern.
+- **Vom Gerät abspielen:** Auf der Downloads-Seite (Alle abspielen, Zufall, Abspielen-Knopf je Liste und Titel) und im Menü einer vollständig geladenen Liste („Vom Gerät abspielen“). Es erscheint eine eigene Leiste mit Zurück, Pause, Weiter, Spulen und einer Vollansicht mit Zufall und Wiederholen (aus / alle / ein Titel). Der Ton kommt aus dem Gerätespeicher, der Server wird dafür nicht gebraucht. Startet eine Serverwiedergabe, endet die lokale (und umgekehrt wird die Serverwiedergabe pausiert). Ist das Gerät offline, spielt der normale Abspielknopf die geladenen Titel der Liste vom Gerät.
+- **Grenzen:**
+  - **Die Jellyfin-Seite selbst braucht den Server zum Starten.** Jellyfins Web-Oberfläche speichert sich nicht für den Offlinebetrieb (ihr Service Worker kümmert sich laut Quellcode nur um Benachrichtigungen). Das Plugin kann das nicht ändern, ohne Jellyfins eigenen Service Worker zu ersetzen; das wäre ein zu tiefer Eingriff in Jellyfin. Die lokale Wiedergabe funktioniert darum, solange die Seite einmal geladen ist (Verbindung bricht ab, schwaches Netz, Datensparen, Funkloch nach dem Laden). Ein Neustart der App komplett ohne Verbindung zum Server ist nicht möglich.
+  - Die Steuerung über den Sperrbildschirm zeigt beim lokalen Abspielen Titel und Cover und reagiert auf Pause/Weiter/Zurück. Jellyfin bindet seine eigenen Tasten nur einmal; das Plugin ersetzt sie durch Tasten, die bei Serverwiedergabe an dieselbe Sitzung weiterleiten.
+  - Der Speicherplatz hängt vom Browser und Gerät ab. Safari löscht Daten einer Website nach 7 Tagen ohne Nutzung (außer für Apps auf dem Startbildschirm); „Dauerhaft speichern“ ist dort nicht garantiert. Jede Datei wird beim Laden kurz komplett im Arbeitsspeicher gehalten (sehr große Hörbuch-Dateien belasten Handys). Formate, die das Gerät nicht abspielen kann, lädt das Plugin automatisch als MP3.
 
 ## Grenzen
 - **Nicht umgesetzt, weil Jellyfin dafür nichts bietet:** „Zu Video wechseln“ und „Playlist/Titel aus dem Geschmacksprofil ausschließen“ (dafür gibt es in Jellyfin keine Entsprechung).
-- **Download = ZIP-Datei auf dem Gerät.** Ein Offline-Abspielen innerhalb von Jellyfin bietet die Web-Oberfläche nicht; laut Jellyfin-Forum hat auch die offizielle Android-App keinen Offline-Modus (Findroid als Fremd-App kann heruntergeladene Titel offline abspielen).
+- **Zwei Arten von Download:** Das Menü einer Playlist bietet weiter den ZIP-Download (Dateien für eine beliebige Musik-App). Der Download-Knopf lädt dagegen in den Browser-Speicher des Geräts, um die Titel direkt in der Jellyfin-Oberfläche vom Gerät abzuspielen (siehe oben). Die Seite selbst startet ohne Server nicht; laut Jellyfin-Forum hat auch die offizielle Android-App keinen Offline-Modus (Findroid als Fremd-App kann heruntergeladene Titel offline abspielen).
 - Jam synchronisiert die Warteschlange, nicht die Wiedergabeposition: Pause und Spulen sind pro Gerät.
 - Nicht umgesetzt: Hörerzahlen pro Monat bei Künstlern (Jellyfin kennt sie nicht), Umschalten zwischen Lautsprecher und Bluetooth (Sache des Betriebssystems).
 - Der Player folgt der Wiedergabe des Web-Clients auf dem eigenen Gerät und zeigt, wenn dort nichts läuft, automatisch ein anderes Gerät desselben Benutzers, auf dem Musik läuft (Steuern klappt nur, wenn dessen App Fernsteuerung unterstützt). Die grün markierte Playlist wird aus der Warteschlange erkannt: Sie gilt nur, wenn die Warteschlange genau die Titel der Playlist enthält (nicht mehr, sobald Titel zur Warteschlange hinzugefügt oder entfernt wurden; Zufallsreihenfolge stört nicht); die Position wird alle paar Sekunden abgeglichen.

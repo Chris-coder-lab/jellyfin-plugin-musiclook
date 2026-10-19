@@ -330,6 +330,7 @@
     function reloadOnce() {
       var au = document.querySelectorAll('audio');
       for (var i = 0; i < au.length; i++) if (!au[i].paused && !au[i].ended) return;   // laufende Wiedergabe hier nie unterbrechen
+      if (typeof OFFPLAY !== 'undefined' && OFFPLAY.active()) return;   // auch die lokale Wiedergabe vom Gerät nicht unterbrechen
       var now = Date.now(), last = 0;
       try { last = +window.sessionStorage.getItem('ml.leaveReload') || 0; window.sessionStorage.setItem('ml.leaveReload', String(now)); } catch (e) { /* ohne Speicher */ }
       if (now - last < 60000) return;
@@ -547,6 +548,182 @@
     function run() { var pal = coverPalette(img); if (pal) setPalette(host, pal); }
     if (img.complete && img.naturalWidth) run(); else img.addEventListener('load', run, { once: true });
   }
+  /* ---------- Offline-Speicher (IndexedDB im Browser des Geräts; gemeinsam für die Spotify-Ansicht und die Offline-App) ---------- */
+  // Speichern: tracks (Metadaten), blobs (Audiodatei), covers (Bild), colls (Alben/Playlists/Mixe, die geladen wurden).
+  // Ein Titel gehört zu null oder mehr Sammlungen (colls) und ist ggf. einzeln geladen (explicit). Er wird erst gelöscht,
+  // wenn weder das eine noch das andere zutrifft.
+  var MLOff = (function () {
+    var DB_NAME = 'musiclook-offline', dbp = null;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (resolve, reject) {
+        if (!window.indexedDB) { reject(new Error('no indexedDB')); return; }
+        var r = window.indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = function () {
+          var d = r.result;
+          if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('blobs')) d.createObjectStore('blobs');
+          if (!d.objectStoreNames.contains('covers')) d.createObjectStore('covers');
+          if (!d.objectStoreNames.contains('colls')) d.createObjectStore('colls', { keyPath: 'key' });
+        };
+        r.onsuccess = function () {
+          var d = r.result;
+          d.onversionchange = function () { d.close(); dbp = null; };
+          resolve(d);
+        };
+        r.onerror = function () { reject(r.error || new Error('open failed')); };
+        r.onblocked = function () { reject(new Error('blocked')); };
+      });
+      dbp.then(null, function () { dbp = null; });
+      return dbp;
+    }
+    // fn(tx, set): set(v) legt das Ergebnis fest; aufgelöst wird erst, wenn die Transaktion abgeschlossen ist.
+    function run(stores, mode, fn) {
+      return open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var out, t = db.transaction(stores, mode);
+          t.oncomplete = function () { resolve(out); };
+          t.onerror = function () { reject(t.error || new Error('transaction failed')); };
+          t.onabort = function () { reject(t.error || new Error('transaction aborted')); };
+          try { fn(t, function (v) { out = v; }); } catch (e) { try { t.abort(); } catch (e2) { /* schon beendet */ } reject(e); }
+        });
+      });
+    }
+    function nk(id) { return String(id || '').replace(/-/g, '').toLowerCase(); }
+
+    function allTracks() { return run(['tracks'], 'readonly', function (t, set) { var r = t.objectStore('tracks').getAll(); r.onsuccess = function () { set(r.result || []); }; }); }
+    function allColls() { return run(['colls'], 'readonly', function (t, set) { var r = t.objectStore('colls').getAll(); r.onsuccess = function () { set(r.result || []); }; }); }
+    function getTrack(id) { return run(['tracks'], 'readonly', function (t, set) { var r = t.objectStore('tracks').get(nk(id)); r.onsuccess = function () { set(r.result || null); }; }); }
+    function getBlob(id) { return run(['blobs'], 'readonly', function (t, set) { var r = t.objectStore('blobs').get(nk(id)); r.onsuccess = function () { set(r.result || null); }; }); }
+    function getCover(key) { return run(['covers'], 'readonly', function (t, set) { var r = t.objectStore('covers').get(String(key)); r.onsuccess = function () { set(r.result || null); }; }); }
+
+    // Speichert (oder ergänzt) einen Titel. meta.colls / meta.explicit werden mit dem Vorhandenen zusammengeführt.
+    function saveTrack(meta, blob, coverKey, coverBlob) {
+      meta.id = nk(meta.id);
+      return run(['tracks', 'blobs', 'covers'], 'readwrite', function (t) {
+        var ts = t.objectStore('tracks');
+        var g = ts.get(meta.id);
+        g.onsuccess = function () {
+          var old = g.result;
+          var rec = {};
+          Object.keys(meta).forEach(function (k) { rec[k] = meta[k]; });
+          var colls = (old && old.colls ? old.colls.slice() : []);
+          (meta.colls || []).forEach(function (c) { if (colls.indexOf(c) < 0) colls.push(c); });
+          rec.colls = colls;
+          rec.explicit = !!((old && old.explicit) || meta.explicit);
+          rec.added = old && old.added ? old.added : (meta.added || Date.now());
+          if (blob) { rec.size = blob.size; t.objectStore('blobs').put(blob, meta.id); }
+          else if (old) { rec.size = old.size; }
+          if (coverKey && coverBlob) { rec.coverKey = String(coverKey); rec.coverSize = coverBlob.size; t.objectStore('covers').put(coverBlob, String(coverKey)); }
+          ts.put(rec);
+        };
+      });
+    }
+    // Hängt vorhandene Titel an eine Sammlung / markiert sie als einzeln geladen.
+    function linkTracks(ids, collKey, explicit) {
+      return run(['tracks'], 'readwrite', function (t) {
+        var ts = t.objectStore('tracks');
+        ids.forEach(function (id) {
+          var g = ts.get(nk(id));
+          g.onsuccess = function () {
+            var rec = g.result;
+            if (!rec) return;
+            if (collKey && rec.colls.indexOf(collKey) < 0) rec.colls.push(collKey);
+            if (explicit) rec.explicit = true;
+            ts.put(rec);
+          };
+        });
+      });
+    }
+    function saveColl(c) { return run(['colls'], 'readwrite', function (t) { t.objectStore('colls').put(c); }); }
+
+    // Löst einen Titel aus einer Sammlung (collKey) bzw. aus "einzeln geladen" (collKey = null) und löscht ihn, wenn er nirgends mehr gebraucht wird.
+    function unlink(t, id, collKey) {
+      var ts = t.objectStore('tracks');
+      var g = ts.get(nk(id));
+      g.onsuccess = function () {
+        var rec = g.result;
+        if (!rec) return;
+        if (collKey) rec.colls = (rec.colls || []).filter(function (c) { return c !== collKey; }); else rec.explicit = false;
+        if (!rec.colls.length && !rec.explicit) {
+          ts.delete(rec.id); t.objectStore('blobs').delete(rec.id);
+          if (rec.coverKey) dropCoverIfUnused(t, rec.coverKey, rec.id);
+        } else ts.put(rec);
+      };
+    }
+    function dropCoverIfUnused(t, coverKey, exceptId) {
+      var r = t.objectStore('tracks').getAll();
+      r.onsuccess = function () {
+        var used = (r.result || []).some(function (x) { return x.id !== exceptId && x.coverKey === coverKey; });
+        if (!used) t.objectStore('covers').delete(coverKey);
+      };
+    }
+    // Bei mehreren Titeln einer Sammlung wird erst am Ende (nach allen unlink-Läufen) aufgeräumt: Titel zählen einzeln.
+    function removeColl(key) {
+      return run(['tracks', 'blobs', 'covers', 'colls'], 'readwrite', function (t) {
+        var cs = t.objectStore('colls');
+        var g = cs.get(key);
+        g.onsuccess = function () {
+          var c = g.result;
+          if (!c) return;
+          // Titel, die nur in dieser Sammlung liegen, samt Bildern löschen; die übrigen nur aus der Sammlung lösen.
+          var ts = t.objectStore('tracks');
+          var all = ts.getAll();
+          all.onsuccess = function () {
+            var recs = all.result || [], gone = {};
+            recs.forEach(function (rec) {
+              if ((rec.colls || []).indexOf(key) < 0) return;
+              rec.colls = rec.colls.filter(function (x) { return x !== key; });
+              if (!rec.colls.length && !rec.explicit) { gone[rec.id] = true; ts.delete(rec.id); t.objectStore('blobs').delete(rec.id); }
+              else ts.put(rec);
+            });
+            var keep = {};
+            recs.forEach(function (rec) { if (!gone[rec.id] && rec.coverKey) keep[rec.coverKey] = true; });
+            recs.forEach(function (rec) { if (gone[rec.id] && rec.coverKey && !keep[rec.coverKey]) { t.objectStore('covers').delete(rec.coverKey); keep[rec.coverKey] = true; } });
+            cs.delete(key);
+          };
+        };
+      });
+    }
+    function removeTrack(id) {
+      return run(['tracks', 'blobs', 'covers'], 'readwrite', function (t) { unlink(t, id, null); });
+    }
+    // Entfernt Titel aus einer Sammlung (z. B. wenn sie in der Playlist nicht mehr vorkommen).
+    function dropFromColl(ids, key) {
+      return run(['tracks', 'blobs', 'covers'], 'readwrite', function (t) { ids.forEach(function (id) { unlink(t, id, key); }); });
+    }
+    function clearAll() {
+      return run(['tracks', 'blobs', 'covers', 'colls'], 'readwrite', function (t) {
+        ['tracks', 'blobs', 'covers', 'colls'].forEach(function (s) { t.objectStore(s).clear(); });
+      });
+    }
+    // Belegter Platz der Downloads (Audio + Bilder) und Anzahlen.
+    function usage() {
+      return Promise.all([allTracks(), allColls()]).then(function (res) {
+        var tracks = res[0], colls = res[1], audio = 0, covers = 0, seen = {};
+        tracks.forEach(function (x) {
+          audio += x.size || 0;
+          if (x.coverKey && !seen[x.coverKey]) { seen[x.coverKey] = true; covers += x.coverSize || 0; }
+        });
+        return { audio: audio, covers: covers, bytes: audio + covers, tracks: tracks.length, colls: colls.length };
+      });
+    }
+    // Schätzung des Browsers: gesamter belegter Platz dieser Website und der verfügbare Rahmen.
+    function estimate() {
+      var s = navigator.storage;
+      if (!s || !s.estimate) return Promise.resolve(null);
+      return s.estimate().then(function (e) { return { usage: e.usage || 0, quota: e.quota || 0 }; }, function () { return null; });
+    }
+    function persisted() { var s = navigator.storage; return s && s.persisted ? s.persisted().then(function (v) { return !!v; }, function () { return false; }) : Promise.resolve(false); }
+    function persist() { var s = navigator.storage; return s && s.persist ? s.persist().then(function (v) { return !!v; }, function () { return false; }) : Promise.resolve(false); }
+
+    return {
+      open: open, nk: nk, allTracks: allTracks, allColls: allColls, getTrack: getTrack, getBlob: getBlob, getCover: getCover,
+      saveTrack: saveTrack, linkTracks: linkTracks, saveColl: saveColl, removeColl: removeColl, removeTrack: removeTrack,
+      dropFromColl: dropFromColl, clearAll: clearAll, usage: usage, estimate: estimate, persisted: persisted, persist: persist
+    };
+  })();
+  if (typeof module !== 'undefined' && module.exports) module.exports = MLOff;
   /* ---------- Audio-DSP: Rauschunterdrückung und De-Esser (läuft im Browser des Hörers, nicht auf dem Server) ---------- */
   // mode 'denoise': spektrale Rauschunterdrückung (STFT, adaptive Rauschschätzung, Gewinn nach "decision-directed" Wiener-Regel)
   // mode 'deess'  : Split-Band-De-Esser (Linkwitz-Riley 4. Ordnung bei 5,5 kHz; nur das Höhenband wird abgesenkt, wenn es überwiegt)
@@ -1414,6 +1591,15 @@
     opts = opts || {};
     if (!ids.length) return Promise.resolve();
     start = clamp(start || 0, 0, ids.length - 1);
+    // Ohne Verbindung spielen die geladenen Titel vom Gerät; mit Verbindung ersetzt die Serverwiedergabe die lokale.
+    if (typeof OFFPLAY !== 'undefined') {
+      if (navigator.onLine === false) {
+        var loc = OFFPLAY.offlineIds(ids, start);
+        if (!loc.ids.length) { toast(t('offNotAvail')); return Promise.resolve(false); }
+        return OFFPLAY.startIds(loc.ids, loc.start, { name: opts.name || '' }).then(function (ok) { clearPending(); return ok; });
+      }
+      OFFPLAY.stop();
+    }
     // Merkt, aus welcher Playlist (oder Lieblingssongs) hier gestartet wird; so ist die gruene Markierung auf diesem Geraet eindeutig.
     playIntent = opts.ctx ? { key: String(opts.ctx), ids: (ids.length <= PLAY_CHUNK ? ids : ids.slice(start)).slice() } : null;
     if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto();
@@ -1846,6 +2032,195 @@
     });
   }
 
+  /* ---------- Downloads: Titel auf das Gerät laden (Verwaltung in der Spotify-Ansicht) ---------- */
+  var OFF = (function () {
+    var D = MLOff;
+    var have = {};          // Titel-ID -> Größe in Byte (geladene Titel)
+    var single = {};        // Titel-ID -> true, wenn einzeln geladen
+    var colls = {};         // Schlüssel -> Sammlung
+    var jobs = {};          // Schlüssel -> laufender Auftrag
+    var listeners = [];
+    var loadP = null, persistAsked = false;
+    var CONC = 2;
+
+    function emit() { listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* Zuhörer darf nichts blockieren */ } }); }
+    function available() { return !!(window.indexedDB && window.fetch); }
+    function load(force) {
+      if (loadP && !force) return loadP;
+      loadP = Promise.all([D.allTracks(), D.allColls()]).then(function (r) {
+        have = {}; single = {}; r[0].forEach(function (x) { have[x.id] = x.size || 0; if (x.explicit) single[x.id] = true; });
+        colls = {}; r[1].forEach(function (c) { colls[c.key] = c; });
+        emit();
+      }, function () { loadP = null; });
+      return loadP;
+    }
+    function quality() { try { return window.localStorage.getItem('ml.offq') === 'mp3' ? 'mp3' : 'orig'; } catch (e) { return 'orig'; } }
+    function setQuality(q) { try { window.localStorage.setItem('ml.offq', q === 'mp3' ? 'mp3' : 'orig'); } catch (e) { /* nur für diese Sitzung */ } emit(); }
+
+    function audioUrl(id, q) {
+      var c = ML.client();
+      if (q === 'mp3') return c.getUrl('Audio/' + id + '/stream.mp3', { audioCodec: 'mp3', audioBitRate: 192000, api_key: c.accessToken() });
+      return c.getUrl('Audio/' + id + '/stream', { static: true, api_key: c.accessToken() });
+    }
+    function canPlayMime(mime) {
+      if (!mime || /octet-stream|^text\//i.test(mime)) return true;
+      try { return document.createElement('audio').canPlayType(mime) !== ''; } catch (e) { return true; }
+    }
+    // Lädt eine Audiodatei als Blob. Kann das Gerät das Original-Format nicht abspielen (z. B. FLAC/Opus auf älteren Geräten), wird MP3 geladen.
+    function fetchAudio(id, q, signal, onBytes) {
+      return fetch(audioUrl(id, q), { signal: signal, credentials: 'omit' }).then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        var mime = String(res.headers.get('content-type') || '').split(';')[0].trim();
+        if (q === 'orig' && !canPlayMime(mime)) {
+          try { res.body && res.body.cancel(); } catch (e) { /* egal */ }
+          return fetchAudio(id, 'mp3', signal, onBytes);
+        }
+        var total = +res.headers.get('content-length') || 0;
+        if (!res.body || !res.body.getReader) return res.blob().then(function (b) { return { blob: b, mime: mime, q: q }; });
+        var reader = res.body.getReader(), chunks = [], got = 0;
+        function pump() {
+          return reader.read().then(function (r) {
+            if (r.done) return { blob: new Blob(chunks, { type: mime || 'audio/mpeg' }), mime: mime, q: q };
+            chunks.push(r.value); got += r.value.length;
+            if (onBytes) onBytes(got, total);
+            return pump();
+          });
+        }
+        return pump();
+      });
+    }
+    function metaOf(tr) {
+      return {
+        id: nid(tr.Id), name: tr.Name || '', artist: firstArtist(tr) || '', album: tr.Album || '', albumId: tr.AlbumId ? nid(tr.AlbumId) : '',
+        ticks: tr.RunTimeTicks || 0, year: tr.ProductionYear || 0, index: tr.IndexNumber || 0
+      };
+    }
+    function fetchCover(tr, signal) {
+      var pr = pairOf(tr);
+      if (!pr) return Promise.resolve(null);
+      var c = ML.client();
+      var url = c.getUrl('Items/' + pr[0] + '/Images/Primary', { maxWidth: 400, quality: 85, tag: pr[1], api_key: c.accessToken() });
+      return fetch(url, { signal: signal, credentials: 'omit' }).then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) { return b && b.size ? { key: nid(pr[0]), blob: b } : null; }, function () { return null; });
+    }
+    function isQuota(e) { return !!e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message || e))); }
+
+    // Lädt die Titel; collMeta = { key, type, name, sub } (Sammlung) oder null (einzelne Titel). Gibt ein Versprechen auf { ok, failed, cancelled } zurück.
+    function start(tracks, collMeta, jobName) {
+      if (!available()) { toast(t('offUnsupported')); return Promise.resolve({ ok: 0, failed: 0, cancelled: false }); }
+      var list = [], seen = {};
+      (tracks || []).forEach(function (tr) { if (tr && ID_RE.test(String(tr.Id || '')) && !seen[nid(tr.Id)]) { seen[nid(tr.Id)] = 1; list.push(tr); } });
+      if (!list.length) return Promise.resolve({ ok: 0, failed: 0, cancelled: false });
+      var key = collMeta ? collMeta.key : 'tracks:' + Date.now();
+      if (jobs[key]) return jobs[key].promise;
+      if (!persistAsked) { persistAsked = true; D.persist(); }
+      var ctrl = typeof AbortController === 'function' ? new AbortController() : { signal: undefined, abort: function () { } };
+      var job = { key: key, name: jobName || (collMeta && collMeta.name) || '', total: list.length, done: 0, failed: 0, part: 0, cancelled: false, ctrl: ctrl, noSpace: false };
+      jobs[key] = job;
+      var q = quality(), coverMemo = {}, existing = [], next = 0, idsAll = list.map(function (x) { return nid(x.Id); });
+      var firstCover = '';
+      var coll = null;
+      if (collMeta) {
+        var prev = colls[collMeta.key];
+        coll = { key: collMeta.key, type: collMeta.type, name: collMeta.name, sub: collMeta.sub || '', ids: idsAll, coverKey: '', href: collMeta.href || (prev && prev.href) || '', added: prev ? prev.added : Date.now() };
+        var pr0 = pairOf(list[0]);
+        if (pr0) coll.coverKey = nid(pr0[0]);
+        colls[collMeta.key] = coll;
+        D.saveColl(coll).then(null, function () { /* wird am Ende erneut versucht */ });
+      }
+      emit();
+      function oneTrack(tr) {
+        var id = nid(tr.Id);
+        if (have[id] != null) { existing.push(id); job.done++; emit(); return Promise.resolve(); }
+        return fetchAudio(tr.Id, q, ctrl.signal, function (got, total) { job.part = total ? got / total : 0; }).then(function (a) {
+          var pr = pairOf(tr), cp = Promise.resolve(null);
+          if (pr) { var ck = nid(pr[0]); cp = coverMemo[ck] || (coverMemo[ck] = fetchCover(tr, ctrl.signal)); }
+          return cp.then(function (cv) {
+            var meta = metaOf(tr);
+            meta.mime = a.mime; meta.q = a.q; meta.added = Date.now();
+            if (collMeta) meta.colls = [collMeta.key]; else meta.explicit = true;
+            return D.saveTrack(meta, a.blob, cv ? cv.key : '', cv ? cv.blob : null).then(function () {
+              have[id] = a.blob.size; job.done++; job.part = 0; emit();
+            });
+          });
+        }).then(null, function (e) {
+          if (job.cancelled || (e && e.name === 'AbortError')) return;
+          if (isQuota(e)) { job.noSpace = true; job.cancelled = true; try { ctrl.abort(); } catch (e2) { /* egal */ } return; }
+          job.failed++; job.done++; emit();
+        });
+      }
+      function worker() {
+        if (job.cancelled || next >= list.length) return Promise.resolve();
+        var tr = list[next++];
+        return oneTrack(tr).then(worker);
+      }
+      var workers = [];
+      for (var w = 0; w < CONC; w++) workers.push(worker());
+      job.promise = Promise.all(workers).then(function () {
+        var fin = existing.length ? D.linkTracks(existing, collMeta ? collMeta.key : null, !collMeta) : Promise.resolve();
+        return fin.then(null, function () { /* wird beim nächsten Laden ergänzt */ });
+      }).then(function () {
+        delete jobs[key];
+        return load(true);
+      }).then(function () {
+        if (job.noSpace) toast(t('offNoSpace'));
+        else if (!job.cancelled) toast(job.failed ? t('offDoneSome', job.total - job.failed, job.failed) : t('offDone', job.total));
+        emit();
+        return { ok: job.total - job.failed, failed: job.failed, cancelled: job.cancelled };
+      });
+      return job.promise;
+    }
+
+    function cancel(key) { var j = jobs[key]; if (!j) return; j.cancelled = true; try { j.ctrl.abort(); } catch (e) { /* egal */ } emit(); }
+    function cancelAll() { Object.keys(jobs).forEach(cancel); }
+    function removeColl(key) { cancel(key); return D.removeColl(key).then(function () { return load(true); }); }
+    function removeTrack(id) { return D.removeTrack(id).then(function () { return load(true); }); }
+    function clearAll() { cancelAll(); return D.clearAll().then(function () { return load(true); }); }
+
+    // Zustand einer Sammlung: none | busy | partial | done
+    function collState(key) {
+      if (jobs[key]) return 'busy';
+      var c = colls[key];
+      if (!c) return 'none';
+      return c.ids.every(function (id) { return have[id] != null; }) ? 'done' : 'partial';
+    }
+    function progressOf(key) {
+      var j = jobs[key];
+      return j ? { done: j.done, total: j.total, fraction: Math.min(1, (j.done + (j.part || 0)) / Math.max(1, j.total)) } : null;
+    }
+    // Wurde eine geladene Playlist geändert (Titel dazu/weg), zieht der Download nach.
+    function syncIfDownloaded(meta, tracks) {
+      var c = colls[meta.key];
+      if (!c || jobs[meta.key] || !available() || navigator.onLine === false) return;
+      var ids = tracks.map(function (x) { return nid(x.Id); });
+      var same = ids.length === c.ids.length && ids.every(function (id, i) { return c.ids[i] === id; });
+      if (same) return;
+      var inNew = {}; ids.forEach(function (id) { inNew[id] = 1; });
+      var removed = c.ids.filter(function (id) { return !inNew[id]; });
+      var wasDone = c.ids.every(function (id) { return have[id] != null; });
+      var drop = removed.length ? D.dropFromColl(removed, meta.key) : Promise.resolve();
+      drop.then(null, function () { /* nächstes Mal */ }).then(function () {
+        if (!wasDone) { c.ids = ids; return D.saveColl(c).then(function () { return load(true); }); }
+        return start(tracks, meta);   // lädt nur, was fehlt, und schreibt die Sammlung neu
+      });
+    }
+    function listen(fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (f) { return f !== fn; }); }; }
+
+    return {
+      available: available, load: load, listen: listen, quality: quality, setQuality: setQuality,
+      has: function (id) { return have[nid(id)] != null; },
+      isSingle: function (id) { return !!single[nid(id)]; },
+      collState: collState, coll: function (key) { return colls[key] || null; }, allColls: function () { return Object.keys(colls).map(function (k) { return colls[k]; }); },
+      progress: progressOf, jobList: function () { return Object.keys(jobs).map(function (k) { return jobs[k]; }); },
+      sizeOf: function (id) { return have[nid(id)] || 0; },
+      downloadColl: function (meta, tracks) { return start(tracks, meta); },
+      downloadTrack: function (tr) { return start([tr], null, tr.Name); },
+      removeColl: removeColl, removeTrack: removeTrack, clearAll: clearAll, cancel: cancel,
+      syncIfDownloaded: syncIfDownloaded,
+      usage: D.usage, estimate: D.estimate, persisted: D.persisted, persist: D.persist, tracks: D.allTracks
+    };
+  })();
+  OFF.load();
+
   /* ---------- Download ---------- */
   function startDownload(url, filename, title, itemId) {
     var item = { url: url, itemId: itemId, serverId: serverId(), title: title, filename: filename };
@@ -2013,6 +2388,7 @@
         }, function () { toast(t('editFailed')); });
       } },
       { icon: 'queue', label: t('mQueue'), run: function () { queueIds([track.Id]); } },
+      offTrackEntry(track),
       { hidden: !track.AlbumId, icon: 'album', label: t('mAlbum'), run: function () {
         go('#/details?id=' + track.AlbumId + (serverId() ? '&serverId=' + serverId() : ''));
       } },
@@ -2051,7 +2427,10 @@
     var tx = el('div', 'ml-trow-text');
     tx.appendChild(el('div', 'ml-track-title', track.Name));
     var sub = firstArtist(track);
-    if (sub) tx.appendChild(el('div', 'ml-track-sub', sub));
+    var subEl = el('div', 'ml-track-sub');
+    var bd = offBadge(); bd.hidden = !OFF.has(track.Id); subEl.appendChild(bd);
+    if (sub) subEl.appendChild(document.createTextNode(sub));
+    tx.appendChild(subEl);
     main.appendChild(tx);
     row.appendChild(main);
     if (ctx.kind !== 'album') {
@@ -2083,7 +2462,10 @@
     var main = el('div', 'ml-track-main');
     main.appendChild(el('div', 'ml-track-title', track.Name));
     var sub = firstArtist(track);
-    if (sub) main.appendChild(el('div', 'ml-track-sub', sub));
+    var subEl = el('div', 'ml-track-sub');
+    var bd = offBadge(); bd.hidden = !OFF.has(track.Id); subEl.appendChild(bd);
+    if (sub) subEl.appendChild(document.createTextNode(sub));
+    main.appendChild(subEl);
 
     if (ctx.edit) {
       row.classList.add('ml-editing');
@@ -2225,6 +2607,7 @@
         { hidden: !jamOk, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } }
       ];
     }
+    entries.unshift(offLocalEntry(ctx));
     openMenu({ title: title, subtitle: sub, cover: null, coverEl: coverFor(ctx, '') }, entries);
   }
 
@@ -2596,6 +2979,7 @@
       openMenu({ title: me.name || t('yourLibraryTitle'), subtitle: '', coverEl: av }, [
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
+        { hidden: !OFF.available(), icon: 'download_circle', label: t('offMenu'), run: openDownloads },
         { icon: 'equalizer', label: t('eqTitle'), run: openEqualizer },
         { icon: 'radio', label: t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff'), run: function () { setAutoplay(!autoplayOn()); toast(t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff')); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
@@ -2818,7 +3202,7 @@
         mixStore[key] = { tracks: res.tracks, n: res.n };
         var title = kind === 'mix' ? t('mixN', res.n || 1) : kind === 'radio' ? (name || t('radioLbl')) : t('mixtapeOf', name || '');
         var label = kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl');
-        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, sub: artistsLine(res.tracks) }, tracks: res.tracks, canEdit: false });
+        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, name: name || '', sub: artistsLine(res.tracks) }, tracks: res.tracks, canEdit: false });
         ctx.reload = function () { delete mixStore[key]; start(); };
         buildDetail(host, ctx);
       }, function () { if (seq === state.view) renderDetailFailed(host, function () { renderDetailLoading(host); start(); }); });
@@ -3419,7 +3803,9 @@
 
       var actions = el('div', 'ml-actions');
       var left = el('div', 'ml-actions-left');
-      if (ctx.kind === 'playlist') left.appendChild(iconBtn('download', t('download'), '', function () { openDownload(ctx.pl); }));
+      var dlBtn = offHeroButton(ctx);
+      if (dlBtn) left.appendChild(dlBtn);
+      else if (ctx.kind === 'playlist') left.appendChild(iconBtn('download', t('download'), '', function () { openDownload(ctx.pl); }));
       if (ctx.kind === 'liked') left.appendChild(iconBtn('add', t('addFirstSongs'), 'ml-liked-add', function () { openAddSongs({ liked: true }, ctx.reload); }));
       if (ctx.kind !== 'liked' && ctx.kind !== 'mix' && !(ctx.book && ctx.album.Type !== 'MusicAlbum')) left.appendChild(iconBtn('share', t('share'), '', function () {
         if (ctx.kind === 'playlist') shareList(ctx);
@@ -3438,6 +3824,7 @@
       hero.appendChild(actions);
     }
     host.appendChild(hero);
+    if (!edit) offSync(ctx);
 
     if (ctx.subs && ctx.subs.length && !edit) {
       shelf(host, t('books'), ctx.subs.map(function (sub) {
@@ -3493,7 +3880,7 @@
     syncPlayButtons();
   }
   function pressCtx(key, start) {
-    if (key && Player.contextId() === key) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
+    if (key && Player.contextId() === key && !OFFPLAY.active() && navigator.onLine !== false) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
     if (key) markPending(key);
     var p = start();
     if (key && p && typeof p.then === 'function') p.then(function (ok) { if (ok === false) clearPending(key); }, function () { clearPending(key); });
@@ -3842,6 +4229,573 @@
     }
     if (!ctx.tracks.length && !ctx.albums.length && !bio) host.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
   }
+
+  /* ---------- Downloads: Oberfläche (Knöpfe, Seite "Downloads" mit Speicheranzeige) ---------- */
+  (function () {
+    var extra = {
+      de: {
+        offTitle: 'Downloads', offDownload: 'Herunterladen', offDownloading: 'Lädt … {0}/{1}', offCancel: 'Download abbrechen',
+        offStarted: '{0} Titel werden geladen', offDone: '{0} Titel geladen', offDoneSome: '{0} geladen, {1} fehlgeschlagen',
+        offNoSpace: 'Nicht genug Speicherplatz auf dem Gerät. Gib Speicher frei oder lösche Downloads.',
+        offUnsupported: 'Dieser Browser kann keine Downloads speichern.',
+        offRemove: 'Download entfernen', offRemoveTitle: 'Download entfernen?', offRemoveText: '„{0}“ wird von diesem Gerät gelöscht. Auf dem Server bleibt alles erhalten.',
+        offDownloadTrack: 'Herunterladen', offRemoveTrack: 'Download entfernen', offRemoved: 'Download entfernt', offDownloaded: 'Heruntergeladen',
+        offStorage: 'Speicher', offUsed: '{0} belegt', offCounts: '{0} • {1}', offColl1: '1 Liste', offCollN: '{0} Listen',
+        offBarDl: 'Downloads', offBarOther: 'Sonstiges', offBarFree: 'Frei', offQuotaNote: 'Schätzung des Browsers. Der verfügbare Rahmen hängt vom Gerät und vom freien Speicher ab.',
+        offPersistOk: 'Der Browser löscht diese Downloads nicht von selbst.', offPersistNo: 'Der Browser darf diese Downloads bei Platzmangel löschen.',
+        offPersistBtn: 'Dauerhaft speichern', offPersistDenied: 'Der Browser hat die dauerhafte Speicherung nicht erlaubt.',
+        offQuality: 'Qualität', offQOrig: 'Original', offQOrigSub: 'Unverändert, größte Dateien', offQMp3: 'Platzsparend', offQMp3Sub: 'MP3 mit 192 kbit/s (der Server rechnet um)',
+        offActive: 'Läuft gerade',
+        offColls: 'Geladene Listen', offSingles: 'Einzelne Titel', offNone: 'Noch nichts geladen. Tippe bei einer Playlist, einem Album oder einem Titel auf den Download-Knopf.',
+        offClearAll: 'Alle Downloads löschen', offClearTitle: 'Alle Downloads löschen?', offClearText: 'Alle geladenen Titel werden von diesem Gerät gelöscht. Auf dem Server bleibt alles erhalten.',
+        offPartial: '{0} von {1} geladen', offMenu: 'Downloads und Speicher', offResume: 'Download fortsetzen', offViaList: 'Heruntergeladen (über eine Liste)', offViaListHint: 'Dieser Titel gehört zu einer geladenen Liste. Entferne die Liste, um ihn zu löschen.'
+      },
+      en: {
+        offTitle: 'Downloads', offDownload: 'Download', offDownloading: 'Downloading … {0}/{1}', offCancel: 'Cancel download',
+        offStarted: 'Downloading {0} tracks', offDone: '{0} tracks downloaded', offDoneSome: '{0} downloaded, {1} failed',
+        offNoSpace: 'Not enough storage on this device. Free up space or delete downloads.',
+        offUnsupported: 'This browser cannot store downloads.',
+        offRemove: 'Remove download', offRemoveTitle: 'Remove download?', offRemoveText: '"{0}" will be deleted from this device. Everything stays on the server.',
+        offDownloadTrack: 'Download', offRemoveTrack: 'Remove download', offRemoved: 'Download removed', offDownloaded: 'Downloaded',
+        offStorage: 'Storage', offUsed: '{0} used', offCounts: '{0} • {1}', offColl1: '1 list', offCollN: '{0} lists',
+        offBarDl: 'Downloads', offBarOther: 'Other', offBarFree: 'Free', offQuotaNote: 'Estimate from the browser. The available space depends on the device and its free storage.',
+        offPersistOk: 'The browser will not delete these downloads on its own.', offPersistNo: 'The browser may delete these downloads when storage runs low.',
+        offPersistBtn: 'Keep permanently', offPersistDenied: 'The browser did not allow permanent storage.',
+        offQuality: 'Quality', offQOrig: 'Original', offQOrigSub: 'Unchanged, largest files', offQMp3: 'Space saving', offQMp3Sub: 'MP3 at 192 kbit/s (the server converts)',
+        offActive: 'In progress',
+        offColls: 'Downloaded lists', offSingles: 'Single tracks', offNone: 'Nothing downloaded yet. Tap the download button on a playlist, an album or a track.',
+        offClearAll: 'Delete all downloads', offClearTitle: 'Delete all downloads?', offClearText: 'All downloaded tracks will be deleted from this device. Everything stays on the server.',
+        offPartial: '{0} of {1} downloaded', offMenu: 'Downloads and storage', offResume: 'Resume download', offViaList: 'Downloaded (via a list)', offViaListHint: 'This track belongs to a downloaded list. Remove the list to delete it.'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  // Kreis mit Pfeil (Kontur) für "herunterladen", gefüllter grüner Kreis mit Pfeil für "geladen" (wie bei Spotify)
+  STROKE_ICONS.download_circle = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.6v6.6M8.9 11.6L12 14.7l3.1-3.1';
+  ICONS.download_done = 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM11 6.5h2v6.2l2.3-2.3 1.4 1.4L12 16.6 7.3 11.8l1.4-1.4 2.3 2.3z';
+
+  function fmtBytes(n) {
+    n = Math.max(0, n || 0);
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+    while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+    var d = i <= 1 ? 0 : 1;
+    try { return n.toLocaleString(navigator.language || 'de', { maximumFractionDigits: d, minimumFractionDigits: d }) + ' ' + u[i]; } catch (e) { return n.toFixed(d) + ' ' + u[i]; }
+  }
+
+  // Schlüssel und Beschreibung der Sammlung, die eine Detailseite darstellt (null = nicht ladbar)
+  function offMetaOf(ctx) {
+    if (!ctx || ctx.subs && ctx.subs.length) return null;
+    if (ctx.kind === 'liked') return { key: 'liked', type: 'liked', name: t('liked'), sub: '', href: likedHash() };
+    if (ctx.kind === 'playlist') return { key: 'pl:' + nid(ctx.pl.id), type: 'playlist', name: ctx.pl.item.Name, sub: ctx.pl.info.ownerName || '', href: hrefFor(ctx.pl.item) };
+    if (ctx.kind === 'album') return { key: 'al:' + nid(ctx.album.Id), type: 'album', name: ctx.album.Name, sub: albumArtistLine(ctx.album), href: hrefFor(ctx.album) };
+    if (ctx.kind === 'mix') return { key: ctx.mix.key, type: 'mix', name: ctx.mix.title, sub: ctx.mix.sub || '', href: mixHash(ctx.mix.kind, ctx.mix.id, (mixStore[ctx.mix.key] || {}).n || 0, ctx.mix.name || '') };
+    return null;
+  }
+
+  // Download-Knopf der Detailseite (Kreis mit Pfeil; grün gefüllt, wenn alles geladen ist; während des Ladens mit Zähler)
+  function offHeroButton(ctx) {
+    var meta = offMetaOf(ctx);
+    if (!meta || !OFF.available() || !ctx.tracks.length) return null;
+    var b = btn('ml-icon-btn ml-dl-btn');
+    var ic = icon('download_circle'), cnt = el('span', 'ml-dl-count');
+    b.appendChild(ic); b.appendChild(cnt);
+    function paint() {
+      var st = OFF.collState(meta.key), pr = OFF.progress(meta.key);
+      var n = st === 'done' ? 'download_done' : 'download_circle';
+      var fresh = icon(n);
+      b.replaceChild(fresh, b.querySelector('.ml-ic'));
+      b.classList.toggle('ml-on', st === 'done');
+      b.classList.toggle('ml-busy', st === 'busy');
+      cnt.textContent = pr ? pr.done + '/' + pr.total : '';
+      var label = st === 'done' ? t('offRemove') : st === 'busy' ? t('offCancel') : st === 'partial' ? t('offResume') : t('offDownload');
+      b.setAttribute('aria-label', label); b.title = label;
+      b.style.setProperty('--ml-dl', pr ? Math.round(pr.fraction * 100) + '%' : '0%');
+    }
+    var off = OFF.listen(function () { if (!document.body.contains(b)) { off(); return; } paint(); });
+    paint();
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var st = OFF.collState(meta.key);
+      if (st === 'busy') { OFF.cancel(meta.key); return; }
+      if (st === 'done') {
+        confirmSheet(t('offRemoveTitle'), t('offRemoveText', meta.name), t('offRemove'), true).then(function (yes) {
+          if (yes) OFF.removeColl(meta.key).then(function () { toast(t('offRemoved')); });
+        });
+        return;
+      }
+      toast(t('offStarted', ctx.tracks.length));
+      OFF.downloadColl(meta, ctx.tracks);
+    });
+    return b;
+  }
+  // Ist die Sammlung schon geladen, zieht sie Änderungen der Liste nach (Titel dazu / entfernt).
+  function offSync(ctx) {
+    var meta = offMetaOf(ctx);
+    if (!meta || ctx.kind === 'mix' || !OFF.available()) return;
+    OFF.load().then(function () { OFF.syncIfDownloaded(meta, ctx.tracks); });
+  }
+
+  // Eintrag im Titelmenü
+  function offTrackEntry(track) {
+    var has = OFF.has(track.Id), single = OFF.isSingle(track.Id);
+    var viaList = has && !single;   // nur als Teil einer geladenen Liste auf dem Gerät
+    return {
+      hidden: !OFF.available(), icon: has ? 'download_done' : 'download_circle',
+      label: viaList ? t('offViaList') : has ? t('offRemoveTrack') : t('offDownloadTrack'),
+      run: function () {
+        if (viaList) { toast(t('offViaListHint')); return; }
+        if (has) OFF.removeTrack(track.Id).then(function () { toast(t('offRemoved')); });
+        else { toast(t('offStarted', 1)); OFF.downloadTrack(track); }
+      }
+    };
+  }
+  // Menüeintrag: komplett geladene Liste direkt vom Gerät abspielen
+  function offLocalEntry(ctx) {
+    var meta = OFF.available() ? offMetaOf(ctx) : null;
+    var ok = !!meta && ctx.kind !== 'mix' && OFF.collState(meta.key) === 'done';
+    return { hidden: !ok, icon: 'download_done', label: t('offPlayLocal'), run: function () {
+      OFFPLAY.startIds(ctx.tracks.map(function (x) { return x.Id; }), 0, { name: ctx.kind === 'liked' ? t('liked') : ctx.kind === 'album' ? ctx.album.Name : ctx.pl.item.Name });
+    } };
+  }
+  // Kleines grünes Häkchen-Symbol an geladenen Titeln
+  function offBadge() {
+    var s = el('span', 'ml-dl-ind');
+    s.appendChild(icon('download_done'));
+    s.hidden = true;
+    s.setAttribute('title', t('offDownloaded'));
+    return s;
+  }
+  function offRefreshBadges() {
+    ML.qsa('.ml-track', content).forEach(function (r) {
+      var b = r.querySelector('.ml-dl-ind');
+      if (b) b.hidden = !OFF.has(r.dataset.id);
+    });
+  }
+  OFF.listen(function () { try { offRefreshBadges(); } catch (e) { /* Seite weg */ } });
+
+  /* ---------- Seite "Downloads" ---------- */
+  function downloadsHash() { return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=downloads'; }
+  function openDownloads() { ensureLibrary().then(function () { go(downloadsHash()); }); }
+
+  function showDownloadsPage(host, seq) {
+    host.textContent = '';
+    var urls = [];
+    var bar = el('div', 'ml-hero-bar');
+    bar.appendChild(iconBtn('back', t('back'), 'ml-hero-back', leaveDetail));
+    bar.appendChild(el('div', 'ml-hero-bar-title', t('offTitle')));
+    host.appendChild(bar);
+    var body = el('div', 'ml-dl-page');
+    host.appendChild(body);
+    var tok = 0, timer = 0;
+    function byAdded(x, y) { return (y.added || 0) - (x.added || 0); }
+
+    function section(title) {
+      var s = el('section', 'ml-dl-sec');
+      if (title) s.appendChild(el('h2', 'ml-dl-h', title));
+      body.appendChild(s);
+      return s;
+    }
+    function coverHolder(key, cls) {
+      var holder = cover(null, cls);
+      if (key) {
+        MLOff.getCover(key).then(function (blob) {
+          if (!blob) return;
+          var u = URL.createObjectURL(blob); urls.push(u);
+          var im = el('img'); im.alt = ''; im.src = u;
+          holder.appendChild(im);
+        }, function () { /* Platzhalter bleibt */ });
+      }
+      return holder;
+    }
+    function row(opts) {
+      var r = el('div', 'ml-dl-row');
+      var main = btn('ml-dl-main');
+      main.appendChild(opts.coverEl);
+      var tx = el('div', 'ml-dl-text');
+      tx.appendChild(el('div', 'ml-dl-title', opts.title));
+      if (opts.sub) tx.appendChild(el('div', 'ml-dl-sub', opts.sub));
+      main.appendChild(tx);
+      if (opts.onOpen) main.addEventListener('click', opts.onOpen); else main.disabled = true;
+      r.appendChild(main);
+      if (opts.play) r.appendChild(iconBtn('play', t('offPlayLocal'), 'ml-dl-act ml-dl-play', opts.play));
+      if (opts.action) r.appendChild(iconBtn(opts.action.icon, opts.action.label, 'ml-dl-act', opts.action.run));
+      return r;
+    }
+
+    function render() {
+      var my = ++tok;
+      Promise.all([OFF.load(), OFF.usage(), OFF.estimate(), OFF.persisted(), OFF.tracks()]).then(function (res) {
+        if (my !== tok || seq !== state.view || !host.isConnected) return;
+        var us = res[1], est = res[2], pers = res[3], tracks = res[4];
+        urls.forEach(function (u) { URL.revokeObjectURL(u); }); urls = [];
+        body.textContent = '';
+
+        // Speicher
+        var sec = section(t('offStorage'));
+        var card = el('div', 'ml-dl-card');
+        card.appendChild(el('div', 'ml-dl-big', t('offUsed', fmtBytes(us.bytes))));
+        card.appendChild(el('div', 'ml-dl-muted', t('offCounts', countText(us.tracks), us.colls === 1 ? t('offColl1') : t('offCollN', us.colls))));
+        if (est && est.quota) {
+          var other = Math.max(0, est.usage - us.bytes), free = Math.max(0, est.quota - est.usage);
+          var meter = el('div', 'ml-dl-meter');
+          var a = el('i', 'ml-dl-m-dl'), o = el('i', 'ml-dl-m-other');
+          a.style.width = Math.max(us.bytes ? 1 : 0, us.bytes / est.quota * 100) + '%';
+          o.style.width = (other / est.quota * 100) + '%';
+          meter.appendChild(a); meter.appendChild(o);
+          card.appendChild(meter);
+          var leg = el('div', 'ml-dl-legend');
+          [['ml-dl-m-dl', t('offBarDl'), us.bytes], ['ml-dl-m-other', t('offBarOther'), other], ['ml-dl-m-free', t('offBarFree'), free]].forEach(function (x) {
+            var l = el('span', 'ml-dl-leg');
+            l.appendChild(el('i', x[0])); l.appendChild(document.createTextNode(' ' + x[1] + ' ' + fmtBytes(x[2])));
+            leg.appendChild(l);
+          });
+          card.appendChild(leg);
+          card.appendChild(el('div', 'ml-dl-note', t('offQuotaNote')));
+        }
+        card.appendChild(el('div', 'ml-dl-note', pers ? t('offPersistOk') : t('offPersistNo')));
+        if (!pers && navigator.storage && navigator.storage.persist) {
+          var pb = btn('ml-pill', t('offPersistBtn'));
+          pb.addEventListener('click', function () { OFF.persist().then(function (ok) { if (!ok) toast(t('offPersistDenied')); render(); }); });
+          card.appendChild(pb);
+        }
+        sec.appendChild(card);
+
+        // Qualität
+        var qs = section(t('offQuality'));
+        var qrow = el('div', 'ml-dl-quality');
+        [['orig', t('offQOrig'), t('offQOrigSub')], ['mp3', t('offQMp3'), t('offQMp3Sub')]].forEach(function (x) {
+          var qb = btn('ml-dl-q' + (OFF.quality() === x[0] ? ' ml-on' : ''));
+          qb.appendChild(el('span', 'ml-dl-q-t', x[1])); qb.appendChild(el('span', 'ml-dl-q-s', x[2]));
+          qb.setAttribute('aria-pressed', OFF.quality() === x[0] ? 'true' : 'false');
+          qb.addEventListener('click', function () { OFF.setQuality(x[0]); });
+          qrow.appendChild(qb);
+        });
+        qs.appendChild(qrow);
+
+        // Läuft gerade
+        var jl = OFF.jobList();
+        if (jl.length) {
+          var js = section(t('offActive'));
+          jl.forEach(function (j) {
+            var r = el('div', 'ml-dl-job');
+            var tx = el('div', 'ml-dl-text');
+            tx.appendChild(el('div', 'ml-dl-title', j.name || t('offDownload')));
+            tx.appendChild(el('div', 'ml-dl-sub', t('offDownloading', j.done, j.total)));
+            var pbar = el('div', 'ml-dl-pbar'), fill = el('i');
+            fill.style.width = Math.round(Math.min(1, (j.done + (j.part || 0)) / Math.max(1, j.total)) * 100) + '%';
+            pbar.appendChild(fill); tx.appendChild(pbar);
+            r.appendChild(tx);
+            r.appendChild(iconBtn('close', t('offCancel'), 'ml-dl-act', function () { OFF.cancel(j.key); }));
+            js.appendChild(r);
+          });
+        }
+
+        // Vom Gerät abspielen
+        if (tracks.length) {
+          var ap = section(t('offFromDevice'));
+          var ac = el('div', 'ml-dl-card');
+          ac.appendChild(el('div', 'ml-dl-note ml-first', t('offLocalNote')));
+          var pr = el('div', 'ml-dl-playrow');
+          var pa = btn('ml-pill ml-primary', t('offPlayAll'));
+          pa.addEventListener('click', function () { OFFPLAY.startIds(tracks.slice().sort(byAdded).map(function (x) { return x.id; }), 0, { name: t('offTitle') }); });
+          var ps = btn('ml-pill', t('offShuffleAll'));
+          ps.addEventListener('click', function () { OFFPLAY.startIds(tracks.map(function (x) { return x.id; }), -1, { shuffle: true, name: t('offTitle') }); });
+          pr.appendChild(pa); pr.appendChild(ps); ac.appendChild(pr);
+          ap.appendChild(ac);
+        }
+
+        // Geladene Listen
+        var colls = OFF.allColls().sort(function (x, y) { return (y.added || 0) - (x.added || 0); });
+        var size = {};
+        tracks.forEach(function (x) { size[x.id] = x.size || 0; });
+        if (colls.length) {
+          var cs = section(t('offColls'));
+          colls.forEach(function (c) {
+            var have = c.ids.filter(function (id) { return OFF.has(id); }).length;
+            var bytes = c.ids.reduce(function (s, id) { return s + (size[id] || 0); }, 0);
+            var sub = [have < c.ids.length ? t('offPartial', have, c.ids.length) : countText(c.ids.length), fmtBytes(bytes)].join(' • ');
+            cs.appendChild(row({
+              play: have ? function () { OFFPLAY.startIds(c.ids, 0, { name: c.name }); } : null,
+              coverEl: coverHolder(c.coverKey, 'ml-dl-cover'), title: c.name, sub: sub,
+              onOpen: c.href ? function () { go(c.href); } : null,
+              action: { icon: 'del', label: t('offRemove'), run: function () {
+                confirmSheet(t('offRemoveTitle'), t('offRemoveText', c.name), t('offRemove'), true).then(function (yes) { if (yes) OFF.removeColl(c.key).then(function () { toast(t('offRemoved')); }); });
+              } }
+            }));
+          });
+        }
+        // Einzelne Titel
+        var singles = tracks.filter(function (x) { return x.explicit; }).sort(function (x, y) { return (y.added || 0) - (x.added || 0); });
+        if (singles.length) {
+          var ss = section(t('offSingles'));
+          singles.forEach(function (x) {
+            ss.appendChild(row({
+              play: function () { OFFPLAY.startIds([x.id], 0, { name: x.name }); },
+              coverEl: coverHolder(x.coverKey, 'ml-dl-cover'), title: x.name, sub: [x.artist, fmtBytes(x.size)].filter(Boolean).join(' • '),
+              action: { icon: 'del', label: t('offRemove'), run: function () { OFF.removeTrack(x.id).then(function () { toast(t('offRemoved')); }); } }
+            }));
+          });
+        }
+        if (!colls.length && !singles.length) body.appendChild(el('p', 'ml-dl-empty', t('offNone')));
+        if (colls.length || singles.length) {
+          var clr = btn('ml-pill ml-dl-clear', t('offClearAll'));
+          clr.addEventListener('click', function () {
+            confirmSheet(t('offClearTitle'), t('offClearText'), t('offClearAll'), true).then(function (yes) { if (yes) OFF.clearAll().then(function () { toast(t('offRemoved')); }); });
+          });
+          body.appendChild(clr);
+        }
+      }, function () { if (my === tok && seq === state.view) { body.textContent = ''; body.appendChild(el('p', 'ml-dl-empty', t('offUnsupported'))); } });
+    }
+    var off = OFF.listen(function () {
+      if (seq !== state.view || !host.isConnected) { off(); return; }
+      clearTimeout(timer); timer = setTimeout(render, 350);
+    });
+    render();
+  }
+
+  /* ---------- Vom Gerät abspielen: geladene Titel direkt in der Jellyfin-Seite (eigenes Audio-Element, ohne Server) ---------- */
+  (function () {
+    var extra = {
+      de: {
+        offPlayLocal: 'Vom Gerät abspielen', offPlayAll: 'Alle abspielen', offShuffleAll: 'Zufall', offFromDevice: 'Vom Gerät', offLocalFail: 'Titel nicht abspielbar',
+        offLocalStop: 'Beenden', offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.', offLocalNote: 'Läuft vom Gerät, ohne Server'
+      },
+      en: {
+        offPlayLocal: 'Play from device', offPlayAll: 'Play all', offShuffleAll: 'Shuffle', offFromDevice: 'From device', offLocalFail: 'Track cannot be played',
+        offLocalStop: 'Stop', offNotAvail: 'You are offline. This track is not downloaded.', offLocalNote: 'Playing from the device, no server needed'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var OFFPLAY = (function () {
+    var D = MLOff;
+    var aud = null;                       // eigenes Audio-Element (Jellyfins Element bleibt unberührt)
+    var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'off', cur: null, url: '', name: '', startedAt: 0 };
+    var ui = null, tok = 0, covers = {}, handlers = false, active = false;
+
+    function el2(tag, cls, text) { return el(tag, cls, text); }
+    function fmtClock(sec) { sec = Math.max(0, Math.floor(sec || 0)); var m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+    function coverUrl(key) {
+      if (!key) return Promise.resolve('');
+      if (covers[key] != null) return Promise.resolve(covers[key]);
+      return D.getCover(key).then(function (b) { covers[key] = b ? URL.createObjectURL(b) : ''; return covers[key]; }, function () { return ''; });
+    }
+    function paintCover(box, key, cur) {
+      box.textContent = ''; box.appendChild(icon('note', 'ml-cover-ph'));
+      coverUrl(key).then(function (u) {
+        if (!u || P.cur !== cur) return;
+        var im = el('img'); im.alt = ''; im.src = u; box.textContent = ''; box.appendChild(im);
+      });
+    }
+
+    function ensureAudio() {
+      if (aud) return;
+      aud = new Audio(); aud.preload = 'auto';
+      aud.addEventListener('ended', function () { if (P.repeat === 'one') { aud.currentTime = 0; aud.play(); } else advance(1); });
+      aud.addEventListener('error', function () { if (P.cur && active) { toast(t('offLocalFail')); advance(1); } });
+      aud.addEventListener('play', function () { pauseServer(); paint(); });
+      aud.addEventListener('pause', paint);
+      aud.addEventListener('timeupdate', paintTime);
+      aud.addEventListener('loadedmetadata', function () { paintTime(); position(); });
+    }
+    function pauseServer() { try { if (Player.isPlayingNow()) Player.toggle(); } catch (e) { /* kein Player */ } }
+
+    /* ---- Steuerung ---- */
+    function buildOrder(first) {
+      var n = P.queue.length, a = [], i;
+      if (P.shuffle) {
+        for (i = 0; i < n; i++) if (i !== first) a.push(i);
+        for (i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), x = a[i]; a[i] = a[j]; a[j] = x; }
+        if (first != null && first >= 0) a.unshift(first);
+      } else for (i = 0; i < n; i++) a.push(i);
+      P.order = a;
+    }
+    // ids: Titel-IDs in Wiedergabereihenfolge; start: Index (-1 = beliebig); opts: { name, shuffle }
+    function startIds(ids, start, opts) {
+      opts = opts || {};
+      return D.allTracks().then(function (all) {
+        var byId = {}; all.forEach(function (x) { byId[x.id] = x; });
+        var list = [], startId = start >= 0 && ids[start] ? nid(ids[start]) : '';
+        ids.forEach(function (id) { var m = byId[nid(id)]; if (m) list.push(m); });
+        if (!list.length) { toast(t('offNotAvail')); return false; }
+        ensureAudio();
+        P.queue = list; P.name = opts.name || '';
+        if (opts.shuffle != null) P.shuffle = !!opts.shuffle;
+        var first = 0;
+        if (start < 0) first = Math.floor(Math.random() * list.length);
+        else if (startId) { for (var i = 0; i < list.length; i++) if (list[i].id === startId) { first = i; break; } }
+        buildOrder(first); P.idx = 0; P.startedAt = Date.now();
+        active = true;
+        pauseServer();
+        show();
+        playCurrent();
+        return true;
+      });
+    }
+    function current() { return P.queue[P.order[P.idx]] || null; }
+    function playCurrent() {
+      var tr = current();
+      if (!tr) return;
+      var my = ++tok;
+      D.getBlob(tr.id).then(function (blob) {
+        if (my !== tok) return;
+        if (!blob) { toast(t('offLocalFail')); return advance(1); }
+        if (P.url) URL.revokeObjectURL(P.url);
+        P.url = URL.createObjectURL(blob); P.cur = tr;
+        aud.src = P.url;
+        var p = aud.play(); if (p && p.catch) p.catch(function () { paint(); });
+        meta(tr); lastCover = ''; paint();
+      }, function () { toast(t('offLocalFail')); });
+    }
+    function advance(dir) {
+      if (!P.queue.length) return;
+      var n = P.order.length, ni = P.idx + dir;
+      if (ni >= n) {
+        if (P.repeat === 'all') ni = 0; else { aud.pause(); aud.currentTime = 0; paint(); return; }
+      }
+      if (ni < 0) ni = P.repeat === 'all' ? n - 1 : 0;
+      P.idx = ni; playCurrent();
+    }
+    function prev() { if (aud.currentTime > 3) { aud.currentTime = 0; return; } advance(-1); }
+    function toggle() { if (!P.cur) return; if (aud.paused) { var p = aud.play(); if (p && p.catch) p.catch(function () { /* egal */ }); } else aud.pause(); }
+    function stop() {
+      if (!active) return;
+      active = false; tok++;
+      if (aud) { aud.pause(); aud.removeAttribute('src'); try { aud.load(); } catch (e) { /* egal */ } }
+      if (P.url) { URL.revokeObjectURL(P.url); P.url = ''; }
+      P.cur = null; P.queue = []; P.order = []; P.idx = -1;
+      try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = null; } catch (e) { /* egal */ }
+      hide();
+    }
+    function toggleShuffle() {
+      P.shuffle = !P.shuffle;
+      if (P.queue.length) { var ci = P.order[P.idx]; buildOrder(P.shuffle ? ci : null); P.idx = P.shuffle ? 0 : ci; }
+      paint();
+    }
+    function cycleRepeat() { P.repeat = P.repeat === 'off' ? 'all' : P.repeat === 'all' ? 'one' : 'off'; paint(); }
+
+    /* ---- Sperrbildschirm (Media Session). Jellyfin bindet seine Tasten nur einmal; sie werden hier ersetzt und leiten bei
+       Serverwiedergabe an dieselbe Sitzung weiter. ---- */
+    function serverCmd(path) { return withSession(function (s) { return sessionCall(s, path); }).then(function () { Player.kick(); }, function () { /* egal */ }); }
+    function bindKeys() {
+      if (handlers || !('mediaSession' in navigator)) return;
+      handlers = true;
+      var set = function (a, f) { try { navigator.mediaSession.setActionHandler(a, f); } catch (e) { /* nicht unterstützt */ } };
+      set('play', function () { if (active) toggle(); else Player.toggle(); });
+      set('pause', function () { if (active) aud.pause(); else Player.toggle(); });
+      set('previoustrack', function () { if (active) prev(); else serverCmd('Playing/PreviousTrack'); });
+      set('nexttrack', function () { if (active) advance(1); else serverCmd('Playing/NextTrack'); });
+      set('seekto', function (d) { if (active && d && d.seekTime != null) aud.currentTime = d.seekTime; });
+    }
+    function meta(tr) {
+      if (!('mediaSession' in navigator)) return;
+      bindKeys();
+      coverUrl(tr.coverKey).then(function (u) {
+        try { navigator.mediaSession.metadata = new MediaMetadata({ title: tr.name, artist: tr.artist, album: tr.album, artwork: u ? [{ src: u, sizes: '400x400', type: 'image/jpeg' }] : [] }); } catch (e) { /* ältere Browser */ }
+      });
+    }
+    function position() {
+      if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState || !isFinite(aud.duration)) return;
+      try { navigator.mediaSession.setPositionState({ duration: aud.duration, playbackRate: aud.playbackRate || 1, position: aud.currentTime || 0 }); } catch (e) { /* egal */ }
+    }
+
+    /* ---- Oberfläche: Leiste (Handy: über der Navigation, Computer: statt der Player-Leiste) und Vollansicht ---- */
+    function pbtn(cls, name, label, fn) { var b = iconBtn(name, label, cls, fn); return b; }
+    function build() {
+      var bar = el('div', 'mlo-bar');
+      var cov = el('div', 'mlo-cv'), tx = btn('mlo-tx'), tt = el('div', 'mlo-t'), ts = el('div', 'mlo-s');
+      tx.appendChild(tt); tx.appendChild(ts);
+      var bPrev = pbtn('mlo-skip', 'prev', t('prev'), prev), bPlay = pbtn('mlo-play', 'play', t('play'), toggle), bNext = pbtn('mlo-skip', 'next', t('next'), function () { advance(1); });
+      var bClose = pbtn('mlo-close', 'close', t('offLocalStop'), stop);
+      var prog = el('div', 'mlo-prog'); prog.appendChild(el('i'));
+      var bseek = el('input', 'mlo-seek mlo-seek-bar'); bseek.type = 'range'; bseek.min = 0; bseek.max = 1000; bseek.value = 0; bseek.setAttribute('aria-label', 'Position');
+      [cov, tx, bPrev, bPlay, bNext, bseek, bClose, prog].forEach(function (n) { bar.appendChild(n); });
+      cov.addEventListener('click', openFull); tx.addEventListener('click', openFull);
+      var full = el('div', 'mlo-full'); full.hidden = true;
+      var top = el('div', 'mlo-top');
+      var bDown = pbtn('', 'down', t('close'), closeFull); var from = el('div', 'mlo-from'); var sp = el('div'); sp.style.width = '40px';
+      top.appendChild(bDown); top.appendChild(from); top.appendChild(sp);
+      var art = el('div', 'mlo-art'), fcv = el('div', 'mlo-cvbig'); art.appendChild(fcv);
+      var meta2 = el('div', 'mlo-meta'), ft = el('div', 'mlo-ft'), fs = el('div', 'mlo-fs'); meta2.appendChild(ft); meta2.appendChild(fs);
+      var seek = el('input', 'mlo-seek'); seek.type = 'range'; seek.min = 0; seek.max = 1000; seek.value = 0; seek.setAttribute('aria-label', 'Position');
+      var times = el('div', 'mlo-times'), tc = el('span', null, '0:00'), td = el('span', null, '0:00'); times.appendChild(tc); times.appendChild(td);
+      var ctl = el('div', 'mlo-ctl');
+      var cShuf = pbtn('', 'shuffle', t('shuffle'), toggleShuffle), cPrev = pbtn('mlo-skip', 'prev', t('prev'), prev), cPlay = pbtn('mlo-playbig', 'play', t('play'), toggle),
+          cNext = pbtn('mlo-skip', 'next', t('next'), function () { advance(1); }), cRep = pbtn('', 'repeat', t('repeatLbl') || 'Wiederholen', cycleRepeat);
+      [cShuf, cPrev, cPlay, cNext, cRep].forEach(function (b) { ctl.appendChild(b); });
+      var note = el('div', 'mlo-note', t('offLocalNote'));
+      [top, art, meta2, seek, times, ctl, note].forEach(function (n) { full.appendChild(n); });
+      var seeking = false;
+      function bindSeek(inp) {
+        inp.addEventListener('input', function () { seeking = true; inp.style.setProperty('--p', inp.value / 10 + '%'); if (isFinite(aud.duration)) tc.textContent = fmtClock(aud.duration * inp.value / 1000); });
+        inp.addEventListener('change', function () { if (isFinite(aud.duration)) aud.currentTime = aud.duration * inp.value / 1000; seeking = false; });
+      }
+      bindSeek(seek); bindSeek(bseek);
+      ui = { bar: bar, cov: cov, tt: tt, ts: ts, bPlay: bPlay, prog: prog, bseek: bseek, full: full, from: from, fcv: fcv, ft: ft, fs: fs, seek: seek, tc: tc, td: td, cShuf: cShuf, cPlay: cPlay, cRep: cRep, seeking: function () { return seeking; } };
+      document.body.appendChild(full);
+    }
+    var lastCover = '';
+    function place() {
+      if (!ui || !active || !root) return;
+      if (isWide()) { if (ui.bar.parentNode !== root) root.appendChild(ui.bar); }
+      else {
+        var bb = bottomBar || root.querySelector('.ml-bottom');
+        if (bb && ui.bar.parentNode !== bb) bb.insertBefore(ui.bar, bb.firstChild);
+      }
+    }
+    function show() { if (!ui) build(); document.body.classList.add('ml-local-on'); place(); paint(); }
+    function hide() {
+      document.body.classList.remove('ml-local-on');
+      if (ui) { if (ui.bar.parentNode) ui.bar.parentNode.removeChild(ui.bar); ui.full.hidden = true; }
+    }
+    function openFull() { if (!P.cur || !ui) return; ui.full.hidden = false; paint(); }
+    function closeFull() { if (ui) ui.full.hidden = true; }
+    function setPlay(b, playing) {
+      var ic = b.querySelector('.ml-ic'), fresh = icon(playing ? 'pause' : 'play');
+      if (ic) b.replaceChild(fresh, ic); else b.appendChild(fresh);
+      b.setAttribute('aria-label', playing ? t('pause') : t('play')); b.title = playing ? t('pause') : t('play');
+    }
+    function paint() {
+      if (!ui || !active) return;
+      var tr = P.cur;
+      if (!tr) return;
+      var playing = !aud.paused;
+      setPlay(ui.bPlay, playing); setPlay(ui.cPlay, playing);
+      ui.tt.textContent = tr.name; ui.ts.textContent = [tr.artist, t('offFromDevice')].filter(Boolean).join(' • ');
+      ui.ft.textContent = tr.name; ui.fs.textContent = tr.artist || '';
+      ui.from.textContent = P.name ? P.name : t('offFromDevice');
+      ui.cShuf.classList.toggle('ml-on', P.shuffle);
+      ui.cRep.classList.toggle('ml-on', P.repeat !== 'off');
+      var ric = ui.cRep.querySelector('.ml-ic'); ui.cRep.replaceChild(icon(P.repeat === 'one' ? 'repeat_one' : 'repeat'), ric);
+      if (lastCover !== tr.id) { lastCover = tr.id; paintCover(ui.cov, tr.coverKey, tr); paintCover(ui.fcv, tr.coverKey, tr); }
+      paintTime();
+    }
+    function paintTime() {
+      if (!ui || !active) return;
+      var d = aud.duration, c = aud.currentTime || 0, frac = isFinite(d) && d > 0 ? c / d : 0;
+      ui.prog.firstChild.style.width = (frac * 100) + '%';
+      if (!ui.seeking()) {
+        [ui.seek, ui.bseek].forEach(function (s) { s.value = Math.round(frac * 1000); s.style.setProperty('--p', frac * 100 + '%'); });
+        ui.tc.textContent = fmtClock(c);
+      }
+      ui.td.textContent = isFinite(d) ? fmtClock(d) : '0:00';
+    }
+    window.addEventListener('resize', place);
+
+    // Offline: nur die geladenen Titel der Liste abspielen (Position des gewünschten Titels bleibt erhalten)
+    function offlineIds(ids, start) {
+      var keep = [], want = start >= 0 && ids[start] ? nid(ids[start]) : '', ns = -1;
+      ids.forEach(function (id) { if (OFF.has(id)) { if (want && nid(id) === want) ns = keep.length; keep.push(id); } });
+      return { ids: keep, start: want ? ns : start };
+    }
+    return {
+      startIds: startIds, stop: stop, place: place, audio: function () { return aud; }, active: function () { return active; },
+      recentlyStarted: function () { return Date.now() - P.startedAt < 4000; },
+      offlineIds: offlineIds
+    };
+  })();
 
   /* ---------- Player ---------- */
   var Player = (function () {
@@ -5314,6 +6268,7 @@
       renderNpCards();
       resolveContext();
       markContext();
+      if (P.item && !isPaused() && OFFPLAY.active() && !OFFPLAY.recentlyStarted()) OFFPLAY.stop();   // Musik vom Server hat übernommen
       maybeAutoplay(s);
     }
 
@@ -5419,6 +6374,7 @@
           if (np.parentNode !== root) root.appendChild(np);
           if (bar.parentNode !== root) root.appendChild(bar);
         }
+        OFFPLAY.place();
       },
       repaint: paint
     };
@@ -5707,13 +6663,14 @@
       if (state.classic) { hideApp(); toggleClassicFab(true); return; }
 
       var folderId = isLib && route.params && route.params.mlview === 'folder' && ID_RE.test(route.params.mlid || '') ? route.params.mlid : null;
+      var dlView = isLib && route.params && route.params.mlview === 'downloads';
       var mixKind = isLib && route.params && route.params.mlview === 'mix' && /^(mix|radio|mixtape)$/.test(route.params.mlkind || '') && ID_RE.test(route.params.mlid || '') ? route.params.mlkind : null;
       if (isLib && route.id && !isMediaLib(route.id)) state.libraryId = route.id;
       var key;
-      if (isLib) key = folderId ? 'folder|' + folderId : mixKind ? 'mix|' + mixKind + '|' + nid(route.params.mlid) : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
+      if (isLib) key = folderId ? 'folder|' + folderId : dlView ? 'downloads' : mixKind ? 'mix|' + mixKind + '|' + nid(route.params.mlid) : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
       else key = 'detail|' + route.id;
       if (isWide() && state.tab === 'library') state.tab = 'home';
-      var mcat = isLib && route.id && !folderId && !mixKind && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
+      var mcat = isLib && route.id && !folderId && !mixKind && !dlView && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
       if (mcat && state.autoChip !== route.id) { state.autoChip = route.id; state.chip = mcat; state.tab = 'home'; key = 'tab|home'; }
       if (isDetail && route.params && route.params.mltrack && ID_RE.test(route.params.mltrack)) state.focusTrack = route.params.mltrack;
       var wasShown = root && !root.hidden;
@@ -5726,6 +6683,7 @@
       state.view++;
       var seq = state.view;
       if (folderId) showFolderDetail(content, seq, folderId, route.id);
+      else if (dlView) showDownloadsPage(content, seq);
       else if (mixKind) showMixDetail(content, seq, mixKind, route.params.mlid, parseInt(route.params.mln, 10) || 0, route.params.mlt || '');
       else if (key === 'liked') showLikedDetail(content, seq);
       else if (isDetail) {
@@ -5781,7 +6739,7 @@
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
-    eq: EQ,
+    eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY,
     addToPlaylist: function (ids) { addToPlaylist(ids); }
   };
 
