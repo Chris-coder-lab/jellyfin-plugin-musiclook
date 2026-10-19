@@ -165,6 +165,7 @@
   ICONS.volume_off = 'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z';
   ICONS.volume_low = 'M18.5 12A4.5 4.5 0 0 0 16 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z';
   ICONS.sort = 'M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z';
+  ICONS.equalizer = 'M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z';
   ICONS.plus_circle = 'M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z';
   ICONS.check_circle = 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z';
   ICONS.book = 'M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z';
@@ -173,8 +174,8 @@
   /* Kontur-Symbole im Stil von Spotify (Zufallswiedergabe, Wiederholen). */
   var STROKE_ICONS = {
     shuffle: 'M3 7h2.6c1.6 0 3.1.8 4 2.1l4.1 5.8c.9 1.3 2.4 2.1 4 2.1H21M3 17h2.6c1.4 0 2.7-.6 3.6-1.7M13.6 8.8C14.5 7.7 15.8 7 17.3 7H21M18.4 4.3L21 7l-2.6 2.7M18.4 14.3L21 17l-2.6 2.7',
-    repeat: 'M4 11.5V10a3 3 0 0 1 3-3h13M17.4 4.3L20 7l-2.6 2.7M20 12.5V14a3 3 0 0 1-3 3H4M6.6 14.3L4 17l2.6 2.7',
-    repeat_one: 'M4 11.5V10a3 3 0 0 1 3-3h13M17.4 4.3L20 7l-2.6 2.7M20 12.5V14a3 3 0 0 1-3 3H4M6.6 14.3L4 17l2.6 2.7M11 10.6l1.6-1v6.2'
+    repeat: 'M3.5 12v-1.5A4.5 4.5 0 0 1 8 6h12.5M17.6 3.1L20.5 6l-2.9 2.9M20.5 12v1.5A4.5 4.5 0 0 1 16 18H3.5M6.4 15.1L3.5 18l2.9 2.9',
+    repeat_one: 'M3.5 12v-1.5A4.5 4.5 0 0 1 8 6h12.5M17.6 3.1L20.5 6l-2.9 2.9M20.5 12v1.5A4.5 4.5 0 0 1 16 18H3.5M6.4 15.1L3.5 18l2.9 2.9M10.4 10.4l1.9-1.4V15'
   };
 
   function icon(name, cls) {
@@ -545,6 +546,705 @@
   function applyHeroColor(host, img) {
     function run() { var pal = coverPalette(img); if (pal) setPalette(host, pal); }
     if (img.complete && img.naturalWidth) run(); else img.addEventListener('load', run, { once: true });
+  }
+  /* ---------- Audio-DSP: Rauschunterdrückung und De-Esser (läuft im Browser des Hörers, nicht auf dem Server) ---------- */
+  // mode 'denoise': spektrale Rauschunterdrückung (STFT, adaptive Rauschschätzung, Gewinn nach "decision-directed" Wiener-Regel)
+  // mode 'deess'  : Split-Band-De-Esser (Linkwitz-Riley 4. Ordnung bei 5,5 kHz; nur das Höhenband wird abgesenkt, wenn es überwiegt)
+  // process(inputs, outputs, n): inputs/outputs sind Listen von Float32Array-Kanälen (wie bei einem AudioWorklet).
+  function MLDspCreate(sr, mode) {
+    var PI2 = 2 * Math.PI;
+
+    function biquadCoef(type, fc, q) {
+      var w0 = PI2 * fc / sr, c = Math.cos(w0), s = Math.sin(w0), al = s / (2 * q), a0 = 1 + al, b0, b1, b2;
+      if (type === 'lp') { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; } else { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; }
+      return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: (-2 * c) / a0, a2: (1 - al) / a0 };
+    }
+
+    /* ---- De-Esser ---- */
+    function makeDeess() {
+      var q = 0.70710678, lp = biquadCoef('lp', 5500, q), hp = biquadCoef('hp', 5500, q);
+      var THR = 0.28;          // Anteil der Höhen-Leistung an der Gesamtleistung, ab dem abgesenkt wird
+      var EXP = 0.375;         // entspricht Verhältnis 4:1
+      var GMIN = 0.35;         // höchstens etwa -9 dB
+      var aTot = 1 - Math.exp(-1 / (0.15 * sr)), aAtk = 1 - Math.exp(-1 / (0.001 * sr)), aRel = 1 - Math.exp(-1 / (0.03 * sr));
+      var gAtk = 1 - Math.exp(-1 / (0.0007 * sr)), gRel = 1 - Math.exp(-1 / (0.04 * sr));
+      var st = [new Float64Array(8), new Float64Array(8)];   // je Kanal: lp1, lp2, hp1, hp2 (z1, z2)
+      var pTot = 0, pHF = 0, g = 1, lo = [0, 0], hi = [0, 0];
+      return function (inp, out, n) {
+        var nch = Math.min(inp.length, out.length, 2);
+        if (!nch) return;
+        for (var i = 0; i < n; i++) {
+          var xx = 0, hh = 0;
+          for (var c = 0; c < nch; c++) {
+            var z = st[c], x = inp[c][i], y;
+            y = lp.b0 * x + z[0]; z[0] = lp.b1 * x - lp.a1 * y + z[1]; z[1] = lp.b2 * x - lp.a2 * y;
+            var l = y;
+            y = lp.b0 * l + z[2]; z[2] = lp.b1 * l - lp.a1 * y + z[3]; z[3] = lp.b2 * l - lp.a2 * y;
+            lo[c] = y;
+            y = hp.b0 * x + z[4]; z[4] = hp.b1 * x - hp.a1 * y + z[5]; z[5] = hp.b2 * x - hp.a2 * y;
+            var h = y;
+            y = hp.b0 * h + z[6]; z[6] = hp.b1 * h - hp.a1 * y + z[7]; z[7] = hp.b2 * h - hp.a2 * y;
+            hi[c] = y;
+            xx += x * x; hh += y * y;
+          }
+          xx /= nch; hh /= nch;
+          pTot += aTot * (xx - pTot);
+          pHF += (hh > pHF ? aAtk : aRel) * (hh - pHF);
+          var tgt = 1;
+          if (pTot > 1e-7) {
+            var frac = pHF / pTot;
+            if (frac > THR) { tgt = Math.pow(THR / frac, EXP); if (tgt < GMIN) tgt = GMIN; }
+          }
+          g += (tgt < g ? gAtk : gRel) * (tgt - g);
+          for (var c2 = 0; c2 < nch; c2++) out[c2][i] = lo[c2] + g * hi[c2];
+        }
+        for (var c3 = nch; c3 < out.length; c3++) out[c3].set(out[0].subarray(0, n));
+      };
+    }
+
+    /* ---- Rauschunterdrückung ---- */
+    function makeDenoise() {
+      var N = 1024, H = 512, K = N / 2 + 1;
+      var win = new Float64Array(N), cosT = new Float64Array(N / 2), sinT = new Float64Array(N / 2), rev = new Uint16Array(N);
+      var i, bits = 10;
+      for (i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos(PI2 * i / N));
+      for (i = 0; i < N / 2; i++) { cosT[i] = Math.cos(PI2 * i / N); sinT[i] = Math.sin(PI2 * i / N); }
+      for (i = 0; i < N; i++) { var r = 0, v = i; for (var b = 0; b < bits; b++) { r = (r << 1) | (v & 1); v >>= 1; } rev[i] = r; }
+      var re = new Float64Array(N), im = new Float64Array(N);
+      function fft() {
+        var a, j, k, size, half, step, tr, ti, wr, wi;
+        for (a = 0; a < N; a++) { j = rev[a]; if (j > a) { tr = re[a]; re[a] = re[j]; re[j] = tr; tr = im[a]; im[a] = im[j]; im[j] = tr; } }
+        for (size = 2; size <= N; size <<= 1) {
+          half = size >> 1; step = N / size;
+          for (a = 0; a < N; a += size) {
+            for (j = 0, k = 0; j < half; j++, k += step) {
+              wr = cosT[k]; wi = -sinT[k];
+              var p = a + j, q2 = p + half;
+              tr = re[q2] * wr - im[q2] * wi; ti = re[q2] * wi + im[q2] * wr;
+              re[q2] = re[p] - tr; im[q2] = im[p] - ti; re[p] += tr; im[p] += ti;
+            }
+          }
+        }
+      }
+      var A_PS = 0.6;                                  // Glättung der Leistung
+      var RISE = Math.pow(10, 3 / 10 / (sr / H));      // Rauschschätzung darf mit ca. 3 dB/s ansteigen
+      var BIAS = 1.5;                                  // Ausgleich: das Minimum unterschätzt das mittlere Rauschen
+      var DD = 0.92, GMIN = 0.25;                      // Entscheidungsgesteuerte Glättung, höchstens ca. -12 dB
+      var chans = [];
+      function mk() {
+        return {
+          x: new Float32Array(N), acc: new Float32Array(N), wp: 0, hop: 0, first: true,
+          ps: new Float64Array(K), nz: new Float64Array(K), a2: new Float64Array(K), g: new Float64Array(K), gs: new Float64Array(K)
+        };
+      }
+      function frame(s) {
+        var k, p, idx = s.wp;
+        for (var a = 0; a < N; a++) { re[a] = s.x[idx] * win[a]; im[a] = 0; if (++idx === N) idx = 0; }
+        fft();
+        for (k = 0; k < K; k++) {
+          p = re[k] * re[k] + im[k] * im[k];
+          if (s.first) { s.ps[k] = p; s.nz[k] = Math.max(p, 1e-9); s.a2[k] = 0; }
+          else {
+            s.ps[k] = A_PS * s.ps[k] + (1 - A_PS) * p;
+            var nz = s.nz[k], ps = s.ps[k];
+            if (ps < nz) nz += 0.2 * (ps - nz); else nz = Math.min(ps, nz * RISE);
+            s.nz[k] = nz = Math.max(nz, 1e-9);
+          }
+          var nT = s.nz[k] * BIAS, gam = p / nT, xi = DD * s.a2[k] / nT + (1 - DD) * Math.max(gam - 1, 0);
+          var gk = xi / (1 + xi);
+          if (gk < GMIN) gk = GMIN;
+          s.g[k] = gk;
+          s.a2[k] = gk * gk * p;
+        }
+        s.first = false;
+        // Gewinn glätten: über die Frequenz (3 Punkte) und in der Zeit (schnell hoch, langsamer runter)
+        for (k = 0; k < K; k++) {
+          var l = k > 0 ? s.g[k - 1] : s.g[k], rr = k < K - 1 ? s.g[k + 1] : s.g[k];
+          var sm = 0.25 * l + 0.5 * s.g[k] + 0.25 * rr;
+          s.gs[k] += (sm > s.gs[k] ? 0.7 : 0.35) * (sm - s.gs[k]);
+        }
+        for (k = 0; k < K; k++) { re[k] *= s.gs[k]; im[k] *= s.gs[k]; }
+        for (k = 1; k < N / 2; k++) { re[N - k] = re[k]; im[N - k] = -im[k]; }
+        // Rücktransformation (Konjugations-Trick)
+        for (k = 0; k < N; k++) im[k] = -im[k];
+        fft();
+        idx = s.wp;
+        for (var b2 = 0; b2 < N; b2++) { s.acc[idx] += re[b2] / N * win[b2]; if (++idx === N) idx = 0; }
+      }
+      return function (inp, out, n) {
+        var nch = Math.min(inp.length, out.length, 2);
+        if (!nch) return;
+        while (chans.length < nch) chans.push(mk());
+        for (var c = 0; c < nch; c++) {
+          var s = chans[c], xin = inp[c], xout = out[c];
+          for (var i2 = 0; i2 < n; i2++) {
+            xout[i2] = s.acc[s.wp];
+            s.acc[s.wp] = 0;
+            s.x[s.wp] = xin[i2];
+            if (++s.wp === N) s.wp = 0;
+            if (++s.hop === H) { s.hop = 0; frame(s); }
+          }
+        }
+        for (var c3 = nch; c3 < out.length; c3++) out[c3].set(out[0].subarray(0, n));
+      };
+    }
+
+    return { process: mode === 'deess' ? makeDeess() : makeDenoise() };
+  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = MLDspCreate;
+
+  /* ---------- Equalizer (laeuft im Browser per Web Audio, nicht auf dem Server) ---------- */
+  var EQ = (function () {
+    var BANDS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    var BAND_LABEL = ['31', '62', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+    var MAXDB = 12;
+    var PRESETS = [
+      { id: 'flat', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], deess: false, denoise: false },
+      { id: 'music', bands: [3, 2.5, 1.5, 0, -0.5, -0.5, 0, 1.5, 2.5, 2], deess: false, denoise: false },
+      { id: 'sermon', bands: [-12, -8, -3, 0, 1, 2.5, 3, 2, -1, -4], deess: true, denoise: true },
+      { id: 'audiobook', bands: [-5, -3, 0, 1, 1.5, 2, 2, 1, -1, -3], deess: true, denoise: false },
+      { id: 'bass', bands: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0], deess: false, denoise: false },
+      { id: 'treble', bands: [0, 0, 0, 0, 0, 0, 1, 3, 5, 6], deess: false, denoise: false }
+    ];
+    var KEY = 'ml.eq';
+    var AC = window.AudioContext || window.webkitAudioContext;
+
+    function isIOS() {
+      var ua = String(navigator.userAgent || '');
+      return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+    }
+    function supported() { return !!AC && !isIOS() && typeof WeakMap === 'function'; }
+
+    function clampBand(v) {
+      v = Number(v);
+      if (!isFinite(v)) v = 0;
+      v = Math.round(v * 2) / 2;
+      return Math.max(-MAXDB, Math.min(MAXDB, v));
+    }
+    function sane(s) {
+      var out = { bands: [], deess: !!(s && s.deess), denoise: !!(s && s.denoise) };
+      for (var i = 0; i < BANDS.length; i++) out.bands.push(clampBand(s && s.bands ? s.bands[i] : 0));
+      return out;
+    }
+    function copy(s) { return sane(s); }
+    function same(a, b) {
+      if (!!a.deess !== !!b.deess || !!a.denoise !== !!b.denoise) return false;
+      for (var i = 0; i < BANDS.length; i++) if (clampBand(a.bands[i]) !== clampBand(b.bands[i])) return false;
+      return true;
+    }
+    function flat() { return sane(PRESETS[0]); }
+    function bandsActive(s) { for (var i = 0; i < s.bands.length; i++) if (s.bands[i] !== 0) return true; return false; }
+    function isActive(s) { return bandsActive(s) || !!s.deess || !!s.denoise; }
+    function presetOf(s) {
+      for (var i = 0; i < PRESETS.length; i++) if (same(s, PRESETS[i])) return PRESETS[i].id;
+      return 'custom';
+    }
+
+    function load() {
+      try {
+        var r = JSON.parse(window.localStorage.getItem(KEY) || 'null');
+        if (r && r.b) return sane({ bands: r.b, deess: !!r.d, denoise: !!r.n });
+      } catch (e) { /* kein Speicher */ }
+      return flat();
+    }
+    function save(s) {
+      try {
+        if (!isActive(s)) window.localStorage.removeItem(KEY);
+        else window.localStorage.setItem(KEY, JSON.stringify({ b: s.bands, d: s.deess ? 1 : 0, n: s.denoise ? 1 : 0 }));
+      } catch (e) { /* kein Speicher */ }
+    }
+
+    var applied = load(), live = copy(applied);
+    var rigs = [], byEl = supported() ? new WeakMap() : null, building = null, retryArmed = false, listeners = [], dspFailed = false;
+
+    function workletUrl() {
+      var s = document.querySelector('script[src*="MusicLook/app.js"]');
+      var v = '';
+      if (s) { var m = /[?&]v=([^&]+)/.exec(s.getAttribute('src') || ''); if (m) v = '?v=' + m[1]; }
+      var base = s ? s.src.replace(/app\.js(\?.*)?$/, '') : new URL('../MusicLook/', document.baseURI).href;
+      return base + 'eqdsp.js' + v;
+    }
+
+    /* ---- Graph je Audio-Element ---- */
+    function disc(n) { try { n.disconnect(); } catch (e) { /* war nicht verbunden */ } }
+
+    function ensureEqNodes(rig) {
+      if (rig.eq) return;
+      var ctx = rig.ctx;
+      rig.eq = BANDS.map(function (f, i) {
+        var n = ctx.createBiquadFilter();
+        n.type = i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking';
+        n.frequency.value = i === 0 ? 45 : i === BANDS.length - 1 ? 11000 : f;
+        if (n.type === 'peaking') n.Q.value = 1.4;
+        n.gain.value = 0;
+        return n;
+      });
+      rig.trim = ctx.createGain();
+      rig.trim.gain.value = 1;
+      for (var i = 0; i < rig.eq.length - 1; i++) rig.eq[i].connect(rig.eq[i + 1]);
+      rig.eq[rig.eq.length - 1].connect(rig.trim);
+    }
+
+    // Betrag (dB) eines Filters der Kette bei der Frequenz f (RBJ-Formeln wie in der Web-Audio-Spezifikation)
+    function filterDb(type, f0, q, gainDb, f, sr) {
+      var A = Math.pow(10, gainDb / 40), w0 = 2 * Math.PI * f0 / sr, cs = Math.cos(w0), sn = Math.sin(w0), b0, b1, b2, a0, a1, a2, al, sa;
+      if (type === 'peaking') {
+        al = sn / (2 * q);
+        b0 = 1 + al * A; b1 = -2 * cs; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * cs; a2 = 1 - al / A;
+      } else {
+        al = sn / Math.SQRT2; sa = 2 * Math.sqrt(A) * al;
+        if (type === 'lowshelf') {
+          b0 = A * ((A + 1) - (A - 1) * cs + sa); b1 = 2 * A * ((A - 1) - (A + 1) * cs); b2 = A * ((A + 1) - (A - 1) * cs - sa);
+          a0 = (A + 1) + (A - 1) * cs + sa; a1 = -2 * ((A - 1) + (A + 1) * cs); a2 = (A + 1) + (A - 1) * cs - sa;
+        } else {
+          b0 = A * ((A + 1) + (A - 1) * cs + sa); b1 = -2 * A * ((A - 1) + (A + 1) * cs); b2 = A * ((A + 1) + (A - 1) * cs - sa);
+          a0 = (A + 1) - (A - 1) * cs + sa; a1 = 2 * ((A - 1) - (A + 1) * cs); a2 = (A + 1) - (A - 1) * cs - sa;
+        }
+      }
+      var w = 2 * Math.PI * f / sr, c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+      var nr = b0 + b1 * c1 + b2 * c2, ni = -(b1 * s1 + b2 * s2), dr = a0 + a1 * c1 + a2 * c2, di = -(a1 * s1 + a2 * s2);
+      return 10 * Math.log((nr * nr + ni * ni) / (dr * dr + di * di)) / Math.LN10;
+    }
+
+    // Vorverstaerkung: gleicht die groesste Anhebung der Kurve aus, damit nichts uebersteuert (aus den Sollwerten berechnet)
+    function trimFor(rig, s) {
+      var peak = 0, N = 64, sr = rig.ctx.sampleRate || 44100;
+      for (var i = 0; i < N; i++) {
+        var f = 20 * Math.pow(1000, i / (N - 1)), sum = 0;
+        for (var k = 0; k < BANDS.length; k++) {
+          if (!s.bands[k]) continue;
+          var last = k === BANDS.length - 1;
+          sum += filterDb(k === 0 ? 'lowshelf' : last ? 'highshelf' : 'peaking', k === 0 ? 45 : last ? 11000 : BANDS[k], 1.4, s.bands[k], f, sr);
+        }
+        if (sum > peak) peak = sum;
+      }
+      return Math.pow(10, -0.8 * Math.min(peak, 24) / 20);
+    }
+
+    function setParam(p, v, ctx) {
+      try { p.setTargetAtTime(v, ctx.currentTime, 0.02); } catch (e) { p.value = v; }
+    }
+
+    function configure(rig) {
+      var s = live, ctx = rig.ctx;
+      if (bandsActive(s)) {
+        var fresh = !rig.eq;
+        ensureEqNodes(rig);
+        for (var i = 0; i < rig.eq.length; i++) {
+          if (fresh) rig.eq[i].gain.value = s.bands[i]; else setParam(rig.eq[i].gain, s.bands[i], ctx);
+        }
+        var tr = trimFor(rig, s);
+        if (fresh) rig.trim.gain.value = tr; else setParam(rig.trim.gain, tr, ctx);
+      }
+      if (s.denoise && !rig.A) startDsp(rig, 'denoise');
+      if (s.deess && !rig.B) startDsp(rig, 'deess');
+      wire(rig);
+    }
+
+    function wire(rig) {
+      var s = live, k, head;
+      disc(rig.in); disc(rig.out);
+      if (rig.trim) disc(rig.trim);   // die Filterkette selbst bleibt verbunden; nur Anfang und Ende werden neu gesetzt
+      if (rig.A) disc(rig.A);
+      if (rig.B) disc(rig.B);
+      var useA = s.denoise && rig.A, useEq = bandsActive(s) && rig.eq, useB = s.deess && rig.B;
+      if (!useA && !useEq && !useB) rig.in.connect(rig.out);
+      else {
+        head = rig.in;
+        if (useA) { head.connect(rig.A); head = rig.A; }
+        if (useEq) { head.connect(rig.eq[0]); head = rig.trim; }
+        if (useB) { head.connect(rig.B); head = rig.B; }
+        head.connect(rig.out);
+      }
+      for (k = 0; k < rig.dests.length; k++) { try { rig.out.connect(rig.dests[k]); } catch (e) { /* anderer Kontext */ } }
+    }
+
+    function startDsp(rig, mode) {
+      var ctx = rig.ctx, slot = mode === 'denoise' ? 'A' : 'B', flag = '_' + slot;
+      if (rig[flag]) return;
+      rig[flag] = true;
+      function fallback() {
+        if (typeof ctx.createScriptProcessor !== 'function') throw new Error('kein ScriptProcessor');
+        var sp = ctx.createScriptProcessor(2048, 2, 2), dsp = MLDspCreate(ctx.sampleRate, mode);
+        sp.onaudioprocess = function (e) {
+          var ib = e.inputBuffer, ob = e.outputBuffer;
+          var ins = [ib.getChannelData(0), ib.getChannelData(ib.numberOfChannels > 1 ? 1 : 0)];
+          var outs = [ob.getChannelData(0), ob.getChannelData(ob.numberOfChannels > 1 ? 1 : 0)];
+          dsp.process(ins, outs, ib.length);
+        };
+        rig.dspKind = 'script';
+        return sp;
+      }
+      var p;
+      if (ctx.audioWorklet && typeof AudioWorkletNode === 'function') {
+        if (!rig.wlp) rig.wlp = ctx.audioWorklet.addModule(workletUrl());
+        p = rig.wlp.then(function () {
+          var n = new AudioWorkletNode(ctx, 'ml-dsp', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit', processorOptions: { mode: mode } });
+          rig.dspKind = 'worklet';
+          return n;
+        }).then(null, function () { return fallback(); });
+      } else {
+        p = new Promise(function (resolve) { resolve(fallback()); });
+      }
+      p.then(function (node) {
+        rig[slot] = node;
+        wire(rig);
+      }, function () {
+        rig[flag] = false;
+        dspFailed = true;
+        rig.dspKind = 'none';
+        listeners.forEach(function (fn) { try { fn('dsp-failed'); } catch (e) { /* ignorieren */ } });
+      });
+    }
+
+    function adopt(mediaEl, ctx, node, own) {
+      var rig = { el: mediaEl, ctx: ctx, src: node, dests: [], own: !!own, in: ctx.createGain(), out: ctx.createGain(), eq: null, trim: null, A: null, B: null, dspKind: '' };
+      var origConnect = node.connect, origDisconnect = node.disconnect;
+      origConnect.call(node, rig.in);
+      node.connect = function (dest) {
+        if (dest && dest.context === ctx && typeof dest.connect === 'function') {
+          if (rig.dests.indexOf(dest) < 0) rig.dests.push(dest);
+          wire(rig);
+          return dest;
+        }
+        return origConnect.apply(node, arguments);
+      };
+      node.disconnect = function (dest) {
+        if (dest === undefined) rig.dests.length = 0;
+        else {
+          var i = rig.dests.indexOf(dest);
+          if (i < 0) return origDisconnect.apply(node, arguments);
+          rig.dests.splice(i, 1);
+        }
+        wire(rig);
+      };
+      byEl.set(mediaEl, rig);
+      rigs.push(rig);
+      wire(rig);
+      configure(rig);
+      return rig;
+    }
+
+    function patch() {
+      if (!AC || !AC.prototype || typeof AC.prototype.createMediaElementSource !== 'function' || !byEl) return;
+      if (AC.prototype.createMediaElementSource.__ml) return;
+      var orig = AC.prototype.createMediaElementSource;
+      var wrapped = function (mediaEl) {
+        var known = mediaEl && byEl.get(mediaEl);
+        if (known) return known.src;   // Element ist schon verbunden: denselben Knoten zurueckgeben statt eines Fehlers
+        var node = orig.apply(this, arguments);
+        try {
+          if (mediaEl && mediaEl.classList && mediaEl.classList.contains('mediaPlayerAudio')) adopt(mediaEl, this, node, false);
+        } catch (e) { if (window.console) console.error('Music Look Equalizer', e); }
+        return node;
+      };
+      wrapped.__ml = true;
+      AC.prototype.createMediaElementSource = wrapped;
+    }
+
+    function findEl() { return document.querySelector('audio.mediaPlayerAudio'); }
+
+    // Verbindet das Audio-Element mit einem eigenen Kontext (falls Jellyfin das nicht schon getan hat).
+    // Nur wenn der Kontext laeuft: ein Element, das einmal in einen stehenden Kontext geleitet wurde, bliebe stumm.
+    function ensureRig() {
+      if (!supported()) return Promise.resolve(null);
+      var el = findEl();
+      if (!el) return Promise.resolve(null);
+      var known = byEl.get(el);
+      if (known) return Promise.resolve(known);
+      if (building) return building;
+      building = new Promise(function (resolve) {
+        var ctx, done = false;
+        try { ctx = new AC({ latencyHint: 'playback' }); } catch (e) { try { ctx = new AC(); } catch (e2) { resolve(null); return; } }
+        function go() {
+          if (done) return;
+          done = true;
+          var have = byEl.get(el);
+          if (have) { try { ctx.close(); } catch (e) { /* ignorieren */ } resolve(have); return; }
+          if (ctx.state !== 'running') { try { ctx.close(); } catch (e) { /* ignorieren */ } armRetry(); resolve(null); return; }
+          try {
+            var node = ctx.createMediaElementSource(el);
+            var rig = byEl.get(el);
+            if (!rig) { rig = adopt(el, ctx, node, true); }
+            rig.own = true;
+            node.connect(ctx.destination);
+            resolve(rig);
+          } catch (e) {
+            try { ctx.close(); } catch (e3) { /* ignorieren */ }
+            resolve(null);
+          }
+        }
+        if (ctx.state === 'running') { go(); return; }
+        var p = ctx.resume && ctx.resume();
+        if (p && p.then) p.then(go, go);
+        setTimeout(go, 450);
+      }).then(function (r) { building = null; return r; });
+      return building;
+    }
+
+    function armRetry() {
+      if (retryArmed) return;
+      retryArmed = true;
+      function again() {
+        document.removeEventListener('pointerdown', again, true);
+        document.removeEventListener('keydown', again, true);
+        retryArmed = false;
+        if (isActive(live)) ensureRig();
+      }
+      document.addEventListener('pointerdown', again, true);
+      document.addEventListener('keydown', again, true);
+    }
+
+    function refresh() {
+      rigs.forEach(function (rig) { configure(rig); });
+      if (isActive(live)) {
+        ensureRig().then(function (r) { if (r) configure(r); });
+      }
+    }
+
+    function notify(what) { listeners.forEach(function (fn) { try { fn(what); } catch (e) { /* ignorieren */ } }); }
+
+    function setLive(s) { live = sane(s); refresh(); }
+    function commit(s) { applied = sane(s); save(applied); live = copy(applied); refresh(); notify('applied'); }
+    function revert() { live = copy(applied); refresh(); }
+
+    // Gespeicherte Einstellung wirkt, sobald das Audio-Element zu spielen beginnt (Jellyfin bekommt kurz Zeit, es selbst zu verbinden)
+    function onPlay(e) {
+      var t0 = e && e.target;
+      if (!t0 || !t0.classList || !t0.classList.contains('mediaPlayerAudio') || !isActive(live)) return;
+      setTimeout(function () { if (isActive(live)) ensureRig().then(function (r) { if (r) configure(r); }); }, 500);
+    }
+
+    if (supported()) {
+      patch();
+      document.addEventListener('play', onPlay, true);
+    }
+
+    return {
+      supported: supported, isIOS: isIOS, PRESETS: PRESETS, BANDS: BANDS, BAND_LABEL: BAND_LABEL, MAXDB: MAXDB,
+      load: function () { return copy(applied); }, live: function () { return copy(live); },
+      setLive: setLive, commit: commit, revert: revert,
+      same: same, isActive: isActive, presetOf: presetOf, flat: flat, copy: copy, clampBand: clampBand,
+      onChange: function (fn) { listeners.push(fn); },
+      status: function () {
+        var kind = '';
+        rigs.forEach(function (r) { if (r.dspKind) kind = r.dspKind; });
+        return { supported: supported(), ios: isIOS(), rigs: rigs.length, dsp: kind, dspFailed: dspFailed, ctx: rigs.length ? rigs[rigs.length - 1].ctx.state : '' };
+      },
+      _rigs: rigs, _ensure: ensureRig
+    };
+  })();
+
+  /* ---------- Equalizer: Bedienung ---------- */
+  function openEqualizer() {
+    var applied = EQ.load(), draft = EQ.load(), committed = false;
+    var ui2 = makeSheet({
+      cls: 'ml-menu ml-eq', title: t('eqTitle'),
+      onClose: function () { if (!committed) EQ.revert(); }
+    });
+    var sheet = ui2.sheet;
+    var head = el('div', 'ml-menu-head');
+    head.appendChild(icon('equalizer'));
+    var txt = el('div', 'ml-menu-text');
+    txt.appendChild(el('div', 'ml-menu-title', t('eqTitle')));
+    head.appendChild(txt);
+    sheet.appendChild(head);
+
+    var okEngine = EQ.supported();
+    var note = el('div', 'ml-sheet-note ml-eq-note');
+    function setNote() {
+      var m = '';
+      if (!okEngine) m = EQ.isIOS() ? t('eqIOS') : t('eqUnsupported');
+      else if (typeof Player !== 'undefined' && Player.targetId && Player.targetId()) m = t('eqRemote');
+      else if (EQ.status().dspFailed) m = t('eqNoDsp');
+      else m = t('eqSub');
+      note.textContent = m;
+    }
+    setNote();
+    sheet.appendChild(note);
+
+    var body = el('div', 'ml-eq-body' + (okEngine ? '' : ' ml-eq-off'));
+    sheet.appendChild(body);
+
+    // Voreinstellungen
+    var chips = el('div', 'ml-eq-chips');
+    chips.setAttribute('role', 'group');
+    chips.setAttribute('aria-label', t('eqPresets'));
+    var chipBtns = {};
+    EQ.PRESETS.forEach(function (p) {
+      var b = btn('ml-eq-chip');
+      b.textContent = t('eq_' + p.id);
+      b.addEventListener('click', function () {
+        draft = EQ.copy(p);
+        syncAll();
+        changed();
+      });
+      chipBtns[p.id] = b;
+      chips.appendChild(b);
+    });
+    var customChip = el('span', 'ml-eq-chip ml-eq-custom', t('eq_custom'));
+    chips.appendChild(customChip);
+    body.appendChild(chips);
+
+    // Baender
+    var bandsBox = el('div', 'ml-eq-bands');
+    bandsBox.setAttribute('role', 'group');
+    var sliders = [];
+    function fmtDb(v) { return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(Math.abs(v % 1) ? 1 : 0).replace('.', LANG === 'de' ? ',' : '.'); }
+    EQ.BANDS.forEach(function (f, i) {
+      var col = el('div', 'ml-eq-band');
+      var val = el('div', 'ml-eq-val', '0');
+      var sl = el('div', 'ml-eq-slider');
+      sl.tabIndex = okEngine ? 0 : -1;
+      sl.setAttribute('role', 'slider');
+      sl.setAttribute('aria-orientation', 'vertical');
+      sl.setAttribute('aria-valuemin', String(-EQ.MAXDB));
+      sl.setAttribute('aria-valuemax', String(EQ.MAXDB));
+      sl.setAttribute('aria-label', EQ.BAND_LABEL[i] + ' Hz');
+      var rail = el('div', 'ml-eq-rail');
+      var fill = el('div', 'ml-eq-fill');
+      var knob = el('div', 'ml-eq-knob');
+      add(rail, fill, knob);
+      sl.appendChild(rail);
+      var lab = el('div', 'ml-eq-freq', EQ.BAND_LABEL[i]);
+      add(col, val, sl, lab);
+      bandsBox.appendChild(col);
+      var o = { sl: sl, val: val, fill: fill, knob: knob, i: i };
+      sliders.push(o);
+
+      function paintBand() {
+        var v = draft.bands[i], pct = (EQ.MAXDB - v) / (2 * EQ.MAXDB) * 100;
+        knob.style.top = pct + '%';
+        if (v >= 0) { fill.style.top = pct + '%'; fill.style.bottom = '50%'; } else { fill.style.top = '50%'; fill.style.bottom = (100 - pct) + '%'; }
+        val.textContent = fmtDb(v);
+        sl.setAttribute('aria-valuenow', String(v));
+        sl.setAttribute('aria-valuetext', fmtDb(v) + ' dB');
+        val.classList.toggle('ml-zero', v === 0);
+      }
+      o.paint = paintBand;
+      function fromPointer(e) {
+        var r = rail.getBoundingClientRect();
+        var y = Math.max(0, Math.min(r.height, e.clientY - r.top));
+        draft.bands[i] = EQ.clampBand(EQ.MAXDB - y / r.height * 2 * EQ.MAXDB);
+        paintBand();
+      }
+      var dragging = false;
+      sl.addEventListener('pointerdown', function (e) {
+        if (!okEngine || (e.button !== undefined && e.button > 0)) return;
+        dragging = true;
+        try { sl.setPointerCapture(e.pointerId); } catch (err) { /* ignorieren */ }
+        sl.classList.add('ml-drag');
+        fromPointer(e);
+        e.preventDefault();
+        sl.focus({ preventScroll: true });
+      });
+      sl.addEventListener('pointermove', function (e) { if (dragging) fromPointer(e); });
+      function release() {
+        if (!dragging) return;
+        dragging = false;
+        sl.classList.remove('ml-drag');
+        syncChips();
+        changed();   // erst nach dem Loslassen wird die Aenderung hoerbar
+      }
+      sl.addEventListener('pointerup', release);
+      sl.addEventListener('pointercancel', release);
+      sl.addEventListener('lostpointercapture', release);
+      sl.addEventListener('dblclick', function () { if (!okEngine) return; draft.bands[i] = 0; paintBand(); syncChips(); changed(); });
+      var keyTimer = null;
+      sl.addEventListener('keydown', function (e) {
+        if (!okEngine) return;
+        var d = 0, step = e.shiftKey ? 3 : 0.5;
+        if (e.key === 'ArrowUp' || e.key === 'ArrowRight') d = step;
+        else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') d = -step;
+        else if (e.key === 'PageUp') d = 3; else if (e.key === 'PageDown') d = -3;
+        else if (e.key === 'Home') { draft.bands[i] = EQ.MAXDB; d = 0; paintBand(); }
+        else if (e.key === 'End') { draft.bands[i] = -EQ.MAXDB; d = 0; paintBand(); }
+        else return;
+        e.preventDefault();
+        if (d) draft.bands[i] = EQ.clampBand(draft.bands[i] + d);
+        paintBand(); syncChips();
+        clearTimeout(keyTimer);
+        keyTimer = setTimeout(changed, 350);
+      });
+    });
+    body.appendChild(bandsBox);
+
+    // Schalter
+    function makeSwitch(key, titleKey, subKey) {
+      var row = btn('ml-eq-switch');
+      row.setAttribute('role', 'switch');
+      var tx = el('div', 'ml-eq-switch-text');
+      tx.appendChild(el('div', 'ml-eq-switch-title', t(titleKey)));
+      tx.appendChild(el('div', 'ml-eq-switch-sub', t(subKey)));
+      var knobWrap = el('span', 'ml-eq-toggle');
+      knobWrap.appendChild(el('span', 'ml-eq-toggle-dot'));
+      add(row, tx, knobWrap);
+      row.addEventListener('click', function () {
+        if (!okEngine) return;
+        draft[key] = !draft[key];
+        paintSwitch();
+        syncChips();
+        changed();
+      });
+      function paintSwitch() {
+        row.setAttribute('aria-checked', draft[key] ? 'true' : 'false');
+        row.classList.toggle('ml-on', !!draft[key]);
+      }
+      row._paint = paintSwitch;
+      body.appendChild(row);
+      return row;
+    }
+    var swDeess = makeSwitch('deess', 'eqDeess', 'eqDeessSub');
+    var swDenoise = makeSwitch('denoise', 'eqDenoise', 'eqDenoiseSub');
+
+    // Aktionen
+    var actions = el('div', 'ml-eq-actions');
+    var bReset = btn('ml-eq-btn ml-eq-reset'); bReset.textContent = t('eqReset');
+    var bCancel = btn('ml-eq-btn ml-eq-cancel'); bCancel.textContent = t('cancel');
+    var bApply = btn('ml-eq-btn ml-eq-apply'); bApply.textContent = t('eqApply');
+    add(actions, bReset, el('span', 'ml-eq-spacer'), bCancel, bApply);
+    sheet.appendChild(actions);
+
+    function syncChips() {
+      var id = EQ.presetOf(draft);
+      Object.keys(chipBtns).forEach(function (k) {
+        chipBtns[k].classList.toggle('ml-on', k === id);
+        chipBtns[k].setAttribute('aria-pressed', k === id ? 'true' : 'false');
+      });
+      customChip.hidden = id !== 'custom';
+    }
+    function syncAll() {
+      sliders.forEach(function (o) { o.paint(); });
+      swDeess._paint(); swDenoise._paint();
+      syncChips();
+    }
+    function changed() {
+      draft = EQ.copy(draft);
+      if (okEngine) EQ.setLive(draft);
+      var dirty = !EQ.same(draft, applied);
+      bApply.disabled = !dirty;
+      bApply.classList.toggle('ml-disabled', !dirty);
+      setNote();
+    }
+    bReset.addEventListener('click', function () {
+      if (!okEngine) return;
+      draft = EQ.flat();
+      syncAll();
+      changed();
+    });
+    bCancel.addEventListener('click', function () { ui2.close(); });
+    bApply.addEventListener('click', function () {
+      if (!okEngine || EQ.same(draft, applied)) { ui2.close(); return; }
+      EQ.commit(draft);
+      committed = true;
+      toast(t('eqApplied'));
+      ui2.close();
+    });
+    if (!okEngine) { bReset.disabled = true; bApply.disabled = true; bApply.classList.add('ml-disabled'); }
+    syncAll();
+    changed();
+    // changed() hat bei unveraenderten Werten nichts zu tun; sicherheitshalber Live-Zustand = gespeicherter Zustand
+    if (okEngine) EQ.setLive(draft);
   }
 
   /* ---------- Daten ---------- */
@@ -1573,7 +2273,7 @@
     var extra = {
       de: {
         forYouToday: 'Für heute empfohlen', forYouSub: 'Passend zu dem, was du zuletzt gehört hast', forUser: 'Für {0}', forUserSub: 'Deine Mixe – passend zu deinem Geschmack', stations: 'Empfohlene Sender', stationsSub: 'Radio zu Künstlern, die du magst',
-        topMixes: 'Deine Top-Mixtapes', topMixesSub: 'Zu deinen meistgehörten Künstlern', likedAlbums: 'Alben mit Songs, die dir gefallen', likedAlbumsSub: 'Mit deinen Lieblingssongs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} Mixtape', mixtapeSub: 'Ausgehend von „{0}“', andMore: ' und mehr', autoplayIsOn: 'Autoplay ist an', autoplayIsOff: 'Autoplay ist aus', autoQueue: 'Empfohlen – Autoplay',
+        topMixes: 'Deine Top-Mixtapes', topMixesSub: 'Zu deinen meistgehörten Künstlern', likedAlbums: 'Alben mit Songs, die dir gefallen', likedAlbumsSub: 'Mit deinen Lieblingssongs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} Mixtape', mixtapeSub: 'Ausgehend von „{0}“', andMore: ' und mehr', autoplayIsOn: 'Autoplay ist an', autoplayIsOff: 'Autoplay ist aus', autoQueue: 'Empfohlen – Autoplay', eqTitle: 'Equalizer', eqSub: 'Wirkt auf Musik, die in diesem Browser abgespielt wird. Die Bearbeitung läuft auf deinem Gerät, nicht auf dem Server. Änderungen sind nach dem Loslassen sofort zu hören.', eqPresets: 'Voreinstellungen', eq_flat: 'Flach', eq_music: 'Musik', eq_sermon: 'Predigt', eq_audiobook: 'Hörbuch', eq_bass: 'Bass', eq_treble: 'Höhen', eq_custom: 'Eigene', eqDeess: 'De-Esser', eqDeessSub: 'Dämpft scharfe S-Laute bei Sprache.', eqDenoise: 'Rauschunterdrückung', eqDenoiseSub: 'Automatisch, für Sprache und alte Aufnahmen. Bei Musik besser aus.', eqReset: 'Zurücksetzen', eqApply: 'Übernehmen', eqApplied: 'Equalizer übernommen', eqIOS: 'Auf iPhone und iPad ist der Equalizer im Browser nicht verfügbar: Jellyfin selbst vermeidet dort Web Audio, weil es Tempo und Tonhöhe der Wiedergabe stört.', eqUnsupported: 'Dieser Browser unterstützt Web Audio nicht.', eqRemote: 'Gerade läuft die Musik auf einem anderen Gerät. Der Equalizer wirkt erst, wenn du hier abspielst.', eqNoDsp: 'Rauschunterdrückung und De-Esser konnten in diesem Browser nicht gestartet werden.',
         jellyfinHome: 'Jellyfin-Startseite', allLibs: 'Alle Bibliotheken', allLibsHint: 'Zurück zu Jellyfin: Filme, Serien und mehr', appMenu: 'Menü', emptyPlaylist: 'Diese Playlist ist leer.', addFirstSongs: 'Titel hinzufügen',
         upNext: 'Als Nächstes', openPlayer: 'Wiedergabe öffnen', collapse: 'Minimieren', seekLabel: 'Position', queueNow: 'Läuft gerade',
         backToSpotify: 'Spotify-Ansicht', likedSub: 'Playlist • {0}', moreTracks: 'Weitere Titel', noPlaylistsShared: 'Noch nichts mit dir geteilt.',
@@ -1598,7 +2298,7 @@
       },
       en: {
         forYouToday: 'Recommended for today', forYouSub: 'Based on what you listened to lately', forUser: 'Made for {0}', forUserSub: 'Your mixes – picked for your taste', stations: 'Recommended stations', stationsSub: 'Radio for artists you like',
-        topMixes: 'Your top mixtapes', topMixesSub: 'For your most played artists', likedAlbums: 'Albums with songs you like', likedAlbumsSub: 'With your liked songs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} mixtape', mixtapeSub: 'Starting from "{0}"', andMore: ' and more', autoplayIsOn: 'Autoplay is on', autoplayIsOff: 'Autoplay is off', autoQueue: 'Recommended – Autoplay',
+        topMixes: 'Your top mixtapes', topMixesSub: 'For your most played artists', likedAlbums: 'Albums with songs you like', likedAlbumsSub: 'With your liked songs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} mixtape', mixtapeSub: 'Starting from "{0}"', andMore: ' and more', autoplayIsOn: 'Autoplay is on', autoplayIsOff: 'Autoplay is off', autoQueue: 'Recommended – Autoplay', eqTitle: 'Equalizer', eqSub: 'Applies to music played in this browser. Processing runs on your device, not on the server. Changes are audible as soon as you let go.', eqPresets: 'Presets', eq_flat: 'Flat', eq_music: 'Music', eq_sermon: 'Sermon', eq_audiobook: 'Audiobook', eq_bass: 'Bass', eq_treble: 'Treble', eq_custom: 'Custom', eqDeess: 'De-esser', eqDeessSub: 'Tames harsh S sounds in speech.', eqDenoise: 'Noise reduction', eqDenoiseSub: 'Automatic, for speech and old recordings. Better off for music.', eqReset: 'Reset', eqApply: 'Apply', eqApplied: 'Equalizer applied', eqIOS: 'The equalizer is not available in the browser on iPhone and iPad: Jellyfin itself avoids Web Audio there because it disturbs playback speed and pitch.', eqUnsupported: 'This browser does not support Web Audio.', eqRemote: 'Music is playing on another device. The equalizer only takes effect when you play here.', eqNoDsp: 'Noise reduction and de-esser could not be started in this browser.',
         jellyfinHome: 'Jellyfin home', allLibs: 'All libraries', allLibsHint: 'Back to Jellyfin: movies, shows and more', appMenu: 'Menu', emptyPlaylist: 'This playlist is empty.', addFirstSongs: 'Add tracks',
         upNext: 'Up next', openPlayer: 'Open player', collapse: 'Collapse', seekLabel: 'Position', queueNow: 'Playing now',
         backToSpotify: 'Spotify view', likedSub: 'Playlist • {0}', moreTracks: 'More tracks', noPlaylistsShared: 'Nothing shared with you yet.',
@@ -1892,6 +2592,7 @@
       openMenu({ title: me.name || t('yourLibraryTitle'), subtitle: '', coverEl: av }, [
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
+        { icon: 'equalizer', label: t('eqTitle'), run: openEqualizer },
         { icon: 'radio', label: t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff'), run: function () { setAutoplay(!autoplayOn()); toast(t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff')); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
         { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
@@ -3098,9 +3799,15 @@
     function deviceLabel(s) { return (s && (s.DeviceName || s.Client)) || '?'; }
     function deviceIcon(s) {
       var n = ((s.DeviceName || '') + ' ' + (s.Client || '')).toLowerCase();
-      if (/\b(tv|roku|fire|chromecast|webos|tizen|kodi|apple tv|shield)\b/.test(n)) return 'tv';
+      if (/\b(tv|tvos|roku|fire|chromecast|webos|tizen|kodi|apple tv|shield)\b/.test(n)) return 'tv';
       if (/(phone|pixel|iphone|android|galaxy|ios|ipad|tablet|mobile|\bsm-)/.test(n)) return 'phone';
       return 'computer';
+    }
+    // Geraete, die Musik gar nicht abspielen koennen (z. B. Swiftfin: reiner Videoplayer), werden nicht als Ziel angeboten.
+    // PlayableMediaTypes ist beim Server nie leer-nullable, aber leer, wenn der Client nichts meldet: dann wird es nicht ausgeschlossen.
+    function canPlayAudio(s) {
+      var m = s && s.PlayableMediaTypes;
+      return !(m && m.length && m.indexOf('Audio') < 0);
     }
     function thisDeviceId() { var c = ML.client(); return c && c.deviceId ? c.deviceId() : ''; }
 
@@ -3154,7 +3861,7 @@
         }
         if (!autoOff && !transferBusy) {
           var other = list.filter(function (x) {
-            return x.DeviceId !== here && x.SupportsRemoteControl !== false && x.NowPlayingItem && x.NowPlayingItem.MediaType === 'Audio';
+            return x.DeviceId !== here && x.SupportsRemoteControl !== false && canPlayAudio(x) && x.NowPlayingItem && x.NowPlayingItem.MediaType === 'Audio';
           }).sort(function (a, b) { return String(b.LastActivityDate || '') < String(a.LastActivityDate || '') ? -1 : 1; })[0];
           if (other) { setTarget(other.Id, deviceLabel(other), true); return other; }
         }
@@ -3165,7 +3872,7 @@
     function listDevices() {
       return call('GET', 'Sessions', { ControllableByUserId: uid(), activeWithinSeconds: 960 }).then(function (r) {
         var me = nid(uid()), here = thisDeviceId();
-        var list = (r || []).filter(function (s) { return nid(s.UserId) === me && s.SupportsRemoteControl !== false && (s.DeviceName || s.Client); });
+        var list = (r || []).filter(function (s) { return nid(s.UserId) === me && s.SupportsRemoteControl !== false && canPlayAudio(s) && (s.DeviceName || s.Client); });
         // je Geraet nur eine Sitzung (die zuletzt aktive)
         var byDev = {};
         list.forEach(function (s) {
@@ -3606,7 +4313,10 @@
       ui.speedBtn.addEventListener('click', openSpeed);
       ui.shareBtn = iconBtn('share', t('shareTrack'), 'ml-foot-icon', shareTrack);
       ui.queueBtn = iconBtn('queue', t('queueTitle'), 'ml-foot-icon', openQueuePanel);
-      add(footRight, ui.speedBtn, ui.shareBtn, ui.queueBtn);
+      ui.eqBtn = iconBtn('equalizer', t('eqTitle'), 'ml-foot-icon ml-eq-btn-foot', openEqualizer);
+      ui.eqBtn.classList.toggle('ml-on', EQ.isActive(EQ.load()));
+      EQ.onChange(function () { if (ui.eqBtn) ui.eqBtn.classList.toggle('ml-on', EQ.isActive(EQ.load())); });
+      add(footRight, ui.eqBtn, ui.speedBtn, ui.shareBtn, ui.queueBtn);
       add(foot, ui.devBtn, footRight);
       block.appendChild(foot);
       scroll.appendChild(block);
@@ -4977,6 +5687,7 @@
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
+    eq: EQ,
     addToPlaylist: function (ids) { addToPlaylist(ids); }
   };
 

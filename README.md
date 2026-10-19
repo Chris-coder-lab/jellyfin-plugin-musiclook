@@ -5,11 +5,11 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 ## Voraussetzungen
 - Jellyfin 12.0 oder neuer (getestet gegen den Quellcode von 12.0 und 12.2)
 - Kein weiteres Plugin nötig: Das Plugin fügt sein Script selbst in die Startseite der Web-Oberfläche ein.
-- Funktioniert in der Web-Oberfläche und in der offiziellen Android-App (Web-Wrapper). Nicht in Swiftfin, Findroid oder nativen TV-Apps.
+- Funktioniert in der Web-Oberfläche und in der offiziellen Android-App (Web-Wrapper). Nicht in Swiftfin, Findroid oder nativen TV-Apps: Die Oberfläche ist eine Erweiterung der Web-Oberfläche, native Apps laden sie nicht. Swiftfin selbst ist laut seiner Dokumentation ein Videoclient ohne Unterstützung für Musik und Playlists. Das Plugin verändert nichts an den API-Antworten, die Swiftfin nutzt (Filme, Serien usw.); Geräte, die laut Server keine Musik abspielen können, werden in der Geräteauswahl nicht angeboten.
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.0.10.0 && git push origin v1.0.10.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.1.1.0 && git push origin v1.1.1.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -36,6 +36,8 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 - Jeder Titel (auch in Alben): kleines Cover links statt Nummer, Titel groß, Künstler darunter, rechts Menü: Teilen, Zu Playlist hinzufügen, Aus Lieblingssongs, Aus dieser Playlist entfernen, Zur Warteschlange, Album anzeigen, Künstler*in aufrufen, Geschwindigkeit ändern, Jam starten, Zum Song-Radio, Songinfos.
 
 **Player (wie Spotify):** Mini-Player (Farbe passt sich dem Cover an, zeigt bei Fremdgeräten „Auf <Gerät>“) und Titelseite mit großem Cover, Titel, Künstler, Herz, **„+“ (zu Playlist hinzufügen)**, Fortschrittsleiste, Zufall, Zurück/Pause/Weiter, Wiederholen, Geräte, Geschwindigkeit, Teilen, Warteschlange. Alle Farben der Seite folgen dynamisch dem Cover. Scrollst du nach unten, siehst du Karten für **Songtext**, **Als Nächstes aus der Warteschlange**, **Über den Künstler** (Beschreibung aus Jellyfin) und **Credits** (Interpret, Komponist, Texter, Album, Jahr, Genre, Songinfos); oben bleibt dann eine **kompakte Leiste mit Titel, Künstler und Pause/Weiter**.
+
+**Equalizer (Menü und Knopf in der Titelseite):** 10 Bänder (31 Hz bis 16 kHz, ±12 dB), Voreinstellungen **Flach, Musik, Predigt, Hörbuch, Bass, Höhen**, dazu **De-Esser** und **automatische Rauschunterdrückung** als Schalter. Alles wird im Browser per Web Audio berechnet, nicht auf dem Server. Änderungen sind nach dem Loslassen sofort hörbar; mit **Übernehmen** werden sie gespeichert, mit **Abbrechen** (oder Esc) verworfen, **Zurücksetzen** stellt Flach und alles aus ein. Er wirkt nur auf Musik, die in diesem Browser abgespielt wird. Auf iPhone und iPad ist er im Browser abgeschaltet, weil Jellyfin dort Web Audio selbst meidet (es stört Tempo und Tonhöhe). Ohne Equalizer-Einstellung wird das Audio-Element nicht angefasst.
 
 **Songtext ohne Whisper:** Der Songtext kommt aus Jellyfins eigener Songtext-Funktion. Jellyfin liest Dateien mit **exakt demselben Namen wie die Musikdatei** und der Endung `.lrc` (synchron, Zeile wird mitgeführt) oder `.txt` (unsynchron), die im selben Ordner liegen, zum Beispiel `Luna Vale - Neonlicht.mp3` und `Luna Vale - Neonlicht.lrc`. Der Eingangsordner-Sortierer verschiebt diese Dateien jetzt mit der MP3 und benennt sie passend um. Ohne passende Datei zeigt die Karte einen Hinweis; es wird nie geraten oder automatisch aus dem Internet geladen.
 

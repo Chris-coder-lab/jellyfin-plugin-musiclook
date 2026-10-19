@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.MusicLook</RootNamespace>
-    <AssemblyVersion>1.0.10.0</AssemblyVersion>
-    <FileVersion>1.0.10.0</FileVersion>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -20,6 +20,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Web\musiclook.js" />
     <EmbeddedResource Include="Web\musiclookapp.js" />
+    <EmbeddedResource Include="Web\eqdsp.js" />
     <EmbeddedResource Include="Web\musiclook.css" />
     <EmbeddedResource Include="Web\figtree.woff2" />
     <EmbeddedResource Include="Configuration\configPage.html" />

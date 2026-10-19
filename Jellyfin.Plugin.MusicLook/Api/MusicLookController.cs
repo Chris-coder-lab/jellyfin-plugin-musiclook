@@ -58,6 +58,12 @@ public class MusicLookController : ControllerBase
     [ResponseCache(Duration = 300)]
     public IActionResult AppJs() => Embedded("Web.musiclookapp.js", "application/javascript");
 
+    /// <summary>Gets the audio worklet of the equalizer (noise reduction and de-esser run in the listener's browser).</summary>
+    [HttpGet("eqdsp.js")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 300)]
+    public IActionResult EqDspJs() => Embedded("Web.eqdsp.js", "application/javascript");
+
     /// <summary>Gets the client stylesheet.</summary>
     [HttpGet("client.css")]
     [AllowAnonymous]
