@@ -5354,7 +5354,7 @@
       ui.devBtn = btn('ml-dev-btn');
       ui.devBtn.setAttribute('aria-label', t('devices'));
       ui.devBtn.addEventListener('click', openDevices);
-      var footRight = el('div', 'ml-foot-right');
+      var footMid = el('div', 'ml-foot-mid');
       ui.speedBtn = btn('ml-foot-btn');
       ui.speedBtn.addEventListener('click', openSpeed);
       ui.shareBtn = iconBtn('share', t('shareTrack'), 'ml-foot-icon', shareTrack);
@@ -5362,9 +5362,11 @@
       ui.eqBtn = iconBtn('equalizer', t('eqTitle'), 'ml-foot-icon ml-eq-btn-foot', openEqualizer);
       ui.eqBtn.classList.toggle('ml-on', EQ.isActive(EQ.load()));
       EQ.onChange(function () { if (ui.eqBtn) ui.eqBtn.classList.toggle('ml-on', EQ.isActive(EQ.load())); });
-      add(footRight, ui.eqBtn, ui.speedBtn, ui.shareBtn, ui.queueBtn);
-      add(foot, ui.devBtn, footRight);
+      add(footMid, ui.eqBtn, ui.speedBtn, ui.shareBtn);
+      add(foot, ui.devBtn, footMid, ui.queueBtn);   // Geräte links, Equalizer / Geschwindigkeit / Teilen genau in der Mitte, Warteschlange rechts
       block.appendChild(foot);
+      ui.devLine = el('div', 'ml-dev-line'); ui.devLine.hidden = true;
+      block.appendChild(ui.devLine);
       scroll.appendChild(block);
 
       // Karten unter dem Player
@@ -6152,7 +6154,9 @@
         ui.speedBtn.classList.toggle('ml-on', speed !== 1);
         ui.devBtn.textContent = '';
         ui.devBtn.appendChild(icon('devices'));
-        if (remote) ui.devBtn.appendChild(el('span', 'ml-dev-btn-text', t('connectedTo', P.targetName || '…')));
+        var devText = remote ? t('connectedTo', P.targetName || '…') : '';
+        ui.devLine.textContent = devText; ui.devLine.hidden = !remote;
+        ui.devBtn.setAttribute('aria-label', remote ? t('devices') + ': ' + devText : t('devices'));
         ui.devBtn.classList.toggle('ml-on', remote);
         updateExtras();
       }

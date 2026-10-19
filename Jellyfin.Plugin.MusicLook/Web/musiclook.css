@@ -786,18 +786,20 @@ body.ml-full-on { overflow: hidden; }
 .ml-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); }
 .ml-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; }
 .ml-range:focus-visible { outline: 2px solid var(--ml-accent, #1ed760); outline-offset: 4px; }
-.ml-controls { display: flex; align-items: center; justify-content: space-between; padding: 6px 20px 0; }
+.ml-controls { display: flex; align-items: center; justify-content: space-between; padding: 6px 24px 0; }
 .ml-ctl .ml-ic { width: 28px; height: 28px; }
 .ml-ctl-skip .ml-ic { width: 36px; height: 36px; }
 .ml-ctl-play { width: 68px; height: 68px; background: #fff; color: #000; }
 @media (hover: hover) { .ml-ctl-play:hover{ background: #fff; transform: scale(1.04); } }
 .ml-ctl-play:active{ background: #fff; transform: scale(1.04); }
 .ml-ctl-play .ml-ic { width: 38px; height: 38px; }
-.ml-full-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 12px 20px; }
-.ml-foot-right { display: flex; align-items: center; gap: 4px; }
+.ml-full-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; padding: 10px 24px 12px; }
+.ml-foot-mid { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.ml-full-foot > .ml-dev-btn { justify-self: start; }
+.ml-full-foot > .ml-foot-icon { justify-self: end; }
+.ml-dev-line { padding: 0 24px 8px; text-align: center; font: 700 0.8rem var(--ml-font, system-ui); color: var(--ml-accent, #1ed760); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ml-dev-btn { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px 8px 4px; border: 0; border-radius: 999px; background: transparent; color: #fff; font: 700 0.85rem var(--ml-font, system-ui); cursor: pointer; }
 .ml-dev-btn.ml-on { color: var(--ml-accent, #1ed760); }
-.ml-dev-btn-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
 .ml-foot-btn { padding: 8px 14px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.14); color: #fff; font: 700 0.85rem var(--ml-font, system-ui); cursor: pointer; }
 .ml-foot-btn.ml-on { background: var(--ml-accent, #1ed760); color: #000; }
 
@@ -1406,3 +1408,9 @@ body.ml-local-on .ml-mini, body.ml-local-on .ml-bar { display: none !important; 
   .ml-wide > .mlo-bar .mlo-seek-bar { display: block; flex: 1 1 auto; width: auto; margin: 0 12px; }
   .ml-wide > .mlo-bar .mlo-prog { display: none; }
 }
+
+/* Version 1.2.1: Zufall und Wiederholen sitzen mit dem sichtbaren Symbol bündig am Anfang und Ende der Fortschrittsleiste */
+.ml-controls > .ml-ctl-toggle:first-child { margin-left: -9.5px; }
+.ml-controls > .ml-ctl-toggle:last-child { margin-right: -10.1px; }
+.ml-full-foot > .ml-dev-btn { margin-left: -4px; }
+.ml-full-foot > .ml-foot-icon { margin-right: -10px; }
