@@ -6,7 +6,77 @@
   var ML = window.MusicLook;
   if (!ML || ML.app || (ML.version || 0) < 2) return;
 
-  var call = ML.call, el = ML.el, btn = ML.button, toast = ML.toast, uid = ML.uid, nid = ML.nid, ID_RE = ML.ID_RE;
+  var rawCall = ML.call, el = ML.el, btn = ML.button, toast = ML.toast, uid = ML.uid, nid = ML.nid, ID_RE = ML.ID_RE;
+
+  /* ---------- Verbindung zum Server ----------
+     navigator.onLine reicht nicht: Ist ein VPN aktiv, aber ohne Internet, meldet der Browser "online", und Anfragen haengen.
+     Darum wird der Server selbst geprueft (kleine Anfrage, kurz zwischengespeichert). Ausserdem gibt es einen Schalter "Offline-Modus". */
+  var Net = (function () {
+    var forced = false, down = false, fails = 0, probing = false, timer = 0, started = false, listeners = [];
+    try { forced = window.localStorage.getItem('ml.offmode') === '1'; } catch (e) { forced = false; }
+    function offline() { return forced || down || navigator.onLine === false; }
+    function emit() {
+      try { document.body.classList.toggle('ml-offline', offline()); } catch (e) { /* Seite noch nicht bereit */ }
+      listeners.slice().forEach(function (f) { try { f(offline()); } catch (e) { /* Zuhoerer darf nichts blockieren */ } });
+    }
+    function probeUrl() {
+      var c = ML.client();
+      return c ? c.getUrl('System/Info/Public') : '';
+    }
+    function schedule(ms) { clearTimeout(timer); timer = setTimeout(probe, ms); }
+    function result(ok) {
+      probing = false;
+      var was = offline();
+      if (ok) { fails = 0; down = false; } else { fails++; if (fails >= 2) down = true; }
+      if (was !== offline()) emit();
+      schedule(ok ? 20000 : (down ? 6000 : 2500));
+    }
+    function probe() {
+      if (probing) return;
+      if (document.hidden) { schedule(8000); return; }
+      var url = probeUrl();
+      if (!url || typeof fetch !== 'function') { schedule(url ? 20000 : 3000); return; }
+      probing = true;
+      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      var to = setTimeout(function () { if (ctrl) ctrl.abort(); result(false); }, 4500);
+      var done = false;
+      function fin(ok) { if (done) return; done = true; clearTimeout(to); result(ok); }
+      fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) { fin(!!r); }, function () { fin(false); });
+    }
+    function start() {
+      if (started) return;
+      started = true;
+      window.addEventListener('online', function () { fails = 0; probe(); emit(); });
+      window.addEventListener('offline', function () { emit(); probe(); });
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) probe(); });
+      emit();
+      probe();
+    }
+    return {
+      start: start, offline: offline, probeNow: function () { fails = Math.max(fails, 1); probe(); },
+      // Eine fehlgeschlagene Anfrage ohne HTTP-Antwort: Server vermutlich nicht erreichbar -> bald pruefen.
+      suspect: function () { if (!down && !probing) schedule(300); },
+      forced: function () { return forced; },
+      setForced: function (on) {
+        forced = !!on;
+        try { window.localStorage.setItem('ml.offmode', forced ? '1' : '0'); } catch (e) { /* nur fuer diese Sitzung */ }
+        emit();
+        if (!forced) { fails = 0; probe(); }
+      },
+      onChange: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (f) { return f !== fn; }); }; }
+    };
+  })();
+  function offlineError() { var e = new Error('offline'); e.offline = true; return e; }
+  function mySession() { return Net.offline() ? Promise.reject(offlineError()) : ML.mySession(); }
+  // Anfragen an den Server: ohne Verbindung sofort abgelehnt (statt minutenlang zu haengen); ein Netzfehler loest eine Pruefung aus.
+  function call() {
+    if (Net.offline()) return Promise.reject(offlineError());
+    return rawCall.apply(null, arguments).then(null, function (err) {
+      if (err && typeof err.status !== 'number' && !(err.response && err.response.status)) Net.suspect();
+      throw err;
+    });
+  }
   var LANG = String(navigator.language || 'en').toLowerCase().indexOf('de') === 0 ? 'de' : 'en';
 
   /* ---------- Texte ---------- */
@@ -125,6 +195,8 @@
     add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
     back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
     down: 'M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z',
+    open_in_full: 'M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z',
+    close_fullscreen: 'M22 3.41 16.71 8.7 20 12h-8V4l3.29 3.29L20.59 2 22 3.41zM3.41 22l5.29-5.29L12 20v-8H4l3.29 3.29L2 20.59 3.41 22z',
     search: 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
     home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
     library: 'M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 5h-3v5.5c0 1.38-1.12 2.5-2.5 2.5S10 13.88 10 12.5s1.12-2.5 2.5-2.5c.57 0 1.08.19 1.5.51V5h4v2zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z',
@@ -270,6 +342,7 @@
   // Cover eines Eintrags: eigenes Bild, bei Titeln das Album-Cover.
   function itemImg(item, w) {
     if (!item) return null;
+    if (item.__cover) return item.__cover;   // Titel vom Geraet: Cover liegt als lokale Datei vor
     var tags = item.ImageTags || {};
     if (tags.Primary) return imgUrl(item.Id, tags.Primary, w);
     if (item.AlbumId && item.AlbumPrimaryImageTag) return imgUrl(item.AlbumId, item.AlbumPrimaryImageTag, w);
@@ -635,6 +708,19 @@
         });
       });
     }
+    // Ergaenzt Felder eines vorhandenen Titels (z. B. Songtext), ohne die Audiodatei anzufassen.
+    function updateTrack(id, patch) {
+      return run(['tracks'], 'readwrite', function (t) {
+        var ts = t.objectStore('tracks');
+        var g = ts.get(nk(id));
+        g.onsuccess = function () {
+          var rec = g.result;
+          if (!rec) return;
+          Object.keys(patch).forEach(function (k) { rec[k] = patch[k]; });
+          ts.put(rec);
+        };
+      });
+    }
     function saveColl(c) { return run(['colls'], 'readwrite', function (t) { t.objectStore('colls').put(c); }); }
 
     // Löst einen Titel aus einer Sammlung (collKey) bzw. aus "einzeln geladen" (collKey = null) und löscht ihn, wenn er nirgends mehr gebraucht wird.
@@ -719,7 +805,7 @@
 
     return {
       open: open, nk: nk, allTracks: allTracks, allColls: allColls, getTrack: getTrack, getBlob: getBlob, getCover: getCover,
-      saveTrack: saveTrack, linkTracks: linkTracks, saveColl: saveColl, removeColl: removeColl, removeTrack: removeTrack,
+      saveTrack: saveTrack, updateTrack: updateTrack, linkTracks: linkTracks, saveColl: saveColl, removeColl: removeColl, removeTrack: removeTrack,
       dropFromColl: dropFromColl, clearAll: clearAll, usage: usage, estimate: estimate, persisted: persisted, persist: persist
     };
   })();
@@ -1437,6 +1523,15 @@
   }
   function itemsOf(params) { return getItems(params).then(function (r) { return r.items; }); }
 
+  // Ladeanzeige wie bei Spotify: duenner gruener Ring statt Jellyfins Kreisel (small: kleiner Ring ohne Abstand, z. B. in Menues)
+  function loaderEl(small) {
+    var box = el('div', 'ml-loader' + (small ? ' ml-loader-s' : ''));
+    box.setAttribute('role', 'status');
+    box.setAttribute('aria-label', t('loading'));
+    box.appendChild(el('div', 'ml-spin'));
+    return box;
+  }
+
   function categoryOf(lib) {
     var cfg = ML.config();
     // Umlaute werden aufgeloest, damit "Hörbücher" und "Hoerbuecher" gleich behandelt werden.
@@ -1554,7 +1649,7 @@
     var remote = typeof Player !== 'undefined' && Player && Player.targetId ? Player.targetId() : null;
     if (remote) return Promise.resolve({ Id: remote, remote: true });
     if (!force && sessCache.s && Date.now() - sessCache.at < 20000) return Promise.resolve(sessCache.s);
-    return ML.mySession().then(function (s) { sessCache = { at: Date.now(), s: s }; return s; });
+    return mySession().then(function (s) { sessCache = { at: Date.now(), s: s }; return s; });
   }
   // Fuehrt fn mit der eigenen Sitzung aus; bei Fehlern einmal mit frisch ermittelter Sitzung.
   function withSession(fn) {
@@ -1575,7 +1670,7 @@
 
   // Wartet, bis der erste Titel laeuft, damit nachfolgende "PlayLast"-Befehle die Warteschlange erweitern statt neu zu starten.
   function waitForPlaying(id, tries) {
-    var look = typeof Player !== 'undefined' && Player && Player.sessionNow ? Player.sessionNow : ML.mySession;
+    var look = typeof Player !== 'undefined' && Player && Player.sessionNow ? Player.sessionNow : mySession;
     return look().then(function (s) {
       var np = s && s.NowPlayingItem;
       if (np && nid(np.Id) === nid(id)) return true;
@@ -1593,10 +1688,10 @@
     start = clamp(start || 0, 0, ids.length - 1);
     // Ohne Verbindung spielen die geladenen Titel vom Gerät; mit Verbindung ersetzt die Serverwiedergabe die lokale.
     if (typeof OFFPLAY !== 'undefined') {
-      if (navigator.onLine === false) {
+      if (Net.offline()) {
         var loc = OFFPLAY.offlineIds(ids, start);
         if (!loc.ids.length) { toast(t('offNotAvail')); return Promise.resolve(false); }
-        return OFFPLAY.startIds(loc.ids, loc.start, { name: opts.name || '' }).then(function (ok) { clearPending(); return ok; });
+        return OFFPLAY.startIds(loc.ids, loc.start, { name: opts.name || '', ctx: opts.ctx || '' }).then(function (ok) { clearPending(); return ok; });
       }
       OFFPLAY.stop();
     }
@@ -1654,10 +1749,20 @@
     return ML.jamAddIds(ids).then(function () { toast(t('jamAdded')); }, function () { toast(t('jamFailed')); });
   }
 
-  // Empfehlungen: Jellyfins Sofortmix (aehnliche Titel) zu einem Titel.
-  function loadSongMix(id, limit) {
+  // Empfehlungen: aehnliche Titel zu einem oder mehreren Ausgangstiteln. Zuerst die eigene Stilbewertung (Taste), nur wenn sie nichts
+  // Brauchbares liefert (zu kleine Bibliothek, Fehler, Zeitueberschreitung) Jellyfins Sofortmix.
+  function instantMix(id, limit) {
     return call('GET', 'Songs/' + id + '/InstantMix', { UserId: uid(), Limit: limit || 30 }).then(function (r) {
       return ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')) && (i.Type === 'Audio' || i.MediaType === 'Audio' || !i.Type); });
+    });
+  }
+  function loadSongMix(ids, limit, opts) {
+    var seeds = Array.isArray(ids) ? ids : [ids];
+    var o = { n: limit || 30 };
+    Object.keys(opts || {}).forEach(function (k) { o[k] = opts[k]; });
+    return Taste.similar(seeds, o).then(function (list) {
+      if (list && list.length >= 8) return list;
+      return instantMix(seeds[0], limit);
     });
   }
   // Autoplay: nach dem letzten Titel geht es mit passenden Titeln weiter (Standard: an).
@@ -1665,8 +1770,8 @@
   function setAutoplay(on) { try { window.localStorage.setItem('ml.autoplay', on ? '1' : '0'); } catch (e) { /* nur fuer diese Sitzung */ } }
 
   function songRadio(track) {
-    return call('GET', 'Songs/' + track.Id + '/InstantMix', { UserId: uid(), Limit: 100 }).then(function (r) {
-      var ids = ((r && r.Items) || []).map(function (i) { return i.Id; }).filter(function (id) { return nid(id) !== nid(track.Id); });
+    return loadSongMix(track.Id, 100, { own: 6 }).then(function (items) {
+      var ids = items.map(function (i) { return i.Id; }).filter(function (id) { return nid(id) !== nid(track.Id); });
       if (!ids.length) { toast(t('radioFailed')); return; }
       return playIds([track.Id].concat(ids), 0);
     }, function () { toast(t('radioFailed')); });
@@ -1900,7 +2005,7 @@
 
     var list = el('div', 'ml-sheet-list');
     ui.sheet.appendChild(list);
-    list.appendChild(el('div', 'ml-sheet-note', t('loading')));
+    list.appendChild(loaderEl(true));
     loadPlaylists(true).then(function (all) {
       list.textContent = '';
       all.filter(function (p) { return p.info.canEdit && (!opts.excludeId || nid(p.id) !== nid(opts.excludeId)); }).forEach(function (p) {
@@ -2014,9 +2119,11 @@
   try { speed = parseFloat(window.localStorage.getItem('ml.speed')) || 1; } catch (e) { speed = 1; }
   if (SPEEDS.indexOf(speed) < 0) speed = 1;
   function applySpeed() {
-    var a = document.querySelector('audio.mediaPlayerAudio');
-    if (!a) return;
-    try { a.defaultPlaybackRate = speed; a.playbackRate = speed; a.preservesPitch = true; if ('mozPreservesPitch' in a) a.mozPreservesPitch = true; } catch (e) { /* ignorieren */ }
+    var list = [document.querySelector('audio.mediaPlayerAudio'), typeof OFFPLAY !== 'undefined' ? OFFPLAY.audio() : null];
+    list.forEach(function (a) {
+      if (!a) return;
+      try { a.defaultPlaybackRate = speed; a.playbackRate = speed; a.preservesPitch = true; if ('mozPreservesPitch' in a) a.mozPreservesPitch = true; } catch (e) { /* ignorieren */ }
+    });
   }
   function openSpeed() {
     var ui = makeSheet({ title: t('speedTitle') });
@@ -2031,6 +2138,237 @@
       ui.sheet.appendChild(b);
     });
   }
+
+  /* ---------- Geschmack: Mixe, Sender und Mixtapes, die bei einer Stilrichtung bleiben ----------
+     Jellyfins "Sofortmix" nimmt zufaellige Titel mit IRGENDEINEM der Genres des Ausgangstitels. Ist ein Genre grob (z. B. "Christlich"),
+     steht im Mix alles durcheinander. Hier wird stattdessen die Aehnlichkeit pro Titel bewertet: seltene Genres zaehlen mehr als haeufige,
+     dazu kommen gleiche Kuenstler/Alben, Kuenstler, die in deinen Playlists zusammen vorkommen, die Playlists selbst und das Erscheinungsjahr.
+     Titel unter einer Mindestaehnlichkeit kommen gar nicht erst in den Mix. */
+  var TasteCore = (function () {
+    var STOP = { musik: 1, music: 1, unknown: 1, other: 1, sonstige: 1, sonstiges: 1, '': 1 };
+    function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9äöüß]+/g, ' ').trim(); }
+    function uniq(a) { var seen = {}, out = []; a.forEach(function (x) { if (x && !seen[x]) { seen[x] = 1; out.push(x); } }); return out; }
+
+    // songs: Titel im Format der Server-Antwort; lists: [{ key, ids }] (Playlists, Lieblingssongs)
+    function build(songs, lists) {
+      var recs = [], byId = {}, df = {};
+      songs.forEach(function (it) {
+        var id = nid(it.Id);
+        if (!id || byId[id]) return;
+        var g = uniq((it.Genres || []).map(norm).filter(function (x) { return !STOP[x]; }));
+        var arts = uniq(((it.Artists && it.Artists.length) ? it.Artists : (it.AlbumArtist ? [it.AlbumArtist] : [])).map(norm));
+        var r = { it: it, id: id, g: g, a: arts, alb: it.AlbumId ? nid(it.AlbumId) : (it.Album ? 'n:' + norm(it.Album) + '|' + (arts[0] || '') : ''), y: +it.ProductionYear || 0, pls: [] };
+        byId[id] = r; recs.push(r);
+        g.forEach(function (x) { df[x] = (df[x] || 0) + 1; });
+      });
+      // Gemeinsam gehoerte Titel: aufeinanderfolgend gespielt (Pause < 45 min) zaehlt wie eine Playlist
+      var played = recs.filter(function (r) { return r.it.UserData && r.it.UserData.LastPlayedDate; }).sort(function (a, b) {
+        return a.it.UserData.LastPlayedDate < b.it.UserData.LastPlayedDate ? -1 : 1;
+      });
+      var sessions = [], curS = [], lastT = 0;
+      played.forEach(function (r) {
+        var tm = Date.parse(r.it.UserData.LastPlayedDate) || 0;
+        if (curS.length && tm - lastT > 45 * 60000) { sessions.push(curS); curS = []; }
+        curS.push(r.id); lastT = tm;
+      });
+      if (curS.length) sessions.push(curS);
+      lists = (lists || []).concat(sessions.filter(function (x) { return x.length >= 3 && x.length <= 120; }).map(function (x, i) { return { key: 's' + i, ids: x }; }));
+      var N = recs.length, idf = {};
+      Object.keys(df).forEach(function (g) { idf[g] = Math.max(0.02, Math.log((N + 1) / (df[g] + 0.5))); });
+      var plSize = [], plArt = [];
+      (lists || []).forEach(function (l) {
+        var members = [], seen = {};
+        (l.ids || []).forEach(function (id) { var r = byId[nid(id)]; if (r && !seen[r.id]) { seen[r.id] = 1; members.push(r); } });
+        if (members.length < 3 || members.length > Math.max(60, N * 0.5)) return;   // zu klein oder "alles"-Liste: kein Signal
+        var j = plSize.length, arts = {};
+        plSize.push(members.length);
+        members.forEach(function (r) { r.pls.push(j); r.a.forEach(function (a) { arts[a] = (arts[a] || 0) + 1; }); });
+        plArt.push(arts);
+      });
+      return { recs: recs, byId: byId, idf: idf, N: N, plSize: plSize, plArt: plArt, at: Date.now() };
+    }
+    // Wie "spezifisch" ein Genre ist: sehr haeufige Tags (z. B. "Pop" bei jedem sechsten Titel) sagen wenig, seltene viel.
+    function spec(ix, g) { var v = (ix.idf[g] - 1.0) / 1.5; return v < 0 ? 0 : v > 1 ? 1 : v; }
+    function plW(ix, j) { return 1 / Math.log(2.5 + ix.plSize[j]); }
+
+    // Profil der Ausgangstitel (ein Titel oder mehrere, z. B. alle eines Kuenstlers)
+    function profile(ix, seeds) {
+      var k = seeds.length, gw = {}, aw = {}, albs = {}, pw = {}, ys = [], nb = {};
+      seeds.forEach(function (s) {
+        s.g.forEach(function (g) { gw[g] = (gw[g] || 0) + 1 / k; });
+        s.a.forEach(function (a) { aw[a] = (aw[a] || 0) + 1 / k; });
+        if (s.alb) albs[s.alb] = (albs[s.alb] || 0) + 1 / k;
+        s.pls.forEach(function (j) { pw[j] = (pw[j] || 0) + 1 / k; });
+        if (s.y) ys.push(s.y);
+      });
+      var pnorm = 0, maxNb = 0;
+      Object.keys(pw).forEach(function (j) {
+        var w = pw[j] * plW(ix, +j);
+        pnorm += w;
+        var arts = ix.plArt[+j], tot = ix.plSize[+j];
+        Object.keys(arts).forEach(function (a) { var v = w * arts[a] / tot; nb[a] = (nb[a] || 0) + v; if (nb[a] > maxNb) maxNb = nb[a]; });
+      });
+      if (maxNb > 0) Object.keys(nb).forEach(function (a) { nb[a] = nb[a] / maxNb; });
+      var gn = 0, topSpec = 0;
+      Object.keys(gw).forEach(function (g) { var sp = spec(ix, g); gn += sp * gw[g]; if (sp > topSpec) topSpec = sp; });
+      ys.sort(function (a, b) { return a - b; });
+      return { gw: gw, aw: aw, albs: albs, pw: pw, nb: nb, pnorm: pnorm, gmass: gn, topSpec: topSpec, y: ys.length ? ys[Math.floor(ys.length / 2)] : 0, seedIds: seeds.map(function (s) { return s.id; }) };
+    }
+    function score(ix, pr, c) {
+      var g = 0;
+      if (pr.gmass > 0 && c.g.length) {
+        var shared = 0;
+        c.g.forEach(function (x) { if (pr.gw[x]) shared += spec(ix, x) * pr.gw[x]; });
+        g = shared / (pr.gmass + 0.5);
+      }
+      var a = 0;
+      if (c.alb && pr.albs[c.alb]) a = 1;
+      c.a.forEach(function (x) {
+        if (pr.aw[x]) a = Math.max(a, 0.85 * Math.min(1, pr.aw[x] * 2));
+        else if (pr.nb[x]) a = Math.max(a, 0.6 * pr.nb[x]);
+      });
+      var p = 0;
+      if (pr.pnorm > 0 && c.pls.length) {
+        c.pls.forEach(function (j) { if (pr.pw[j]) p += pr.pw[j] * plW(ix, j); });
+        p = Math.min(1, p / pr.pnorm);
+      }
+      var y = pr.y && c.y ? Math.exp(-Math.abs(c.y - pr.y) / 8) : 0.5;
+      var wg = pr.topSpec > 0.2 ? 0.40 : 0.10, wa = 0.30, wp = pr.pnorm > 0 ? 0.25 : 0, wy = 0.10;
+      return (wg * g + wa * a + wp * p + wy * y) / (wg + wa + wp + wy);
+    }
+
+    // seedIds: Titel-IDs; opts: { n, own (max. Titel der Ausgangskuenstler), per (max. je anderem Kuenstler), min, rnd, skip (IDs ausschliessen), keepSeeds }
+    // Es wird zuerst streng ausgewaehlt (nur wirklich aehnliche Titel); reicht das nicht fuer einen brauchbaren Mix, wird stufenweise gelockert.
+    function similar(ix, seedIds, opts) {
+      opts = opts || {};
+      var n = opts.n || 40, per = opts.per || Math.max(3, Math.ceil(n / 8)), min = opts.min != null ? opts.min : 0.30, rnd = opts.rnd != null ? opts.rnd : 0.35;
+      var want = opts.want || Math.min(n, 24);
+      var seeds = seedIds.map(function (id) { return ix.byId[nid(id)]; }).filter(Boolean);
+      if (!seeds.length) return [];
+      var pr = profile(ix, seeds), skip = {}, own = {};
+      (opts.skip || []).forEach(function (id) { skip[nid(id)] = 1; });
+      if (!opts.keepSeeds) pr.seedIds.forEach(function (id) { skip[id] = 1; });
+      seeds.forEach(function (s) { s.a.forEach(function (a) { own[a] = 1; }); });
+      var ownMax = opts.own != null ? opts.own : per;
+      var cand = [];
+      ix.recs.forEach(function (c) {
+        if (skip[c.id]) return;
+        cand.push({ r: c, s: score(ix, pr, c) });
+      });
+      cand.sort(function (a, b) { return b.s - a.s; });
+      var tiers = [[min, 0.5], [min * 0.8, 0.4], [min * 0.65, 0.35]], out = [];
+      for (var ti = 0; ti < tiers.length; ti++) {
+        var abs = tiers[ti][0], rel = cand.length ? cand[0].s * tiers[ti][1] : 0;
+        var ok = cand.filter(function (x) { return x.s >= abs && x.s >= rel; });
+        // Etwas Abwechslung: die besten 2n werden mit leichtem Zufall neu geordnet, danach gilt die Obergrenze je Kuenstler.
+        var pool = ok.slice(0, n * 2).map(function (x) { return { r: x.r, s: x.s, k: x.s * (1 - rnd / 2 + rnd * Math.random()) }; });
+        pool.sort(function (a, b) { return b.k - a.k; });
+        var cnt = {};
+        out = [];
+        pool.forEach(function (x) {
+          if (out.length >= n) return;
+          var key = x.r.a[0] || x.r.id, isOwn = x.r.a.some(function (a) { return own[a]; });
+          var cap = isOwn ? ownMax : per;
+          if ((cnt[key] || 0) >= cap) return;
+          cnt[key] = (cnt[key] || 0) + 1;
+          out.push(x);
+        });
+        if (out.length >= want) break;
+      }
+      return out.map(function (x) { return { it: x.r.it, s: x.s }; });
+    }
+    // Name der Stilrichtung: das seltenste Genre, das in den meisten Titeln des Mixes vorkommt
+    function label(ix, recs) {
+      var cnt = {}, n = recs.length;
+      if (!n) return '';
+      recs.forEach(function (r) { var s = ix.byId[nid(r.Id)]; if (s) s.g.forEach(function (g) { cnt[g] = (cnt[g] || 0) + 1; }); });
+      var best = '', bestV = 0;
+      Object.keys(cnt).forEach(function (g) {
+        var cov = cnt[g] / n;
+        if (cov < 0.5 || ix.idf[g] < 0.7) return;
+        var v = cov * ix.idf[g];
+        if (v > bestV) { bestV = v; best = g; }
+      });
+      if (!best) return '';
+      // Anzeigename wie im Original (Gross-/Kleinschreibung) aus dem ersten Titel mit diesem Genre
+      for (var i = 0; i < recs.length; i++) {
+        var found = (recs[i].Genres || []).filter(function (x) { return norm(x) === best; })[0];
+        if (found) return found;
+      }
+      return best;
+    }
+    return { build: build, profile: profile, score: score, similar: similar, label: label, norm: norm };
+  })();
+
+  var Taste = (function () {
+    var ix = null, loadP = null, TTL = 30 * 60000, MAX = 6000, PAGE = 1500, genreName = {};
+    function songPages(libIds) {
+      var ids = libIds && libIds.length ? libIds : [null];
+      return Promise.all(ids.map(function (lib) {
+        function params(start, limit) {
+          var p = { IncludeItemTypes: 'Audio', Recursive: true, Fields: 'Genres,ParentId', StartIndex: start, Limit: limit, SortBy: 'SortName' };
+          if (lib) p.ParentId = lib;
+          return p;
+        }
+        return getItems(params(0, PAGE)).then(function (first) {
+          var out = first.items.slice(), total = Math.min(first.total, MAX);
+          var starts = [];
+          for (var s = PAGE; s < total; s += PAGE) starts.push(s);
+          return starts.reduce(function (p, s) {
+            return p.then(function () { return getItems(params(s, Math.min(PAGE, total - s))).then(function (r) { out = out.concat(r.items); }); });
+          }, Promise.resolve()).then(function () { return out; });
+        });
+      })).then(function (lists) { return [].concat.apply([], lists); });
+    }
+    function plItems(id) {
+      return call('GET', 'Playlists/' + id + '/Items', { UserId: uid(), Limit: 1500, Fields: '', EnableImages: false, EnableUserData: false }).then(function (r) {
+        return ((r && r.Items) || []).map(function (x) { return x.Id; });
+      }, function () { return []; });
+    }
+    function load(force) {
+      if (!force && ix && Date.now() - ix.at < TTL && ix.uid === uid()) return Promise.resolve(ix);
+      if (loadP) return loadP;
+      loadP = Promise.all([loadLibraries().then(function (libs) { return musicLibIds(libs); }, function () { return []; }), loadPlaylists(false).then(null, function () { return []; })]).then(function (r) {
+        return songPages(r[0]).then(function (songs) {
+          var pls = (r[1] || []).filter(function (p) { var n = p.item.ChildCount; return n == null || n >= 3; }).slice(0, 30);
+          var lists = [], i = 0;
+          function worker() {
+            if (i >= pls.length) return Promise.resolve();
+            var p = pls[i++];
+            return plItems(p.id).then(function (ids) { lists.push({ key: nid(p.id), ids: ids }); }).then(worker);
+          }
+          return Promise.all([worker(), worker(), worker(), worker()]).then(function () {
+            var liked = songs.filter(function (s) { return s.UserData && s.UserData.IsFavorite; }).map(function (s) { return s.Id; });
+            if (liked.length >= 3) lists.push({ key: 'liked', ids: liked });
+            ix = TasteCore.build(songs, lists);
+            ix.uid = uid();
+            return ix;
+          });
+        });
+      }).then(function (v) { loadP = null; return v; }, function (e) { loadP = null; throw e; });
+      return loadP;
+    }
+    // Aehnliche Titel zu den gegebenen Ausgangstitel-IDs; Fehler/leer: null (Aufrufer nimmt dann Jellyfins Sofortmix)
+    function similar(seedIds, opts) {
+      var timeout = new Promise(function (res) { setTimeout(function () { res(null); }, opts && opts.wait || 12000); });
+      return Promise.race([load().then(function (index) {
+        if (index.N < 25) return null;
+        var list = TasteCore.similar(index, seedIds, opts);
+        return list.map(function (x) { return x.it; });
+      }, function () { return null; }), timeout]);
+    }
+    function labelOf(tracks) { return ix ? TasteCore.label(ix, tracks) : ''; }
+    // Ausgangstitel eines Kuenstlers: seine meistgehoerten bzw. ersten Titel
+    function artistSeeds(artistId, max) {
+      return load().then(function (index) {
+        var out = [];
+        index.recs.forEach(function (r) { if ((r.it.ArtistItems || []).some(function (a) { return nid(a.Id) === nid(artistId); })) out.push(r); });
+        out.sort(function (a, b) { return ((b.it.UserData && b.it.UserData.PlayCount) || 0) - ((a.it.UserData && a.it.UserData.PlayCount) || 0); });
+        return out.slice(0, max || 10).map(function (r) { return r.it.Id; });
+      }, function () { return []; });
+    }
+    return { load: load, similar: similar, label: labelOf, artistSeeds: artistSeeds, core: TasteCore, ready: function () { return !!ix; } };
+  })();
 
   /* ---------- Downloads: Titel auf das Gerät laden (Verwaltung in der Spotify-Ansicht) ---------- */
   var OFF = (function () {
@@ -2051,6 +2389,7 @@
         have = {}; single = {}; r[0].forEach(function (x) { have[x.id] = x.size || 0; if (x.explicit) single[x.id] = true; });
         colls = {}; r[1].forEach(function (c) { colls[c.key] = c; });
         emit();
+        setTimeout(backfillLyrics, 4000);
       }, function () { loadP = null; });
       return loadP;
     }
@@ -2092,7 +2431,8 @@
     function metaOf(tr) {
       return {
         id: nid(tr.Id), name: tr.Name || '', artist: firstArtist(tr) || '', album: tr.Album || '', albumId: tr.AlbumId ? nid(tr.AlbumId) : '',
-        ticks: tr.RunTimeTicks || 0, year: tr.ProductionYear || 0, index: tr.IndexNumber || 0
+        ticks: tr.RunTimeTicks || 0, year: tr.ProductionYear || 0, index: tr.IndexNumber || 0,
+        artists: (tr.Artists || []).slice(0, 8), albumArtist: tr.AlbumArtist || '', genres: (tr.Genres || []).slice(0, 8), disc: tr.ParentIndexNumber || 0
       };
     }
     function fetchCover(tr, signal) {
@@ -2101,6 +2441,34 @@
       var c = ML.client();
       var url = c.getUrl('Items/' + pr[0] + '/Images/Primary', { maxWidth: 400, quality: 85, tag: pr[1], api_key: c.accessToken() });
       return fetch(url, { signal: signal, credentials: 'omit' }).then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) { return b && b.size ? { key: nid(pr[0]), blob: b } : null; }, function () { return null; });
+    }
+    // Songtext wie ihn die Player-Ansicht braucht: { lines: [{ t, text }], synced } oder null (keiner vorhanden); undefined = nicht ermittelbar.
+    function fetchLyrics(id) {
+      return call('GET', 'Audio/' + id + '/Lyrics').then(function (r) {
+        var lines = ((r && r.Lyrics) || []).map(function (l) { return { t: l.Start != null ? l.Start / 1e7 : null, text: String(l.Text == null ? '' : l.Text) }; });
+        var has = lines.some(function (l) { return l.text.trim(); });
+        var synced = !!(r && r.Metadata && r.Metadata.IsSynced) && lines.some(function (l) { return l.t != null; });
+        return has ? { lines: lines, synced: synced } : null;
+      }, function (err) { return err && err.status === 404 ? null : undefined; });
+    }
+    function lyricsOf(id) { return D.getTrack(id).then(function (r) { return r && r.lyrics ? r.lyrics : null; }, function () { return null; }); }
+    // Bereits geladene Titel ohne gespeicherten Songtext: bei Verbindung im Hintergrund nachladen (einmal je Titel).
+    var backfilled = false;
+    function backfillLyrics() {
+      if (backfilled || Net.offline() || !available()) return;
+      backfilled = true;
+      D.allTracks().then(function (all) {
+        var todo = all.filter(function (x) { return !x.lyr; }).map(function (x) { return x.id; });
+        function next() {
+          if (!todo.length || Net.offline()) return Promise.resolve();
+          var id = todo.shift();
+          return fetchLyrics(id).then(function (ly) {
+            if (ly === undefined) return;
+            return D.updateTrack(id, { lyrics: ly, lyr: 1 });
+          }).then(next, next);
+        }
+        return Promise.all([next(), next()]);
+      }).then(null, function () { backfilled = false; });
     }
     function isQuota(e) { return !!e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message || e))); }
 
@@ -2134,8 +2502,10 @@
         return fetchAudio(tr.Id, q, ctrl.signal, function (got, total) { job.part = total ? got / total : 0; }).then(function (a) {
           var pr = pairOf(tr), cp = Promise.resolve(null);
           if (pr) { var ck = nid(pr[0]); cp = coverMemo[ck] || (coverMemo[ck] = fetchCover(tr, ctrl.signal)); }
-          return cp.then(function (cv) {
+          return Promise.all([cp, fetchLyrics(tr.Id)]).then(function (both) {
+            var cv = both[0], ly = both[1];
             var meta = metaOf(tr);
+            if (ly !== undefined) { meta.lyrics = ly; meta.lyr = 1; }
             meta.mime = a.mime; meta.q = a.q; meta.added = Date.now();
             if (collMeta) meta.colls = [collMeta.key]; else meta.explicit = true;
             return D.saveTrack(meta, a.blob, cv ? cv.key : '', cv ? cv.blob : null).then(function () {
@@ -2190,7 +2560,7 @@
     // Wurde eine geladene Playlist geändert (Titel dazu/weg), zieht der Download nach.
     function syncIfDownloaded(meta, tracks) {
       var c = colls[meta.key];
-      if (!c || jobs[meta.key] || !available() || navigator.onLine === false) return;
+      if (!c || jobs[meta.key] || !available() || Net.offline()) return;
       var ids = tracks.map(function (x) { return nid(x.Id); });
       var same = ids.length === c.ids.length && ids.every(function (id, i) { return c.ids[i] === id; });
       if (same) return;
@@ -2215,7 +2585,7 @@
       downloadColl: function (meta, tracks) { return start(tracks, meta); },
       downloadTrack: function (tr) { return start([tr], null, tr.Name); },
       removeColl: removeColl, removeTrack: removeTrack, clearAll: clearAll, cancel: cancel,
-      syncIfDownloaded: syncIfDownloaded,
+      syncIfDownloaded: syncIfDownloaded, lyricsOf: lyricsOf, backfillLyrics: backfillLyrics,
       usage: D.usage, estimate: D.estimate, persisted: D.persisted, persist: D.persist, tracks: D.allTracks
     };
   })();
@@ -2374,6 +2744,13 @@
   }
 
   function trackMenu(track, ctx, index) {
+    if (Net.offline() || track.__local) {   // ohne Server: nur, was auf dem Geraet geht
+      openMenu({ title: track.Name, subtitle: firstArtist(track), cover: itemImg(track, 120) }, [
+        offTrackEntry(track),
+        { icon: 'speed', label: t('mSpeed'), run: openSpeed }
+      ]);
+      return;
+    }
     var liked = !!(track.UserData && track.UserData.IsFavorite);
     var inPlaylist = ctx.kind === 'playlist' && ctx.canEdit && track.PlaylistItemId;
     openMenu({ title: track.Name, subtitle: firstArtist(track), cover: itemImg(track, 120) }, [
@@ -2516,7 +2893,7 @@
   function mosaic(tracks, cls) {
     var seen = {}, urls = [];
     for (var i = 0; i < tracks.length && urls.length < 4; i++) {
-      var key = tracks[i].AlbumId || tracks[i].Id;
+      var key = tracks[i].AlbumId || tracks[i].__cover || tracks[i].Id;
       if (seen[key]) continue;
       var u = itemImg(tracks[i], 300);
       if (!u) continue;
@@ -2574,7 +2951,14 @@
     var entries = [];
     var jamOk = ML.config().jamEnabled;
 
-    if (ctx.kind === 'playlist') {
+    if (ctx.offline) {   // ohne Server: nur Abspielen und Entfernen des Downloads
+      var mk = offMetaOf(ctx);
+      entries = [{ hidden: !mk, icon: 'del', label: t('offRemove'), danger: true, run: function () {
+        confirmSheet(t('offRemoveTitle'), t('offRemoveText', mk.name), t('offRemove'), true).then(function (yes) {
+          if (yes) OFF.removeColl(mk.key).then(function () { toast(t('offRemoved')); leaveDetail(); });
+        });
+      } }];
+    } else if (ctx.kind === 'playlist') {
       entries = [
         { icon: 'share', label: t('mShare'), run: function () { shareList(ctx); } },
         { hidden: !info.canEdit, icon: 'playlist_add', label: t('mAddHere'), run: function () { openAddSongs(pl, ctx.reload); } },
@@ -2607,7 +2991,7 @@
         { hidden: !jamOk, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } }
       ];
     }
-    entries.unshift(offLocalEntry(ctx));
+    if (!ctx.offline) entries.unshift(offLocalEntry(ctx));
     openMenu({ title: title, subtitle: sub, cover: null, coverEl: coverFor(ctx, '') }, entries);
   }
 
@@ -2980,6 +3364,7 @@
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
         { hidden: !OFF.available(), icon: 'download_circle', label: t('offMenu'), run: openDownloads },
+        { icon: 'wifi_off', label: Net.forced() ? t('offModeOff') : t('offModeOn'), run: function () { OFFV.toggleForced(); } },
         { icon: 'equalizer', label: t('eqTitle'), run: openEqualizer },
         { icon: 'radio', label: t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff'), run: function () { setAutoplay(!autoplayOn()); toast(t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff')); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
@@ -3020,6 +3405,7 @@
 
   /* ---------- Startseite ---------- */
   function renderHome(host, seq) {
+    if (Net.offline()) { OFFV.renderHome(host, seq); return; }
     host.textContent = '';
     var head = el('div', 'ml-topbar');
     head.appendChild(profileButton());
@@ -3062,7 +3448,7 @@
     }
     var sig = null;
     if (pre) { sig = libSig(pre.libs) + '#' + plSig(pre.pls); body.textContent = ''; paint(pre.libs, pre.pls); }
-    else { body.textContent = ''; body.appendChild(el('div', 'ml-muted ml-pad', t('loading'))); }
+    else { body.textContent = ''; body.appendChild(loaderEl()); }
     Promise.all([loadLibraries(), loadPlaylists(true)]).then(function (res) {
       if (seq !== state.view) return;
       if (sig !== null && sig === libSig(res[0]) + '#' + plSig(res[1])) return;
@@ -3125,12 +3511,48 @@
     tracks.forEach(function (x) { var a = firstArtist(x); if (a && !seen[a] && names.length < 3) { seen[a] = 1; names.push(a); } });
     return names.length ? names.join(', ') + t('andMore') : '';
   }
-  function playMixFrom(path, failKey, ctxKey) {
-    return call('GET', path, { UserId: uid(), Limit: 60 }).then(function (r) {
-      var ids = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); }).map(function (i) { return i.Id; });
-      if (!ids.length) { toast(t(failKey || 'radioFailed')); return false; }
-      return playIds(ids, 0, ctxKey ? { ctx: ctxKey } : null);
+  // Titel eines Mixes / Senders / Mixtapes. Alle Stellen (Kachel, Seite, Abspielen) benutzen dieselbe Liste (mixStore).
+  function mixTracksOf(kind, id) {
+    var key = mixKey(kind, id), c = mixStore[key];
+    if (c && c.tracks && c.tracks.length) return Promise.resolve(c.tracks);
+    var p;
+    if (kind === 'mix') {
+      p = Promise.all([loadItem(id, ''), loadSongMix(id, 41)]).then(function (res) {
+        var seed = res[0];
+        return (seed ? [seed] : []).concat(res[1].filter(function (x) { return nid(x.Id) !== nid(id); }).slice(0, 40));
+      });
+    } else if (kind === 'radio') {
+      p = Taste.artistSeeds(id, 10).then(function (seeds) {
+        if (!seeds.length) return null;
+        return Taste.similar(seeds, { n: 60, own: 14, keepSeeds: true });
+      }).then(function (list) {
+        if (list && list.length >= 8) return list;
+        return call('GET', 'Artists/' + id + '/InstantMix', { UserId: uid(), Limit: 60 }).then(function (r) { return (r && r.Items) || []; });
+      });
+    } else {
+      p = loadItem(id, '').then(function (seed) {
+        return loadSongMix(id, 60, { own: 10 }).then(function (list) {
+          return (seed ? [seed] : []).concat(list.filter(function (x) { return nid(x.Id) !== nid(id); }));
+        });
+      });
+    }
+    return p.then(function (items) {
+      var tracks = (items || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); });
+      if (tracks.length) mixStore[key] = { tracks: tracks, n: (c && c.n) || 0 };
+      return tracks;
+    });
+  }
+  function playMix(kind, id, failKey) {
+    var key = mixKey(kind, id);
+    return mixTracksOf(kind, id).then(function (tracks) {
+      if (!tracks.length) { toast(t(failKey || 'radioFailed')); return false; }
+      return playIds(tracks.map(function (x) { return x.Id; }), 0, { ctx: key });
     }, function () { toast(t(failKey || 'radioFailed')); return false; });
+  }
+  // Untertitel eines Mixes: Stilrichtung und Kuenstler
+  function mixSub(tracks) {
+    var lbl = Taste.label(tracks), line = artistsLine(tracks);
+    return lbl ? (line ? lbl + ' · ' + line : lbl) : line;
   }
   function trackShelfTile(tr, ids, i) {
     function go1() { playIds(ids, i); }
@@ -3139,6 +3561,7 @@
 
   // Mixe, Sender und Mixtapes: Antippen oeffnet erst die Titelliste (eigene Seite), der gruene Knopf auf der Kachel spielt direkt.
   var mixStore = {};   // 'art|id' -> { tracks, n }: dieselben Titel wie auf der Kachel
+  var mixTitles = {};  // Schluessel -> Anzeigename (fuer "Wiedergabe aus Mix")
   function mixKey(kind, id) { return kind + ':' + nid(id); }
   function mixHash(kind, id, n, name) {
     return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=mix&mlkind=' + kind + '&mlid=' + id + '&mln=' + (n || 0) + (name ? '&mlt=' + encodeURIComponent(name) : '');
@@ -3149,51 +3572,47 @@
     var ids = tracks.map(function (x) { return x.Id; });
     var seed = tracks[0], key = mixKey('mix', seed.Id);
     mixStore[key] = { tracks: tracks, n: n };
+    mixTitles[key] = t('mixN', n);
     var holder = cover(null, 'ml-tile-cover');
     var pairs = pairsOf(tracks);
     if (pairs.length) fillCover(holder, pairs);
     return tile({
-      ctx: key, title: t('mixN', n), sub: artistsLine(tracks), coverEl: holder,
+      ctx: key, title: t('mixN', n), sub: mixSub(tracks), coverEl: holder,
       onClick: function () { openMix('mix', seed.Id, n); },
       play: function () { pressCtx(key, function () { return playIds(ids, 0, { ctx: key }); }); }
     });
   }
   function radioTile(artist, track) {
     var key = mixKey('radio', artist.Id);
+    mixTitles[key] = artist.Name;
     return tile({
       ctx: key, title: artist.Name, sub: t('radioLbl'), round: true, img: itemImg(track, 300),
       onClick: function () { openMix('radio', artist.Id, 0, artist.Name); },
-      play: function () { pressCtx(key, function () { return playMixFrom('Artists/' + artist.Id + '/InstantMix', null, key); }); }
+      play: function () { pressCtx(key, function () { return playMix('radio', artist.Id); }); }
     });
   }
   function mixtapeTile(artistName, track) {
     var key = mixKey('mixtape', track.Id);
+    mixTitles[key] = t('mixtapeOf', artistName);
     return tile({
       ctx: key, title: t('mixtapeOf', artistName), sub: t('mixtapeSub', track.Name), img: itemImg(track, 300),
       onClick: function () { openMix('mixtape', track.Id, 0, artistName); },
-      play: function () { pressCtx(key, function () { return playMixFrom('Songs/' + track.Id + '/InstantMix', null, key); }); }
+      play: function () { pressCtx(key, function () { return playMix('mixtape', track.Id); }); }
     });
   }
 
   // Seite eines Mixes / Senders / Mixtapes: Hero mit Play, darunter die Titel.
   function showMixDetail(host, seq, kind, id, n, name) {
-    renderDetailLoading(host);
     var key = mixKey(kind, id);
+    if (Net.offline()) {
+      OFFV.showDetail(host, seq, 'mix', id, { kind: kind, id: id, key: key, name: name || '', label: kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl') });
+      return;
+    }
+    renderDetailLoading(host);
     function loadTracks() {
       var c = mixStore[key];
       if (c && c.tracks && c.tracks.length) return Promise.resolve({ tracks: c.tracks, n: c.n || n });
-      if (kind === 'mix') {
-        return Promise.all([loadItem(id, ''), loadSongMix(id, 41)]).then(function (res) {
-          var seed = res[0];
-          var rest = res[1].filter(function (x) { return nid(x.Id) !== nid(id); }).slice(0, 40);
-          return { tracks: (seed ? [seed] : []).concat(rest), n: n };
-        });
-      }
-      var path = kind === 'radio' ? 'Artists/' + id + '/InstantMix' : 'Songs/' + id + '/InstantMix';
-      return call('GET', path, { UserId: uid(), Limit: 60 }).then(function (r) {
-        var items = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); });
-        return { tracks: items, n: n };
-      });
+      return mixTracksOf(kind, id).then(function (tracks) { return { tracks: tracks, n: n }; });
     }
     function start() {
       loadTracks().then(function (res) {
@@ -3201,8 +3620,9 @@
         if (!res.tracks.length) throw new Error('empty');
         mixStore[key] = { tracks: res.tracks, n: res.n };
         var title = kind === 'mix' ? t('mixN', res.n || 1) : kind === 'radio' ? (name || t('radioLbl')) : t('mixtapeOf', name || '');
+        mixTitles[key] = title;
         var label = kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl');
-        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, name: name || '', sub: artistsLine(res.tracks) }, tracks: res.tracks, canEdit: false });
+        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, name: name || '', sub: mixSub(res.tracks) }, tracks: res.tracks, canEdit: false });
         ctx.reload = function () { delete mixStore[key]; start(); };
         buildDetail(host, ctx);
       }, function () { if (seq === state.view) renderDetailFailed(host, function () { renderDetailLoading(host); start(); }); });
@@ -3229,7 +3649,7 @@
       var mixes = [];
       recs.seeds.forEach(function (sd, i) {
         var l = (recs.lists[i] || []).filter(function (x) { return nid(x.Id) !== nid(sd.Id); }).slice(0, 40);
-        if (l.length >= 3) mixes.push(mixTile(mixes.length + 1, [sd].concat(l)));
+        if (l.length >= (Taste.ready() ? 8 : 3)) mixes.push(mixTile(mixes.length + 1, [sd].concat(l)));
       });
       if (mixes.length) {
         loadMe().then(function (me) {
@@ -3464,7 +3884,7 @@
   }
 
   function fillMedia(body, seq, libs, cat) {
-    body.appendChild(el('div', 'ml-muted ml-pad', t('loading')));
+    body.appendChild(loaderEl());
     var shelves = libs.length ? loadMediaShelves(libs) : Promise.resolve([]);
     var genre = cat === 'audiobooks' && !libs.length ? loadGenreAudiobooks() : Promise.resolve([]);
     Promise.all([shelves, genre]).then(function (res) {
@@ -3506,6 +3926,7 @@
   }
 
   function renderSearch(host, seq) {
+    if (Net.offline()) { OFFV.renderSearch(host, seq); return; }
     host.textContent = '';
     var head = el('div', 'ml-search-head');
     head.appendChild(el('h1', 'ml-page-title', t('tabSearch')));
@@ -3592,7 +4013,7 @@
       var my = ++token;
       out.textContent = '';
       if (!q) { showAll(my); return; }
-      out.appendChild(el('div', 'ml-muted ml-pad', t('loading')));
+      out.appendChild(loaderEl());
       var hintsReq = call('GET', 'Search/Hints', { searchTerm: q, UserId: uid(), Limit: 30, IncludeItemTypes: 'MusicAlbum,MusicArtist,Playlist', IncludeMedia: true });
       var songsReq = itemsOf({ IncludeItemTypes: 'Audio', Recursive: true, SearchTerm: q, SortBy: 'SortName', Limit: 200 });
       Promise.all([hintsReq, songsReq.catch(function () { return []; })]).then(function (res) {
@@ -3655,6 +4076,7 @@
   // Liste der Bibliothek (Playlists, Alben, Kuenstler) - fuer den Reiter "Bibliothek" und die Seitenleiste am Computer.
   // alive(): false, sobald die Liste nicht mehr gebraucht wird.
   function buildLibList(list, alive, retry) {
+    if (Net.offline()) { OFFV.libList(list, alive); return; }
     list.textContent = '';
     var seg = state.libSeg;
     if (seg === 'playlists') {
@@ -3670,7 +4092,7 @@
         markSide();
       }
       if (pre) { psig = plSig(pre.pls); paintPls(pre.pls); }
-      else list.appendChild(el('div', 'ml-muted ml-pad', t('loading')));
+      else list.appendChild(loaderEl());
       loadPlaylists(true).then(function (pls) {
         if (!alive() || state.libSeg !== 'playlists') return;
         if (psig !== null && psig === plSig(pls)) return;
@@ -3796,7 +4218,7 @@
 
       var cnt = function (n) { return ctx.book ? (n === 1 ? t('chapter1') : t('chaptersN', n)) : countText(n); };
       var stats = ctx.tracks.length ? [fmtLong(sumTicks(ctx.tracks)), cnt(ctx.tracks.length)] : [cnt(0)];
-      if (ctx.kind === 'playlist') stats.push(ctx.pl.info.isPublic ? t('publicBadge') : t('privateBadge'));
+      if (ctx.kind === 'playlist' && !ctx.offline) stats.push(ctx.pl.info.isPublic ? t('publicBadge') : t('privateBadge'));
       info.appendChild(el('div', 'ml-hero-stats', stats.join(' • ')));
       if (ctx.groups) info.appendChild(el('div', 'ml-mixed-note', t('mixedNote', ctx.groups.length)));
       hero.appendChild(info);
@@ -3807,7 +4229,7 @@
       if (dlBtn) left.appendChild(dlBtn);
       else if (ctx.kind === 'playlist') left.appendChild(iconBtn('download', t('download'), '', function () { openDownload(ctx.pl); }));
       if (ctx.kind === 'liked') left.appendChild(iconBtn('add', t('addFirstSongs'), 'ml-liked-add', function () { openAddSongs({ liked: true }, ctx.reload); }));
-      if (ctx.kind !== 'liked' && ctx.kind !== 'mix' && !(ctx.book && ctx.album.Type !== 'MusicAlbum')) left.appendChild(iconBtn('share', t('share'), '', function () {
+      if (ctx.kind !== 'liked' && ctx.kind !== 'mix' && !ctx.offline && !(ctx.book && ctx.album.Type !== 'MusicAlbum')) left.appendChild(iconBtn('share', t('share'), '', function () {
         if (ctx.kind === 'playlist') shareList(ctx);
         else openShare({ url: linkFor(ctx.album.Id), title: ctx.album.Name, subtitle: albumArtistLine(ctx.album), cover: itemImg(ctx.album, 120), note: '' });
       }));
@@ -3880,7 +4302,7 @@
     syncPlayButtons();
   }
   function pressCtx(key, start) {
-    if (key && Player.contextId() === key && !OFFPLAY.active() && navigator.onLine !== false) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
+    if (key && Player.contextId() === key && (OFFPLAY.active() || !Net.offline())) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
     if (key) markPending(key);
     var p = start();
     if (key && p && typeof p.then === 'function') p.then(function (ok) { if (ok === false) clearPending(key); }, function () { clearPending(key); });
@@ -3983,7 +4405,7 @@
     var bar = el('div', 'ml-hero-bar');
     bar.appendChild(iconBtn('back', t('back'), 'ml-hero-back', leaveDetail));
     host.appendChild(bar);
-    host.appendChild(el('div', 'ml-muted ml-pad', t('loading')));
+    host.appendChild(loaderEl());
   }
 
   function renderDetailFailed(host, retry) {
@@ -3995,6 +4417,7 @@
   }
 
   function showPlaylistDetail(host, seq, id) {
+    if (Net.offline()) { OFFV.showDetail(host, seq, 'playlist', id); return; }
     renderDetailLoading(host);
     function load() {
       return Promise.all([
@@ -4050,6 +4473,7 @@
   }
 
   function showAlbumDetail(host, seq, id) {
+    if (Net.offline()) { OFFV.showDetail(host, seq, 'album', id); return; }
     renderDetailLoading(host);
     function start() {
       Promise.all([loadItem(id, 'ChildCount,Genres'), loadAlbumTracks(id)]).then(function (res) {
@@ -4095,6 +4519,7 @@
     });
   }
   function showFolderDetail(host, seq, id, libId) {
+    if (Net.offline()) { OFFV.unavailable(host); return; }
     renderDetailLoading(host);
     function start() {
       Promise.all([
@@ -4116,6 +4541,7 @@
   }
 
   function showLikedDetail(host, seq) {
+    if (Net.offline()) { OFFV.showDetail(host, seq, 'liked', 'liked'); return; }
     renderDetailLoading(host);
     function start() {
       loadLikedTracks().then(function (tracks) {
@@ -4131,6 +4557,7 @@
 
   /* ---------- Kuenstlerseite ---------- */
   function showArtistDetail(host, seq, id) {
+    if (Net.offline()) { OFFV.unavailable(host); return; }
     renderDetailLoading(host);
     function start() {
       Promise.all([
@@ -4431,6 +4858,15 @@
         urls.forEach(function (u) { URL.revokeObjectURL(u); }); urls = [];
         body.textContent = '';
 
+        // Offline-Modus (von Hand): pausiert alle Serveranfragen, z. B. wenn ein VPN verbunden, aber kein Internet da ist
+        var ms = section(t('offModeLbl'));
+        var mb = btn('ml-dl-q ml-dl-mode' + (Net.forced() ? ' ml-on' : ''));
+        mb.appendChild(el('span', 'ml-dl-q-t', Net.forced() ? t('offModeOff') : t('offModeOn')));
+        mb.appendChild(el('span', 'ml-dl-q-s', t('offModeNote')));
+        mb.setAttribute('aria-pressed', Net.forced() ? 'true' : 'false');
+        mb.addEventListener('click', function () { OFFV.toggleForced(); setTimeout(render, 50); });
+        ms.appendChild(mb);
+
         // Speicher
         var sec = section(t('offStorage'));
         var card = el('div', 'ml-dl-card');
@@ -4554,16 +4990,290 @@
     render();
   }
 
-  /* ---------- Vom Gerät abspielen: geladene Titel direkt in der Jellyfin-Seite (eigenes Audio-Element, ohne Server) ---------- */
+  /* ---------- Offline-Ansichten: Start, Bibliothek, Suche und Listen aus den heruntergeladenen Daten ---------- */
+  (function () {
+    var extra = {
+      de: {
+        offPill: 'Offline', offPillForced: 'Offline-Modus', offModeLbl: 'Offline-Modus', offModeOn: 'Offline-Modus einschalten', offModeOff: 'Offline-Modus beenden',
+        offModeNote: 'Pausiert alle Anfragen an den Server und zeigt nur Heruntergeladenes. Hilft, wenn das VPN verbunden ist, aber kein Internet da ist. Ohne den Schalter erkennt die App fehlende Verbindung selbst.',
+        offModeOnToast: 'Offline-Modus an', offModeOffToast: 'Offline-Modus beendet', offChecking: 'Verbindung wird geprüft …', offPillTip: 'Server nicht erreichbar. Tippen, um die Verbindung zu prüfen.',
+        offPillTipForced: 'Offline-Modus ist an. Tippen zum Beenden.',
+        offHomeText: 'Du hörst, was auf diesem Gerät gespeichert ist.', offHomeEmpty: 'Noch nichts heruntergeladen. Lade Playlists oder Alben herunter, solange du online bist.',
+        offUnavail: 'Das ist offline nicht verfügbar, weil es nicht heruntergeladen wurde.', offSearchPh: 'In heruntergeladenen Titeln suchen', offSearchHint: 'Suche in dem, was auf diesem Gerät gespeichert ist.',
+        offPlaylistsShelf: 'Playlists', offAlbumsShelf: 'Alben', offMixesShelf: 'Mixe', offOpenDownloads: 'Downloads verwalten', offFromDeviceBadge: 'Vom Gerät'
+      },
+      en: {
+        offPill: 'Offline', offPillForced: 'Offline mode', offModeLbl: 'Offline mode', offModeOn: 'Turn on offline mode', offModeOff: 'End offline mode',
+        offModeNote: 'Pauses all requests to the server and shows downloads only. Helps when a VPN is connected but there is no internet. Without the switch the app detects a missing connection by itself.',
+        offModeOnToast: 'Offline mode on', offModeOffToast: 'Offline mode ended', offChecking: 'Checking connection …', offPillTip: 'Server not reachable. Tap to check the connection.',
+        offPillTipForced: 'Offline mode is on. Tap to end it.',
+        offHomeText: 'You are listening to what is stored on this device.', offHomeEmpty: 'Nothing downloaded yet. Download playlists or albums while you are online.',
+        offUnavail: 'This is not available offline because it was not downloaded.', offSearchPh: 'Search downloaded tracks', offSearchHint: 'Searches what is stored on this device.',
+        offPlaylistsShelf: 'Playlists', offAlbumsShelf: 'Albums', offMixesShelf: 'Mixes', offOpenDownloads: 'Manage downloads', offFromDeviceBadge: 'From device'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  ICONS.wifi_off = 'M23.64 7c-.45-.34-4.93-4-11.64-4-1.5 0-2.89.19-4.15.48L18.18 13.8 23.64 7zm-6.6 8.22L3.27 1.44 2 2.72l2.05 2.06C1.91 5.76.59 6.82.36 7l11.63 14.49.01.01.01-.01 3.9-4.86 3.32 3.32 1.27-1.27-3.46-3.46z';
+
+  var OFFV = (function () {
+    function collKey(kind, id) { return kind === 'playlist' ? 'pl:' + nid(id) : kind === 'album' ? 'al:' + nid(id) : kind === 'liked' ? 'liked' : id; }
+    function hrefOfColl(c) {
+      if (c.href) return c.href;
+      if (c.key.indexOf('pl:') === 0) return '#/details?id=' + c.key.slice(3);
+      if (c.key.indexOf('al:') === 0) return '#/details?id=' + c.key.slice(3);
+      return '';
+    }
+    // Kleines Bild aus dem Gerätespeicher
+    function coverOf(key, cls) {
+      var holder = cover(null, cls);
+      if (key) OFFPLAY.coverUrl(key).then(function (u) {
+        if (!u) return;
+        var im = el('img'); im.alt = ''; im.src = u; holder.appendChild(im);
+      });
+      return holder;
+    }
+    // Titel einer Sammlung im Format der Server-Antworten (Cover vorgeladen)
+    function collTracks(c) {
+      return MLOff.allTracks().then(function (all) {
+        var by = {}; all.forEach(function (x) { by[x.id] = x; });
+        var metas = c.ids.map(function (id) { return by[id]; }).filter(Boolean);
+        return metasToItems(metas);
+      });
+    }
+    function metasToItems(metas) {
+      return Promise.all(metas.map(function (m) { return OFFPLAY.coverUrl(m.coverKey); })).then(function () { return metas.map(function (m) { return OFFPLAY.itemOf(m); }); });
+    }
+
+    /* ---- Listen-Seiten ---- */
+    function unavailable(host) {
+      host.textContent = '';
+      var bar = el('div', 'ml-hero-bar');
+      bar.appendChild(iconBtn('back', t('back'), 'ml-hero-back', leaveDetail));
+      host.appendChild(bar);
+      emptyNote(host, t('offUnavail'));
+    }
+    function showDetail(host, seq, kind, id, mix) {
+      renderDetailLoading(host);
+      OFF.load().then(function () {
+        var c = OFF.coll(collKey(kind, mix ? mix.key : id));
+        if (!c) { if (seq === state.view) unavailable(host); return; }
+        return collTracks(c).then(function (tracks) {
+          if (seq !== state.view) return;
+          var base;
+          if (kind === 'playlist') {
+            base = { kind: 'playlist', pl: { id: id, item: { Id: id, Name: c.name, Overview: '', ChildCount: tracks.length, ImageTags: {} }, info: { ownerName: c.sub || '', ownerId: '', isOwner: false, canEdit: false, isPublic: false, sharedWithMe: false, customCover: false } }, tracks: tracks, canEdit: false };
+          } else if (kind === 'album') {
+            var first = tracks[0] || {};
+            base = { kind: 'album', album: { Id: id, Name: c.name, AlbumArtist: first.AlbumArtist || c.sub || '', Artists: first.Artists || [], ProductionYear: first.ProductionYear, Type: 'MusicAlbum' }, tracks: tracks, canEdit: false };
+          } else if (kind === 'liked') {
+            base = { kind: 'liked', tracks: tracks, canEdit: false };
+          } else {
+            base = { kind: 'mix', mix: { kind: mix.kind, id: mix.id, key: mix.key, title: c.name, label: mix.label, name: mix.name || '', sub: c.sub || '' }, tracks: tracks, canEdit: false };
+          }
+          var ctx = makeDetailCtx(host, base);
+          ctx.offline = true;
+          ctx.reload = function () { /* nichts nachzuladen */ };
+          buildDetail(host, ctx);
+        });
+      }).then(null, function () { if (seq === state.view) unavailable(host); });
+    }
+
+    /* ---- Kacheln und Zeilen ---- */
+    function ctxOf(c) { return OFFPLAY.ctxFromColl(c.key); }
+    function playColl(c, shuffle) {
+      return OFFPLAY.startIds(c.ids, shuffle ? -1 : 0, { name: c.name, coll: c.key, shuffle: shuffle ? true : undefined });
+    }
+    function haveCount(c) { return c.ids.filter(function (id) { return OFF.has(id); }).length; }
+    function subOf(c) {
+      var n = haveCount(c);
+      if (c.type === 'album' || c.type === 'mix') return c.sub || countText(n);
+      return countText(n);
+    }
+    function collCover(c, cls) { return c.type === 'liked' ? likedCoverEl(cls) : coverOf(c.coverKey, cls); }
+    function collTile(c) {
+      var key = ctxOf(c);
+      return tile({
+        ctx: key, title: c.name, sub: subOf(c), coverEl: collCover(c, 'ml-tile-cover'),
+        onClick: function () { var h = hrefOfColl(c); if (h) go(h); },
+        play: haveCount(c) ? function () { pressCtx(key, function () { return playColl(c, false); }); } : null
+      });
+    }
+    function collRow(c) {
+      return libRow({
+        id: ctxOf(c), coverEl: collCover(c, 'ml-row-cover'), title: c.name,
+        sub: [c.type === 'album' ? t('album') : c.type === 'mix' ? t('mixLbl') : t('playlist'), subOf(c)].filter(Boolean).join(' • '),
+        onClick: function () { var h = hrefOfColl(c); if (h) go(h); }
+      });
+    }
+    function sortedColls() { return OFF.allColls().filter(function (c) { return haveCount(c) > 0; }).sort(function (a, b) { return (b.added || 0) - (a.added || 0); }); }
+
+    /* ---- Start ---- */
+    function renderHome(host, seq) {
+      host.textContent = '';
+      var head = el('div', 'ml-topbar');
+      head.appendChild(profileButton());
+      head.appendChild(el('h1', 'ml-page-title ml-inline', t('offPill')));
+      host.appendChild(head);
+      var body = el('div', 'ml-home-body');
+      host.appendChild(body);
+      OFF.load().then(function () { return MLOff.allTracks(); }).then(function (tracks) {
+        if (seq !== state.view) return;
+        body.textContent = '';
+        var colls = sortedColls();
+        var singles = tracks.filter(function (x) { return x.explicit; }).sort(function (x, y) { return (y.added || 0) - (x.added || 0); });
+        if (!tracks.length) { emptyNote(body, t('offHomeEmpty'), t('offOpenDownloads'), openDownloads); return; }
+        var card = el('div', 'ml-off-card');
+        card.appendChild(el('p', 'ml-off-text', t('offHomeText')));
+        var pr = el('div', 'ml-dl-playrow');
+        var pa = btn('ml-pill ml-primary', t('offPlayAll'));
+        pa.addEventListener('click', function () { OFFPLAY.startIds(tracks.slice().sort(function (x, y) { return (y.added || 0) - (x.added || 0); }).map(function (x) { return x.id; }), 0, { name: t('offTitle') }); });
+        var ps = btn('ml-pill', t('offShuffleAll'));
+        ps.addEventListener('click', function () { OFFPLAY.startIds(tracks.map(function (x) { return x.id; }), -1, { shuffle: true, name: t('offTitle') }); });
+        pr.appendChild(pa); pr.appendChild(ps); card.appendChild(pr);
+        if (Net.forced()) {
+          var end = btn('ml-pill', t('offModeOff'));
+          end.addEventListener('click', function () { Net.setForced(false); toast(t('offModeOffToast')); });
+          pr.appendChild(end);
+        }
+        body.appendChild(card);
+        var pls = colls.filter(function (c) { return c.type === 'playlist' || c.type === 'liked'; });
+        shelf(body, t('offPlaylistsShelf'), pls.map(collTile));
+        shelf(body, t('offAlbumsShelf'), colls.filter(function (c) { return c.type === 'album'; }).map(collTile));
+        shelf(body, t('offMixesShelf'), colls.filter(function (c) { return c.type === 'mix'; }).map(collTile));
+        if (singles.length) {
+          shelf(body, t('offSingles'), singles.slice(0, 30).map(function (x) {
+            function go1() { OFFPLAY.startIds([x.id], 0, { name: x.name }); }
+            return tile({ title: x.name, sub: x.artist, coverEl: coverOf(x.coverKey, 'ml-tile-cover'), onClick: go1, play: go1 });
+          }));
+        }
+        var more = btn('ml-pill ml-dl-clear', t('offOpenDownloads'));
+        more.addEventListener('click', openDownloads);
+        body.appendChild(more);
+        markContext();
+      }, function () { if (seq === state.view) { body.textContent = ''; emptyNote(body, t('offUnavail')); } });
+    }
+
+    /* ---- Bibliothek ---- */
+    function libList(list, alive) {
+      list.textContent = '';
+      var seg = state.libSeg;
+      OFF.load().then(function () {
+        if (!alive()) return;
+        list.textContent = '';
+        var colls = sortedColls();
+        if (seg === 'playlists') colls = colls.filter(function (c) { return c.type === 'playlist' || c.type === 'liked' || c.type === 'mix'; });
+        else if (seg === 'albums') colls = colls.filter(function (c) { return c.type === 'album'; });
+        else colls = [];
+        colls.forEach(function (c) { list.appendChild(collRow(c)); });
+        if (!colls.length) list.appendChild(el('p', 'ml-muted ml-pad', seg === 'artists' ? t('offUnavail') : t('offHomeEmpty')));
+        markSide(); markContext();
+      });
+    }
+
+    /* ---- Suche in den geladenen Titeln ---- */
+    function renderSearch(host, seq) {
+      host.textContent = '';
+      var head = el('div', 'ml-search-head');
+      head.appendChild(el('h1', 'ml-page-title', t('tabSearch')));
+      var input = el('input', 'ml-field ml-search-big');
+      input.type = 'search'; input.placeholder = t('offSearchPh'); input.setAttribute('autocomplete', 'off'); input.value = searchTerm;
+      head.appendChild(input);
+      host.appendChild(head);
+      var out = el('div', 'ml-search-out');
+      host.appendChild(out);
+      var token = 0;
+      function run() {
+        var q = input.value.trim().toLowerCase();
+        searchTerm = input.value;
+        var my = ++token;
+        out.textContent = '';
+        if (!q) { out.appendChild(el('p', 'ml-muted ml-pad', t('offSearchHint'))); return; }
+        MLOff.allTracks().then(function (all) {
+          var hit = all.filter(function (m) { return (m.name + ' ' + m.artist + ' ' + m.album).toLowerCase().indexOf(q) >= 0; }).sort(function (a, b) { return a.name < b.name ? -1 : 1; }).slice(0, 100);
+          return metasToItems(hit);
+        }).then(function (items) {
+          if (my !== token || seq !== state.view) return;
+          out.textContent = '';
+          if (!items.length) { out.appendChild(el('p', 'ml-muted ml-pad', t('noResults', input.value.trim()))); return; }
+          var ctx = songListCtx();
+          ctx.tracks = items;
+          ctx.listEl = el('div', 'ml-tracks');
+          out.appendChild(ctx.listEl);
+          ctx.renderTracks();
+        });
+      }
+      var timer = 0;
+      input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+      run();
+    }
+
+    /* ---- Kopf: Hinweis "Offline" und Schalter ---- */
+    var pill = null;
+    function ensurePill() {
+      if (pill || !root) return pill;
+      pill = btn('ml-offpill');
+      pill.appendChild(icon('wifi_off'));
+      pill.appendChild(el('span', 'ml-offpill-t'));
+      pill.addEventListener('click', function () {
+        if (Net.forced()) { Net.setForced(false); toast(t('offModeOffToast')); }
+        else { toast(t('offChecking')); Net.probeNow(); }
+      });
+      root.appendChild(pill);
+      return pill;
+    }
+    function paintPill() {
+      var on = Net.offline();
+      document.body.classList.toggle('ml-offline', on);
+      if (!ensurePill()) return;
+      pill.hidden = !on;
+      pill.querySelector('.ml-offpill-t').textContent = Net.forced() ? t('offPillForced') : t('offPill');
+      var tip = Net.forced() ? t('offPillTipForced') : t('offPillTip');
+      pill.title = tip; pill.setAttribute('aria-label', tip);
+    }
+    function toggleForced() {
+      var on = !Net.forced();
+      Net.setForced(on);
+      toast(t(on ? 'offModeOnToast' : 'offModeOffToast'));
+    }
+    // Beim Wechsel zwischen online und offline wird die offene Seite neu aufgebaut.
+    var lastOff = null;
+    Net.onChange(function (off) {
+      paintPill();
+      if (lastOff === off) return;
+      lastOff = off;
+      if (!root || root.hidden) return;
+      try {
+        state.key = '';
+        if (!off) { try { ML.refresh(); } catch (e) { /* ignorieren */ } }
+        onRoute(ML.route());
+        if (side && isWide()) scheduleSide();
+        Player.repaint();
+      } catch (e) { if (window.console) console.error('Music Look offline', e); }
+    });
+    return {
+      showDetail: showDetail, renderHome: renderHome, libList: libList, renderSearch: renderSearch, unavailable: unavailable,
+      paintPill: paintPill, toggleForced: toggleForced
+    };
+  })();
+
+  /* ---------- Vom Gerät abspielen: geladene Titel laufen in der normalen Player-Oberfläche (ohne Server) ----------
+     Dieses Modul ist nur die Wiedergabe-Quelle (eigenes Audio-Element, Warteschlange, Zufall, Wiederholen). Es liefert dem
+     Player eine nachgebildete Sitzung; Leiste, Vollansicht, Songtext und Warteschlange sind dieselben wie online. */
   (function () {
     var extra = {
       de: {
         offPlayLocal: 'Vom Gerät abspielen', offPlayAll: 'Alle abspielen', offShuffleAll: 'Zufall', offFromDevice: 'Vom Gerät', offLocalFail: 'Titel nicht abspielbar',
-        offLocalStop: 'Beenden', offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.', offLocalNote: 'Läuft vom Gerät, ohne Server'
+        offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.',
+        fromPlaylistCtx: 'Wiedergabe aus Playlist', fromAlbumCtx: 'Wiedergabe aus Album', fromLikedCtx: 'Wiedergabe aus', fromMixCtx: 'Wiedergabe aus Mix',
+        fromRadioCtx: 'Wiedergabe aus Radio', fromMixtapeCtx: 'Wiedergabe aus Mixtape', lyricsBig: 'Songtext vergrößern', lyricsSmall: 'Songtext verkleinern'
       },
       en: {
         offPlayLocal: 'Play from device', offPlayAll: 'Play all', offShuffleAll: 'Shuffle', offFromDevice: 'From device', offLocalFail: 'Track cannot be played',
-        offLocalStop: 'Stop', offNotAvail: 'You are offline. This track is not downloaded.', offLocalNote: 'Playing from the device, no server needed'
+        offNotAvail: 'You are offline. This track is not downloaded.',
+        fromPlaylistCtx: 'Playing from playlist', fromAlbumCtx: 'Playing from album', fromLikedCtx: 'Playing from', fromMixCtx: 'Playing from mix',
+        fromRadioCtx: 'Playing from radio', fromMixtapeCtx: 'Playing from mixtape', lyricsBig: 'Enlarge lyrics', lyricsSmall: 'Shrink lyrics'
       }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
@@ -4572,35 +5282,49 @@
   var OFFPLAY = (function () {
     var D = MLOff;
     var aud = null;                       // eigenes Audio-Element (Jellyfins Element bleibt unberührt)
-    var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'off', cur: null, url: '', name: '', startedAt: 0 };
-    var ui = null, tok = 0, covers = {}, handlers = false, active = false;
+    var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'RepeatNone', cur: null, url: '', ctxId: '', name: '', startedAt: 0 };
+    var tok = 0, covers = {}, coverWait = {}, handlers = false, active = false, items = {};
 
-    function el2(tag, cls, text) { return el(tag, cls, text); }
-    function fmtClock(sec) { sec = Math.max(0, Math.floor(sec || 0)); var m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
     function coverUrl(key) {
       if (!key) return Promise.resolve('');
       if (covers[key] != null) return Promise.resolve(covers[key]);
-      return D.getCover(key).then(function (b) { covers[key] = b ? URL.createObjectURL(b) : ''; return covers[key]; }, function () { return ''; });
+      if (coverWait[key]) return coverWait[key];
+      coverWait[key] = D.getCover(key).then(function (b) { covers[key] = b ? URL.createObjectURL(b) : ''; delete coverWait[key]; return covers[key]; }, function () { delete coverWait[key]; return ''; });
+      return coverWait[key];
     }
-    function paintCover(box, key, cur) {
-      box.textContent = ''; box.appendChild(icon('note', 'ml-cover-ph'));
-      coverUrl(key).then(function (u) {
-        if (!u || P.cur !== cur) return;
-        var im = el('img'); im.alt = ''; im.src = u; box.textContent = ''; box.appendChild(im);
-      });
+    // Titel im Format der Server-Antworten, damit alle Teile des Players ihn unverändert verwenden (ohne Album- und Künstler-IDs: nichts davon ist offline erreichbar)
+    function itemOf(m) {
+      var it = items[m.id];
+      if (it) return it;
+      it = {
+        Id: m.id, Name: m.name || '', Artists: m.artists && m.artists.length ? m.artists.slice() : (m.artist ? [m.artist] : []),
+        AlbumArtist: m.albumArtist || '', Album: m.album || '', ProductionYear: m.year || undefined, Genres: (m.genres || []).slice(),
+        RunTimeTicks: m.ticks || 0, IndexNumber: m.index || undefined, ParentIndexNumber: m.disc || undefined,
+        Type: 'Audio', MediaType: 'Audio', People: [], UserData: { IsFavorite: false }, __local: true
+      };
+      Object.defineProperty(it, '__cover', { enumerable: false, get: function () { return m.coverKey ? (covers[m.coverKey] || '') : ''; } });
+      items[m.id] = it;
+      return it;
     }
 
     function ensureAudio() {
       if (aud) return;
       aud = new Audio(); aud.preload = 'auto';
-      aud.addEventListener('ended', function () { if (P.repeat === 'one') { aud.currentTime = 0; aud.play(); } else advance(1); });
+      try { var ja = document.querySelector('audio.mediaPlayerAudio'); if (ja && isFinite(ja.volume)) aud.volume = ja.volume; } catch (e) { /* Standard */ }
+      aud.addEventListener('ended', function () { if (P.repeat === 'RepeatOne') { aud.currentTime = 0; aud.play(); } else advance(1); });
       aud.addEventListener('error', function () { if (P.cur && active) { toast(t('offLocalFail')); advance(1); } });
-      aud.addEventListener('play', function () { pauseServer(); paint(); });
-      aud.addEventListener('pause', paint);
-      aud.addEventListener('timeupdate', paintTime);
-      aud.addEventListener('loadedmetadata', function () { paintTime(); position(); });
+      ['play', 'pause', 'volumechange', 'seeked'].forEach(function (ev) { aud.addEventListener(ev, function () { if (active) { position(); Player.repaint(); } }); });
+      aud.addEventListener('loadedmetadata', function () { position(); try { applySpeed(); } catch (e) { /* kein Tempo */ } });
+      // Startet Jellyfin selbst eine Wiedergabe (anderer Titel, anderes Gerät), übernimmt sie: die lokale endet.
+      document.addEventListener('play', function (e) {
+        var a = e.target;
+        if (active && a && a.classList && a.classList.contains('mediaPlayerAudio') && Date.now() - P.startedAt > 1500) stop();
+      }, true);
     }
-    function pauseServer() { try { if (Player.isPlayingNow()) Player.toggle(); } catch (e) { /* kein Player */ } }
+    function pauseServer() {
+      try { var ja = document.querySelector('audio.mediaPlayerAudio'); if (ja && !ja.paused) ja.pause(); } catch (e) { /* kein Element */ }
+      try { if (Player.targetId()) Player.adoptLocal(); } catch (e) { /* kein Player */ }
+    }
 
     /* ---- Steuerung ---- */
     function buildOrder(first) {
@@ -4612,26 +5336,36 @@
       } else for (i = 0; i < n; i++) a.push(i);
       P.order = a;
     }
-    // ids: Titel-IDs in Wiedergabereihenfolge; start: Index (-1 = beliebig); opts: { name, shuffle }
+    // Schlüssel der Download-Sammlung -> Schlüssel, unter dem der Player die Liste kennt (Playlist = ID, Album = album:ID)
+    function ctxFromColl(k) {
+      k = String(k || '');
+      if (k.indexOf('pl:') === 0) return k.slice(3);
+      if (k.indexOf('al:') === 0) return 'album:' + k.slice(3);
+      return k;
+    }
+    // ids: Titel-IDs in Wiedergabereihenfolge; start: Index (-1 = beliebig); opts: { name, shuffle, ctx (Player-Schlüssel), coll (Download-Schlüssel) }
     function startIds(ids, start, opts) {
       opts = opts || {};
       return D.allTracks().then(function (all) {
         var byId = {}; all.forEach(function (x) { byId[x.id] = x; });
-        var list = [], startId = start >= 0 && ids[start] ? nid(ids[start]) : '';
-        ids.forEach(function (id) { var m = byId[nid(id)]; if (m) list.push(m); });
+        var list = [], seen = {}, startId = start >= 0 && ids[start] ? nid(ids[start]) : '';
+        ids.forEach(function (id) { var k = nid(id), m = byId[k]; if (m && !seen[k]) { seen[k] = 1; list.push(m); } });
         if (!list.length) { toast(t('offNotAvail')); return false; }
-        ensureAudio();
-        P.queue = list; P.name = opts.name || '';
-        if (opts.shuffle != null) P.shuffle = !!opts.shuffle;
         var first = 0;
         if (start < 0) first = Math.floor(Math.random() * list.length);
         else if (startId) { for (var i = 0; i < list.length; i++) if (list[i].id === startId) { first = i; break; } }
-        buildOrder(first); P.idx = 0; P.startedAt = Date.now();
-        active = true;
-        pauseServer();
-        show();
-        playCurrent();
-        return true;
+        return Promise.all(list.slice(Math.max(0, first - 1), first + 2).map(function (m) { return coverUrl(m.coverKey); })).then(function () {
+          ensureAudio();
+          pauseServer();
+          P.queue = list; P.name = opts.name || '';
+          P.ctxId = opts.ctx ? String(opts.ctx) : ctxFromColl(opts.coll);
+          if (opts.shuffle != null) P.shuffle = !!opts.shuffle;
+          buildOrder(first); P.idx = 0; P.startedAt = Date.now();
+          active = true;
+          bindKeys();
+          playCurrent();
+          return true;
+        });
       });
     }
     function current() { return P.queue[P.order[P.idx]] || null; }
@@ -4639,42 +5373,69 @@
       var tr = current();
       if (!tr) return;
       var my = ++tok;
-      D.getBlob(tr.id).then(function (blob) {
+      Promise.all([D.getBlob(tr.id), coverUrl(tr.coverKey)]).then(function (r) {
         if (my !== tok) return;
+        var blob = r[0];
         if (!blob) { toast(t('offLocalFail')); return advance(1); }
         if (P.url) URL.revokeObjectURL(P.url);
         P.url = URL.createObjectURL(blob); P.cur = tr;
         aud.src = P.url;
-        var p = aud.play(); if (p && p.catch) p.catch(function () { paint(); });
-        meta(tr); lastCover = ''; paint();
+        try { applySpeed(); } catch (e) { /* kein Tempo */ }
+        var p = aud.play(); if (p && p.catch) p.catch(function () { Player.repaint(); });
+        meta(tr);
+        Player.syncLocal();
+        // Umgebende Titel vorladen: Cover für Warteschlange und "Als Nächstes"
+        for (var k = 1; k <= 4; k++) { var nx = P.queue[P.order[P.idx + k]]; if (nx) coverUrl(nx.coverKey); }
       }, function () { toast(t('offLocalFail')); });
     }
     function advance(dir) {
-      if (!P.queue.length) return;
+      if (!P.queue.length || !aud) return;
       var n = P.order.length, ni = P.idx + dir;
       if (ni >= n) {
-        if (P.repeat === 'all') ni = 0; else { aud.pause(); aud.currentTime = 0; paint(); return; }
+        if (P.repeat === 'RepeatAll') ni = 0; else { aud.pause(); aud.currentTime = 0; Player.repaint(); return; }
       }
-      if (ni < 0) ni = P.repeat === 'all' ? n - 1 : 0;
+      if (ni < 0) { if (P.repeat === 'RepeatAll') ni = n - 1; else { aud.currentTime = 0; return; } }
       P.idx = ni; playCurrent();
     }
-    function prev() { if (aud.currentTime > 3) { aud.currentTime = 0; return; } advance(-1); }
-    function toggle() { if (!P.cur) return; if (aud.paused) { var p = aud.play(); if (p && p.catch) p.catch(function () { /* egal */ }); } else aud.pause(); }
+    function jump(i) { if (!active || i < 0 || i >= P.order.length) return; P.idx = i; playCurrent(); }
     function stop() {
       if (!active) return;
       active = false; tok++;
       if (aud) { aud.pause(); aud.removeAttribute('src'); try { aud.load(); } catch (e) { /* egal */ } }
       if (P.url) { URL.revokeObjectURL(P.url); P.url = ''; }
-      P.cur = null; P.queue = []; P.order = []; P.idx = -1;
+      P.cur = null; P.queue = []; P.order = []; P.idx = -1; P.ctxId = ''; P.name = ''; items = {};
       try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = null; } catch (e) { /* egal */ }
-      hide();
+      Player.dropLocal();
     }
-    function toggleShuffle() {
-      P.shuffle = !P.shuffle;
-      if (P.queue.length) { var ci = P.order[P.idx]; buildOrder(P.shuffle ? ci : null); P.idx = P.shuffle ? 0 : ci; }
-      paint();
+    function setShuffle(on) {
+      P.shuffle = !!on;
+      if (P.queue.length && P.cur) { var ci = P.order[P.idx]; buildOrder(P.shuffle ? ci : null); P.idx = P.shuffle ? 0 : ci; }
+      Player.syncLocal();
     }
-    function cycleRepeat() { P.repeat = P.repeat === 'off' ? 'all' : P.repeat === 'all' ? 'one' : 'off'; paint(); }
+    function setRepeat(mode) { P.repeat = mode === 'RepeatAll' || mode === 'RepeatOne' ? mode : 'RepeatNone'; Player.syncLocal(); }
+
+    // Nachgebildete Sitzung im Format des Servers
+    function session() {
+      if (!active || !P.cur || !aud) return null;
+      var vol = Math.round(Math.pow(Math.max(0, Math.min(1, aud.volume)), 1 / 3) * 100);
+      return {
+        Id: 'local', DeviceName: '', Client: 'Music Look', SupportsRemoteControl: false, UserId: uid(),
+        NowPlayingItem: itemOf(P.cur),
+        PlayState: { IsPaused: aud.paused, PositionTicks: Math.round((aud.currentTime || 0) * 1e7), RepeatMode: P.repeat, PlaybackOrder: P.shuffle ? 'Shuffle' : 'Default', VolumeLevel: vol },
+        NowPlayingQueue: P.order.map(function (i) { return { Id: P.queue[i].id, PlaylistItemId: 'l' + i }; })
+      };
+    }
+    // Titel der Warteschlange (für die Listen) samt geladenen Covern
+    function itemFor(id) {
+      var k = nid(id);
+      for (var i = 0; i < P.queue.length; i++) if (P.queue[i].id === k) return itemOf(P.queue[i]);
+      return null;
+    }
+    function preload(ids) {
+      var jobs = [];
+      ids.forEach(function (id) { var k = nid(id); for (var i = 0; i < P.queue.length; i++) if (P.queue[i].id === k) { jobs.push(coverUrl(P.queue[i].coverKey)); break; } });
+      return Promise.all(jobs);
+    }
 
     /* ---- Sperrbildschirm (Media Session). Jellyfin bindet seine Tasten nur einmal; sie werden hier ersetzt und leiten bei
        Serverwiedergabe an dieselbe Sitzung weiter. ---- */
@@ -4683,117 +5444,35 @@
       if (handlers || !('mediaSession' in navigator)) return;
       handlers = true;
       var set = function (a, f) { try { navigator.mediaSession.setActionHandler(a, f); } catch (e) { /* nicht unterstützt */ } };
-      set('play', function () { if (active) toggle(); else Player.toggle(); });
+      set('play', function () { if (active) aud.play(); else Player.toggle(); });
       set('pause', function () { if (active) aud.pause(); else Player.toggle(); });
-      set('previoustrack', function () { if (active) prev(); else serverCmd('Playing/PreviousTrack'); });
+      set('previoustrack', function () { if (active) { if (aud.currentTime > 3) aud.currentTime = 0; else advance(-1); } else serverCmd('Playing/PreviousTrack'); });
       set('nexttrack', function () { if (active) advance(1); else serverCmd('Playing/NextTrack'); });
       set('seekto', function (d) { if (active && d && d.seekTime != null) aud.currentTime = d.seekTime; });
     }
     function meta(tr) {
       if (!('mediaSession' in navigator)) return;
-      bindKeys();
       coverUrl(tr.coverKey).then(function (u) {
         try { navigator.mediaSession.metadata = new MediaMetadata({ title: tr.name, artist: tr.artist, album: tr.album, artwork: u ? [{ src: u, sizes: '400x400', type: 'image/jpeg' }] : [] }); } catch (e) { /* ältere Browser */ }
       });
     }
     function position() {
-      if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState || !isFinite(aud.duration)) return;
-      try { navigator.mediaSession.setPositionState({ duration: aud.duration, playbackRate: aud.playbackRate || 1, position: aud.currentTime || 0 }); } catch (e) { /* egal */ }
+      if (!aud || !('mediaSession' in navigator) || !navigator.mediaSession.setPositionState || !isFinite(aud.duration)) return;
+      try { navigator.mediaSession.setPositionState({ duration: aud.duration, playbackRate: aud.playbackRate || 1, position: Math.min(aud.currentTime || 0, aud.duration) }); } catch (e) { /* egal */ }
     }
-
-    /* ---- Oberfläche: Leiste (Handy: über der Navigation, Computer: statt der Player-Leiste) und Vollansicht ---- */
-    function pbtn(cls, name, label, fn) { var b = iconBtn(name, label, cls, fn); return b; }
-    function build() {
-      var bar = el('div', 'mlo-bar');
-      var cov = el('div', 'mlo-cv'), tx = btn('mlo-tx'), tt = el('div', 'mlo-t'), ts = el('div', 'mlo-s');
-      tx.appendChild(tt); tx.appendChild(ts);
-      var bPrev = pbtn('mlo-skip', 'prev', t('prev'), prev), bPlay = pbtn('mlo-play', 'play', t('play'), toggle), bNext = pbtn('mlo-skip', 'next', t('next'), function () { advance(1); });
-      var bClose = pbtn('mlo-close', 'close', t('offLocalStop'), stop);
-      var prog = el('div', 'mlo-prog'); prog.appendChild(el('i'));
-      var bseek = el('input', 'mlo-seek mlo-seek-bar'); bseek.type = 'range'; bseek.min = 0; bseek.max = 1000; bseek.value = 0; bseek.setAttribute('aria-label', 'Position');
-      [cov, tx, bPrev, bPlay, bNext, bseek, bClose, prog].forEach(function (n) { bar.appendChild(n); });
-      cov.addEventListener('click', openFull); tx.addEventListener('click', openFull);
-      var full = el('div', 'mlo-full'); full.hidden = true;
-      var top = el('div', 'mlo-top');
-      var bDown = pbtn('', 'down', t('close'), closeFull); var from = el('div', 'mlo-from'); var sp = el('div'); sp.style.width = '40px';
-      top.appendChild(bDown); top.appendChild(from); top.appendChild(sp);
-      var art = el('div', 'mlo-art'), fcv = el('div', 'mlo-cvbig'); art.appendChild(fcv);
-      var meta2 = el('div', 'mlo-meta'), ft = el('div', 'mlo-ft'), fs = el('div', 'mlo-fs'); meta2.appendChild(ft); meta2.appendChild(fs);
-      var seek = el('input', 'mlo-seek'); seek.type = 'range'; seek.min = 0; seek.max = 1000; seek.value = 0; seek.setAttribute('aria-label', 'Position');
-      var times = el('div', 'mlo-times'), tc = el('span', null, '0:00'), td = el('span', null, '0:00'); times.appendChild(tc); times.appendChild(td);
-      var ctl = el('div', 'mlo-ctl');
-      var cShuf = pbtn('', 'shuffle', t('shuffle'), toggleShuffle), cPrev = pbtn('mlo-skip', 'prev', t('prev'), prev), cPlay = pbtn('mlo-playbig', 'play', t('play'), toggle),
-          cNext = pbtn('mlo-skip', 'next', t('next'), function () { advance(1); }), cRep = pbtn('', 'repeat', t('repeatLbl') || 'Wiederholen', cycleRepeat);
-      [cShuf, cPrev, cPlay, cNext, cRep].forEach(function (b) { ctl.appendChild(b); });
-      var note = el('div', 'mlo-note', t('offLocalNote'));
-      [top, art, meta2, seek, times, ctl, note].forEach(function (n) { full.appendChild(n); });
-      var seeking = false;
-      function bindSeek(inp) {
-        inp.addEventListener('input', function () { seeking = true; inp.style.setProperty('--p', inp.value / 10 + '%'); if (isFinite(aud.duration)) tc.textContent = fmtClock(aud.duration * inp.value / 1000); });
-        inp.addEventListener('change', function () { if (isFinite(aud.duration)) aud.currentTime = aud.duration * inp.value / 1000; seeking = false; });
-      }
-      bindSeek(seek); bindSeek(bseek);
-      ui = { bar: bar, cov: cov, tt: tt, ts: ts, bPlay: bPlay, prog: prog, bseek: bseek, full: full, from: from, fcv: fcv, ft: ft, fs: fs, seek: seek, tc: tc, td: td, cShuf: cShuf, cPlay: cPlay, cRep: cRep, seeking: function () { return seeking; } };
-      document.body.appendChild(full);
-    }
-    var lastCover = '';
-    function place() {
-      if (!ui || !active || !root) return;
-      if (isWide()) { if (ui.bar.parentNode !== root) root.appendChild(ui.bar); }
-      else {
-        var bb = bottomBar || root.querySelector('.ml-bottom');
-        if (bb && ui.bar.parentNode !== bb) bb.insertBefore(ui.bar, bb.firstChild);
-      }
-    }
-    function show() { if (!ui) build(); document.body.classList.add('ml-local-on'); place(); paint(); }
-    function hide() {
-      document.body.classList.remove('ml-local-on');
-      if (ui) { if (ui.bar.parentNode) ui.bar.parentNode.removeChild(ui.bar); ui.full.hidden = true; }
-    }
-    function openFull() { if (!P.cur || !ui) return; ui.full.hidden = false; paint(); }
-    function closeFull() { if (ui) ui.full.hidden = true; }
-    function setPlay(b, playing) {
-      var ic = b.querySelector('.ml-ic'), fresh = icon(playing ? 'pause' : 'play');
-      if (ic) b.replaceChild(fresh, ic); else b.appendChild(fresh);
-      b.setAttribute('aria-label', playing ? t('pause') : t('play')); b.title = playing ? t('pause') : t('play');
-    }
-    function paint() {
-      if (!ui || !active) return;
-      var tr = P.cur;
-      if (!tr) return;
-      var playing = !aud.paused;
-      setPlay(ui.bPlay, playing); setPlay(ui.cPlay, playing);
-      ui.tt.textContent = tr.name; ui.ts.textContent = [tr.artist, t('offFromDevice')].filter(Boolean).join(' • ');
-      ui.ft.textContent = tr.name; ui.fs.textContent = tr.artist || '';
-      ui.from.textContent = P.name ? P.name : t('offFromDevice');
-      ui.cShuf.classList.toggle('ml-on', P.shuffle);
-      ui.cRep.classList.toggle('ml-on', P.repeat !== 'off');
-      var ric = ui.cRep.querySelector('.ml-ic'); ui.cRep.replaceChild(icon(P.repeat === 'one' ? 'repeat_one' : 'repeat'), ric);
-      if (lastCover !== tr.id) { lastCover = tr.id; paintCover(ui.cov, tr.coverKey, tr); paintCover(ui.fcv, tr.coverKey, tr); }
-      paintTime();
-    }
-    function paintTime() {
-      if (!ui || !active) return;
-      var d = aud.duration, c = aud.currentTime || 0, frac = isFinite(d) && d > 0 ? c / d : 0;
-      ui.prog.firstChild.style.width = (frac * 100) + '%';
-      if (!ui.seeking()) {
-        [ui.seek, ui.bseek].forEach(function (s) { s.value = Math.round(frac * 1000); s.style.setProperty('--p', frac * 100 + '%'); });
-        ui.tc.textContent = fmtClock(c);
-      }
-      ui.td.textContent = isFinite(d) ? fmtClock(d) : '0:00';
-    }
-    window.addEventListener('resize', place);
 
     // Offline: nur die geladenen Titel der Liste abspielen (Position des gewünschten Titels bleibt erhalten)
     function offlineIds(ids, start) {
       var keep = [], want = start >= 0 && ids[start] ? nid(ids[start]) : '', ns = -1;
-      ids.forEach(function (id) { if (OFF.has(id)) { if (want && nid(id) === want) ns = keep.length; keep.push(id); } });
+      ids.forEach(function (id) { if (OFF.has(id)) { if (want && nid(id) === want && ns < 0) ns = keep.length; keep.push(id); } });
       return { ids: keep, start: want ? ns : start };
     }
     return {
-      startIds: startIds, stop: stop, place: place, audio: function () { return aud; }, active: function () { return active; },
+      startIds: startIds, stop: stop, audio: function () { return aud; }, active: function () { return active; },
       recentlyStarted: function () { return Date.now() - P.startedAt < 4000; },
-      offlineIds: offlineIds
+      offlineIds: offlineIds, session: session, itemFor: itemFor, itemOf: itemOf, preload: preload, coverUrl: coverUrl,
+      next: function () { advance(1); }, prev: function () { advance(-1); }, jump: jump, setShuffle: setShuffle, setRepeat: setRepeat,
+      ctxId: function () { return active ? P.ctxId : ''; }, name: function () { return P.name; }, ctxFromColl: ctxFromColl
     };
   })();
 
@@ -4819,6 +5498,7 @@
     } catch (e) { /* kein Speicher */ }
 
     function audioEl() {
+      if (OFFPLAY.active()) return OFFPLAY.audio();   // Wiedergabe vom Geraet (heruntergeladene Titel)
       if (P.targetId) return null;   // laeuft auf einem anderen Geraet
       var a = document.querySelector('audio.mediaPlayerAudio');
       return a && P.item && nid(a.currentSrc || a.src || '').indexOf(nid(P.item.Id)) >= 0 ? a : null;
@@ -4885,16 +5565,18 @@
     // Spielt dieses Geraet nichts, wird ein anderes Geraet desselben Benutzers, auf dem Musik laeuft, automatisch angezeigt
     // (wie bei Spotify: auf dem Handy hoeren, im Browser sehen und steuern).
     function fetchState() {
+      if (OFFPLAY.active()) { var ls = OFFPLAY.session(); if (ls) return Promise.resolve(ls); }
+      if (Net.offline()) return Promise.reject(offlineError());
       if (P.targetId && !P.auto) {
         return call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) {
           var s = (r || []).filter(function (x) { return x.Id === P.targetId; })[0] || null;
           if (s) { P.misses = 0; P.targetName = deviceLabel(s); return s; }
-          if (++P.misses >= 3) { setTarget(null); return ML.mySession(); }   // Zielgeraet nicht mehr erreichbar
+          if (++P.misses >= 3) { setTarget(null); return mySession(); }   // Zielgeraet nicht mehr erreichbar
           return P.session;
         });
       }
       var here = thisDeviceId();
-      if (!here) return ML.mySession();
+      if (!here) return mySession();
       return sessionsOfUser().then(function (list) {
         var mine = list.filter(function (x) { return x.DeviceId === here; });
         mine = mine.filter(function (x) { return x.SupportsRemoteControl !== false; })[0] || mine[0] || null;
@@ -4941,7 +5623,7 @@
           var a = document.querySelector('audio.mediaPlayerAudio');
           if (a && !a.paused && nid(a.currentSrc || a.src || '').indexOf(nid(itemId)) >= 0) return Promise.resolve(true);
         }
-        var req = toThis ? ML.mySession() : call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) {
+        var req = toThis ? mySession() : call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) {
           return (r || []).filter(function (x) { return x.Id === target.Id; })[0] || null;
         });
         return req.then(function (sess) { return !!(sess && sess.NowPlayingItem && nid(sess.NowPlayingItem.Id) === nid(itemId)); }, function () { return false; });
@@ -5402,6 +6084,7 @@
 
     /* Befehle an die gesteuerte Sitzung (der jeweilige Web-Client fuehrt sie selbst aus). */
     function command(path, params, body) {
+      if (OFFPLAY.active()) return Promise.reject(new Error('local'));
       return withSession(function (s) { return call('POST', 'Sessions/' + s.Id + '/' + path, params || null, body); });
     }
     // Laeuft die Musik auf diesem Geraet, steuern Pause, Spulen und Lautstaerke das Audio-Element des Web-Clients direkt.
@@ -5425,6 +6108,7 @@
       skipDir = cmd === 'PreviousTrack' ? -1 : 1; skipAt = Date.now();
       // Wie bei Spotify: "Zurueck" springt nach ein paar Sekunden zuerst an den Anfang des Titels.
       if (cmd === 'PreviousTrack' && a && a.currentTime > 3 && canSeekLocal(a, 0)) { seekTo(0); return; }
+      if (OFFPLAY.active()) { if (cmd === 'NextTrack') OFFPLAY.next(); else OFFPLAY.prev(); return; }
       command('Playing/' + cmd).then(function () { kick(); }, function () { toast(t('playFailed')); });
     }
 
@@ -5593,10 +6277,12 @@
     function cycleRepeat() {
       var next = P.repeat === 'RepeatNone' ? 'RepeatAll' : P.repeat === 'RepeatAll' ? 'RepeatOne' : 'RepeatNone';
       P.repeat = next; paint();
+      if (OFFPLAY.active()) { OFFPLAY.setRepeat(next); return; }
       command('Command', null, { Name: 'SetRepeatMode', Arguments: { RepeatMode: next } }).then(function () { kick(); });
     }
     function setShuffle(on) {
       P.shuffle = on; paint();
+      if (OFFPLAY.active()) { OFFPLAY.setShuffle(on); return; }
       command('Command', null, { Name: 'SetShuffleQueue', Arguments: { ShuffleMode: on ? 'Shuffle' : 'Sorted' } }).then(function () { kick(); });
     }
     function setVolume(v) {
@@ -5653,6 +6339,9 @@
     function closePanels(fromHistory) { panels.slice().reverse().forEach(function (p) { p.close(fromHistory); }); }
 
     function ensureNames(ids) {
+      if (OFFPLAY.active()) {   // Titel vom Geraet: Namen und Cover kommen von dort, nicht vom Server
+        return OFFPLAY.preload(ids).then(function () { ids.forEach(function (id) { var it = OFFPLAY.itemFor(id); if (it) queueNames[nid(id)] = it; }); });
+      }
       var missing = ids.filter(function (id) { return !queueNames[nid(id)]; }).slice(0, 100);
       if (!missing.length) return Promise.resolve();
       return itemsOf({ Ids: missing.join(','), Fields: '' }).then(function (items) {
@@ -5694,7 +6383,7 @@
           txt.appendChild(el('div', 'ml-row-title', it ? it.Name : '…'));
           txt.appendChild(el('div', 'ml-row-sub', i === curIdx ? t('queueNow') : (it ? firstArtist(it) : '')));
           row.appendChild(txt);
-          row.addEventListener('click', function () { playIds(ids, i); });
+          row.addEventListener('click', function () { if (OFFPLAY.active()) OFFPLAY.jump(i); else playIds(ids, i); });
           box.appendChild(row);
         });
         var cur = box.querySelector('.ml-playing');
@@ -5707,6 +6396,8 @@
     function loadLyrics(id) {
       var k = nid(id);
       if (lyricCache[k] !== undefined) return Promise.resolve(lyricCache[k]);
+      // Ohne Server (offline oder Wiedergabe vom Geraet): der beim Herunterladen gespeicherte Songtext
+      if (OFFPLAY.active() || Net.offline()) return OFF.lyricsOf(id);
       return call('GET', 'Audio/' + id + '/Lyrics').then(function (r) {
         var lines = ((r && r.Lyrics) || []).map(function (l) { return { t: l.Start != null ? l.Start / 1e7 : null, text: String(l.Text == null ? '' : l.Text) }; });
         var has = lines.some(function (l) { return l.text.trim(); });
@@ -5715,6 +6406,7 @@
         return lyricCache[k];
       }, function (err) {
         if (err && err.status === 404) lyricCache[k] = null;   // kein Songtext; andere Fehler spaeter erneut versuchen
+        else if (err && typeof err.status !== 'number') return OFF.lyricsOf(id);   // Verbindung weg: gespeicherten Songtext zeigen
         return null;
       });
     }
@@ -5728,17 +6420,20 @@
       if (!ui.lyricsCard) return;
       var c = ui.lyricsCard, L = P.lyrics;
       c.textContent = '';
-      c.appendChild(el('h3', 'ml-card-title', t('lyrics')));
+      var head = el('div', 'ml-card-head');
+      head.appendChild(el('h3', 'ml-card-title', t('lyrics')));
       c.classList.toggle('ml-card-plain', !L);
       ui.lyBody = null;
+      if (L) head.appendChild(iconBtn('open_in_full', t('lyricsBig'), 'ml-ly-expand', openLyricsFull));
+      c.appendChild(head);
       if (L === undefined) { c.appendChild(el('p', 'ml-card-muted', t('lyricsLoading'))); return; }
       if (!L) { c.appendChild(el('p', 'ml-card-muted', t('lyricsNone'))); return; }
       ui.lyBody = el('div', 'ml-ly-preview');
+      ui.lyBody.setAttribute('role', 'button'); ui.lyBody.tabIndex = 0;
+      ui.lyBody.addEventListener('click', openLyricsFull);
+      ui.lyBody.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLyricsFull(); } });
       c.appendChild(ui.lyBody);
       fillLyricsPreview();
-      var more = btn('ml-pill ml-ly-more', t('lyricsMore'));
-      more.addEventListener('click', openLyricsPanel);
-      c.appendChild(more);
     }
     function fillLyricsPreview() {
       var L = P.lyrics;
@@ -5761,6 +6456,8 @@
       lyPanel = openPanel(t('lyrics'), P.item.Name);
       lyPanel.el.classList.add('ml-panel-lyrics');
       if (!L.synced) lyPanel.el.classList.add('ml-ly-plain');
+      var phead = lyPanel.el.querySelector('.ml-panel-head');
+      if (phead && lyPanel.el.classList.contains('ml-panel-np')) phead.appendChild(iconBtn('open_in_full', t('lyricsBig'), 'ml-ly-expand ml-panel-expand', openLyricsFull));
       lyPanel.onClose = function () { lyPanel = null; lyPanelIdx = -2; };
       L.lines.forEach(function (ln, i) {
         var d = el('div', 'ml-ly-big' + (ln.text.trim() ? '' : ' ml-ly-gap'), ln.text);
@@ -5786,6 +6483,113 @@
       }
       var d = cur >= 0 ? kids[cur] : null;
       if (d && d.scrollIntoView) { try { d.scrollIntoView({ block: 'center', behavior: jump ? 'auto' : 'smooth' }); } catch (e) { d.scrollIntoView(); } }
+    }
+
+    /* ---------- Songtext gross (wie bei Spotify): ganze Seite in der Farbe des Covers, grosse Zeilen, aktuelle Zeile hell ---------- */
+    var lyFull = null, lyFullIdx = -2, lyFullFor = '', lyUserScroll = 0, lyFullEntry = null;
+    function openLyricsFull() {
+      if (lyFull || !P.item) return;
+      var L = P.lyrics;
+      if (!L) return;
+      var layer = el('div', 'ml-lyfull');
+      layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', t('lyrics'));
+      if (P.pal) setPalette(layer, P.pal);
+      var top = el('div', 'ml-lyf-top');
+      var txt = el('div', 'ml-lyf-text');
+      var lt = el('div', 'ml-lyf-title'), la = el('div', 'ml-lyf-artist');
+      add(txt, lt, la);
+      var shrink = iconBtn('close_fullscreen', t('lyricsSmall'), 'ml-lyf-close', function () { closeLyricsFull(); });
+      add(top, txt, shrink);
+      var body = el('div', 'ml-lyf-body');
+      ['wheel', 'touchmove', 'pointerdown'].forEach(function (ev) { body.addEventListener(ev, function () { lyUserScroll = Date.now() + 4500; }, { passive: true }); });
+      var foot = el('div', 'ml-lyf-foot');
+      var seek = el('input', 'ml-range ml-lyf-seek');
+      seek.type = 'range'; seek.min = '0'; seek.max = '1000'; seek.value = '0'; seek.step = '1'; seek.setAttribute('aria-label', t('seekLabel'));
+      var times = el('div', 'ml-seek-times');
+      var tp = el('span', null, '0:00'), td = el('span', null, '0:00');
+      add(times, tp, td);
+      var ctl = el('div', 'ml-lyf-ctl');
+      var bPrev = iconBtn('prev', t('prev'), 'ml-ctl ml-ctl-skip', function () { skip('PreviousTrack'); });
+      var bPlay = iconBtn('play', t('play'), 'ml-ctl ml-ctl-play ml-lyf-play', toggle);
+      var bNext = iconBtn('next', t('next'), 'ml-ctl ml-ctl-skip', function () { skip('NextTrack'); });
+      add(ctl, bPrev, bPlay, bNext);
+      add(foot, seek, times, ctl);
+      add(layer, top, body, foot);
+      var sk = false;
+      seek.addEventListener('input', function () { sk = true; tp.textContent = fmtClock(duration() * seek.value / 1000); paintRange(seek); });
+      seek.addEventListener('change', function () { seekTo(duration() * seek.value / 1000).then(function () { sk = false; }, function () { sk = false; }); });
+      lyFull = { el: layer, body: body, title: lt, artist: la, seek: seek, tp: tp, td: td, play: bPlay, seeking: function () { return sk; } };
+      document.body.appendChild(layer);
+      lyFullEntry = OV.push(closeLyricsFull);
+      lyFullFor = ''; lyFullIdx = -2; lyUserScroll = 0;
+      fillLyricsFull();
+      paintLyricsFull(true);
+    }
+    function closeLyricsFull(fromHistory) {
+      if (!lyFull) return;
+      var l = lyFull; lyFull = null;
+      if (l.el.parentNode) l.el.parentNode.removeChild(l.el);
+      if (fromHistory !== true) OV.release(lyFullEntry);
+      lyFullEntry = null; lyFullIdx = -2; lyFullFor = '';
+    }
+    // Zeilen fuer den aktuellen Titel aufbauen (bei Titelwechsel neu; ohne Songtext schliesst die Ansicht)
+    function fillLyricsFull() {
+      if (!lyFull || !P.item) return;
+      var L = P.lyrics, key = nid(P.item.Id);
+      lyFull.title.textContent = P.item.Name;
+      lyFull.artist.textContent = firstArtist(P.full || P.item) || '';
+      if (lyFullFor === key) return;
+      lyFullFor = key;
+      lyFull.body.textContent = '';
+      lyFull.body.scrollTop = 0;
+      lyFullIdx = -2;
+      lyFull.el.classList.toggle('ml-lyf-plain', !(L && L.synced));
+      if (!L) { lyFull.body.appendChild(el('p', 'ml-lyf-none', L === undefined ? t('lyricsLoading') : t('lyricsNone'))); return; }
+      L.lines.forEach(function (ln, i) {
+        var d = el('div', 'ml-lyf-line' + (ln.text.trim() ? '' : ' ml-lyf-gap'), ln.text);
+        if (L.synced && ln.t != null) {
+          d.classList.add('ml-seekable');
+          d.addEventListener('click', function () { lyUserScroll = 0; seekTo(ln.t).catch(function () { /* ignorieren */ }); });
+        }
+        lyFull.body.appendChild(d);
+      });
+    }
+    function paintLyricsFull(jump) {
+      if (!lyFull || !P.item) return;
+      var L = P.lyrics;
+      if (lyFullFor !== nid(P.item.Id)) fillLyricsFull();
+      if (L === undefined && lyFull.loading !== nid(P.item.Id)) {   // Titelwechsel (z. B. am Computer ohne offene Vollansicht): Songtext nachladen
+        var want = P.item.Id; lyFull.loading = nid(want);
+        loadLyrics(want).then(function (ly) {
+          if (!lyFull || !P.item || nid(P.item.Id) !== nid(want)) return;
+          P.lyrics = ly; lyFullFor = ''; fillLyricsFull(); paintLyricsFull(true);
+        });
+      }
+      var paused = isPaused();
+      swapIcon(lyFull.play, paused ? 'play' : 'pause', paused ? t('play') : t('pause'));
+      var d = duration(), p = Math.min(position(), d || position());
+      if (!lyFull.seeking()) {
+        lyFull.seek.value = String(d ? Math.round(p / d * 1000) : 0);
+        paintRange(lyFull.seek);
+        lyFull.tp.textContent = fmtClock(p);
+      }
+      lyFull.td.textContent = fmtClock(d);
+      if (!L || !L.synced) return;
+      var cur = lineIndex(L, p);
+      if (cur === lyFullIdx && !jump) return;
+      lyFullIdx = cur;
+      var kids = lyFull.body.children;
+      for (var i = 0; i < kids.length; i++) {
+        kids[i].classList.toggle('ml-now', i === cur);
+        kids[i].classList.toggle('ml-past', cur >= 0 && i < cur);
+      }
+      var node = cur >= 0 ? kids[cur] : null;
+      if (node && (jump || Date.now() > lyUserScroll)) {
+        // aktuelle Zeile in das obere Drittel holen (wie bei Spotify), nicht ganz in die Mitte
+        var br = lyFull.body.getBoundingClientRect(), nr = node.getBoundingClientRect();
+        var target = lyFull.body.scrollTop + (nr.top - br.top) - br.height * 0.3;
+        try { lyFull.body.scrollTo({ top: Math.max(0, target), behavior: jump ? 'auto' : 'smooth' }); } catch (e) { lyFull.body.scrollTop = Math.max(0, target); }
+      }
     }
 
     /* ---------- Karten ---------- */
@@ -5817,7 +6621,7 @@
           txt.appendChild(el('div', 'ml-row-title', it ? it.Name : '…'));
           txt.appendChild(el('div', 'ml-row-sub', it ? firstArtist(it) : ''));
           row.appendChild(txt);
-          row.addEventListener('click', function () { playIds(ids, cur + 1 + k); });
+          row.addEventListener('click', function () { if (OFFPLAY.active()) OFFPLAY.jump(cur + 1 + k); else playIds(ids, cur + 1 + k); });
           c.appendChild(row);
         });
       });
@@ -5931,6 +6735,7 @@
         if (!P.item || P.item.Id !== id) return;
         P.lyrics = ly;
         renderLyricsCard();
+        if (lyFull) { lyFullFor = ''; fillLyricsFull(); paintLyricsFull(true); }
       });
     }
 
@@ -5980,6 +6785,34 @@
       if (P.ctxId === id) return;
       P.ctxId = id;
       try { markContext(); } catch (e) { /* ignorieren */ }
+      paintTopLabel();
+    }
+    // Oben in der Vollansicht: "Wiedergabe aus Playlist" und darunter der Name der Liste (auch offline); sonst das Album
+    function ctxDisplay(it) {
+      var k = P.ctxId, name = '', label = '', rest;
+      if (!k) return null;
+      if (k === 'liked') { label = t('fromLikedCtx'); name = t('liked'); }
+      else if (k.indexOf('album:') === 0) {
+        rest = k.slice(6); label = t('fromAlbumCtx');
+        if (it && it.AlbumId && nid(it.AlbumId) === rest) name = it.Album || '';
+        if (!name) { var ac = OFF.coll('al:' + rest); name = ac ? ac.name : ''; }
+      } else if (/^(mix|radio|mixtape):/.test(k)) {
+        label = t(k.indexOf('radio:') === 0 ? 'fromRadioCtx' : k.indexOf('mixtape:') === 0 ? 'fromMixtapeCtx' : 'fromMixCtx');
+        name = mixTitles[k] || '';
+        if (!name) { var mc = OFF.coll(k); name = mc ? mc.name : ''; }
+      } else {
+        label = t('fromPlaylistCtx');
+        var pl = ((plCache.list || (peekLists() || {}).pls || [])).filter(function (x) { return nid(x.id) === k; })[0];
+        name = pl ? pl.item.Name : '';
+        if (!name) { var pc = OFF.coll('pl:' + k); name = pc ? pc.name : ''; }
+      }
+      return name ? { label: label, name: name } : null;
+    }
+    function paintTopLabel() {
+      if (!full || !P.item || !ui.topKicker) return;
+      var it = P.full || P.item, cd = ctxDisplay(it);
+      ui.topKicker.textContent = cd ? cd.label : (it.Album ? t('fromAlbum') : t('nowPlaying'));
+      ui.topName.textContent = cd ? cd.name : (it.Album || '');
     }
     function hashIds(ids) {
       var h = 5381;
@@ -6000,6 +6833,7 @@
     // Warteschlange abgeleitet: nur eine eindeutige Liste mit genau diesen Titeln zaehlt; bei Unsicherheit wird nichts markiert.
     var ctxRetryAt = 0;
     function resolveContext() {
+      if (P.session && P.session.Id === 'local') { ctxSig = ''; setCtx(OFFPLAY.ctxId()); return; }   // Wiedergabe vom Geraet: Liste ist bekannt
       var ids = (P.queue || []).map(function (x) { return x.Id; }).filter(function (id) { return !autoAdded[nid(id)]; });   // Autoplay-Titel gehoeren nicht zur Playlist
       if (!P.item || !ids.length) { ctxSig = ''; setCtx(''); return; }
       if (intentMatches(ids)) { ctxSig = ''; setCtx(nid(playIntent.key)); return; }
@@ -6047,6 +6881,7 @@
       if (mini) setPalette(mini, pal);
       if (full) setPalette(full, pal);
       if (np) setPalette(np, pal);
+      if (lyFull) setPalette(lyFull.el, pal);
     }
 
     // Verbunden mit einem anderen Geraet, das gerade nichts spielt: Mini-Player und Leiste bleiben, damit man Geraete wechseln kann.
@@ -6131,8 +6966,7 @@
       paintBar(it, sub, paused, remote);
       paintNp(it, sub);
       if (full) {
-        ui.topName.textContent = it.Album || '';
-        ui.topKicker.textContent = it.Album ? t('fromAlbum') : t('nowPlaying');
+        paintTopLabel();
         ui.fullTitle.textContent = P.item.Name;
         ui.fullArtist.textContent = sub || t('unknownArtist');
         ui.cmpTitle.textContent = P.item.Name;
@@ -6196,6 +7030,7 @@
           if (lyPanel) paintLyricsPanel(false);
         }
       }
+      if (lyFull) paintLyricsFull(false);
     }
 
     /* ---------- Abfrage der Sitzung ---------- */
@@ -6210,7 +7045,7 @@
       autoKey = key; autoBusy = true;
       var seed = P.item.Id, have = {};
       q.forEach(function (x) { have[nid(x.Id)] = 1; });
-      loadSongMix(seed, 40).then(function (items) {
+      loadSongMix(q.slice(-3).map(function (x) { return x.Id; }), 40).then(function (items) {
         var ids = [], seen = {};
         items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
         // Nur anhaengen, wenn sich inzwischen nichts geaendert hat (anderer Titel, andere Warteschlange, Autoplay aus).
@@ -6240,6 +7075,8 @@
         return;
       }
       var changed = !P.item || nid(P.item.Id) !== nid(np.Id);
+      var isLocal = s.Id === 'local';
+      if (!changed && P.item && P.item.__local !== np.__local) changed = true;
       var ps = s.PlayState || {};
       P.session = s; P.item = np;
       if (pendingPause && Date.now() < pendingPause.until) {
@@ -6257,7 +7094,8 @@
         P.full = null; P.lyrics = undefined; extrasFor = ''; lyricIdx = -2;
         var id = np.Id;
         P.fav = !!(np.UserData && np.UserData.IsFavorite);
-        loadItem(id, 'Genres,People').then(function (it) {
+        if (isLocal) P.full = np;
+        else loadItem(id, 'Genres,People').then(function (it) {
           if (it && P.item && nid(P.item.Id) === nid(id)) {
             P.full = it;
             P.fav = !!(it.UserData && it.UserData.IsFavorite);
@@ -6272,8 +7110,7 @@
       renderNpCards();
       resolveContext();
       markContext();
-      if (P.item && !isPaused() && OFFPLAY.active() && !OFFPLAY.recentlyStarted()) OFFPLAY.stop();   // Musik vom Server hat übernommen
-      maybeAutoplay(s);
+      if (!isLocal) maybeAutoplay(s);
     }
 
     function poll() {
@@ -6338,6 +7175,7 @@
       var was = fullOpen;
       fullOpen = false;
       closePanels(fromHistory);
+      closeLyricsFull(fromHistory);
       if (full) full.hidden = true;
       bodyCls('ml-full-on', false);
       if (was && fromHistory !== true) OV.release(fullEntry);
@@ -6365,7 +7203,18 @@
       if (panels.length) panels[panels.length - 1].close(); else closeFull();
     });
 
+    // Wiedergabe vom Geraet (OFFPLAY): Zustand sofort uebernehmen bzw. wieder abgeben
+    function syncLocal() { if (!running) return; var s = OFFPLAY.session(); if (s) applySession(s); }
+    function dropLocal() {
+      if (!(P.session && P.session.Id === 'local')) return;
+      P.session = null; P.item = null; P.full = null; P.lyrics = undefined; P.queue = []; P.paused = true;
+      lastItemId = ''; heroCoverId = ''; extrasFor = ''; ctxSig = ''; gapSince = 0; queueNames = {};
+      setCtx(''); markPlaying(); paint(); kick();
+    }
+    function adoptLocal() { if (P.targetId) setTarget(null, ''); autoOff = true; }
+
     return {
+      syncLocal: syncLocal, dropLocal: dropLocal, adoptLocal: adoptLocal,
       start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, toggle: toggle,
       contextId: function () { return P.ctxId; }, isPlayingNow: function () { return !!P.item && !isPaused(); }, isRunning: function () { return running; }, hasUi: function () { return !!(mini && !mini.hidden) || !!P.item; }, currentId: currentId, refreshFavorite: refreshFavorite,
       open: openFull, close: closeFull, isOpen: function () { return fullOpen; },
@@ -6378,7 +7227,6 @@
           if (np.parentNode !== root) root.appendChild(np);
           if (bar.parentNode !== root) root.appendChild(bar);
         }
-        OFFPLAY.place();
       },
       repaint: paint
     };
@@ -6410,6 +7258,7 @@
     document.body.appendChild(root);
     if (isWide()) { ensureSide(); root.insertBefore(side, scroller); }
     Player.mount();
+    OFFV.paintPill();
     window.addEventListener('resize', layout);
     window.addEventListener('orientationchange', function () { setTimeout(layout, 250); });
     if (wideMq) {
@@ -6572,6 +7421,7 @@
     bodyCls('ml-app-on', false);
     bodyCls('ml-app-wide', false);
     Player.stop();
+    OFFPLAY.stop();   // ohne Oberflaeche gibt es keine Bedienung: Wiedergabe vom Geraet endet mit dem Verlassen der Musik-Ansicht
   }
   // Notausgang: blendet die Ansicht hart aus und stellt die Jellyfin-Seite wieder her (falls der normale Seitenwechsel haengt).
   function forceLeave() {
@@ -6743,11 +7593,23 @@
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
-    eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY,
+    eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
     addToPlaylist: function (ids) { addToPlaylist(ids); }
   };
 
+  // Ohne Server lassen sich heruntergeladene Playlists und Alben trotzdem oeffnen: der Kern fragt hier nach, was die ID ist.
+  ML.offlineItem = function (id) {
+    var k = nid(id), c = OFF.coll('pl:' + k);
+    if (c) return { Id: k, Type: 'Playlist', MediaType: 'Audio', Name: c.name };
+    c = OFF.coll('al:' + k);
+    if (c) return { Id: k, Type: 'MusicAlbum', Name: c.name };
+    return null;
+  };
+  Net.start();
+
   // Der Kern hat die Seite evtl. schon gemeldet, bevor dieses Script geladen war.
+  // Stil-Index fuer Mixe im Hintergrund vorbereiten, damit die erste Startseite nicht darauf wartet.
+  setTimeout(function () { try { if (!Net.offline()) Taste.load().then(null, function () { /* Rueckfall: Sofortmix */ }); } catch (e) { /* ohne Index */ } }, 3500);
   try {
     var first = ML.route();
     if (first && first.kind && first.kind !== 'none') onRoute(first);

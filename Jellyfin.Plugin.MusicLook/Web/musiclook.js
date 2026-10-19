@@ -169,6 +169,11 @@
         var item = r && r.Items && r.Items[0];
         if (item) { typeCache[id] = item; if (isMusicItem(item)) rememberMusic(item); }
         return item;
+      }, function (err) {
+        // Ohne Server: heruntergeladene Playlists und Alben (die App-Ansicht liefert eine Beschreibung dafuer) lassen sich trotzdem oeffnen
+        var off = api.offlineItem && api.offlineItem(id);
+        if (off) return off;
+        throw err;
       });
   }
 
@@ -263,23 +268,34 @@
     ensureJamButton();
   }
 
+  function applyConfig(c) {
+    if (/^#[0-9a-fA-F]{6}$/.test(c.accentColor || '')) {
+      config.accentColor = c.accentColor;
+      document.documentElement.style.setProperty('--ml-accent', c.accentColor);
+    }
+    config.jamEnabled = c.jamEnabled !== false;
+    config.spotifyHome = c.spotifyHome !== false;
+    config.shareBaseUrl = typeof c.shareBaseUrl === 'string' ? c.shareBaseUrl : '';
+    if (Array.isArray(c.podcastKeywords)) config.podcastKeywords = c.podcastKeywords.map(String);
+    if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String).map(function (k) { return k.toLowerCase() === 'hörbüch' ? 'hörbücher' : k; });
+  }
+  // Die Einstellungen werden gemerkt: ohne Server (offline) startet die Ansicht trotzdem mit den zuletzt bekannten Werten.
+  var CFG_KEY = 'ml.cfg1';
   function loadConfig() {
     if (configLoaded) return;
     configLoaded = true;
     call('GET', 'MusicLook/Config').then(function (c) {
       if (!c) { finishConfig(); return; }
-      if (/^#[0-9a-fA-F]{6}$/.test(c.accentColor || '')) {
-        config.accentColor = c.accentColor;
-        document.documentElement.style.setProperty('--ml-accent', c.accentColor);
-      }
-      config.jamEnabled = c.jamEnabled !== false;
-      config.spotifyHome = c.spotifyHome !== false;
-      config.shareBaseUrl = typeof c.shareBaseUrl === 'string' ? c.shareBaseUrl : '';
-      if (Array.isArray(c.podcastKeywords)) config.podcastKeywords = c.podcastKeywords.map(String);
-      if (Array.isArray(c.audiobookKeywords)) config.audiobookKeywords = c.audiobookKeywords.map(String).map(function (k) { return k.toLowerCase() === 'hörbüch' ? 'hörbücher' : k; });
+      applyConfig(c);
+      try { window.localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch (e) { /* Speicher gesperrt */ }
       finishConfig();
       ensureJamButton();
-    }, function () { configLoaded = false; });
+    }, function () {
+      configLoaded = false;
+      var saved = null;
+      try { saved = JSON.parse(window.localStorage.getItem(CFG_KEY) || 'null'); } catch (e) { saved = null; }
+      if (saved && typeof saved === 'object' && !configDone) { applyConfig(saved); finishConfig(); }
+    });
   }
 
   function finishConfig() {
