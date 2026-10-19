@@ -2158,6 +2158,7 @@
       var au = itemImg(ctx.album, 600);
       return au ? cover(au, cls) : mosaic(ctx.tracks, cls);
     }
+    if (ctx.kind === 'mix') return mosaic(ctx.tracks, cls);
     var pl = ctx.pl;
     var custom = playlistCoverUrl(pl, 600);
     return custom ? cover(custom, cls) : mosaic(ctx.tracks, cls);
@@ -2186,8 +2187,8 @@
   function playlistMenu(ctx) {
     var pl = ctx.pl, info = pl ? pl.info : null;
     var ids = idsOf(ctx.tracks);
-    var title = ctx.kind === 'liked' ? t('liked') : ctx.kind === 'album' ? ctx.album.Name : pl.item.Name;
-    var sub = ctx.kind === 'playlist' ? t('ownerLine', info.ownerName || '') : ctx.kind === 'album' ? t('albumLine', albumArtistLine(ctx.album)) : t('playlist');
+    var title = ctx.kind === 'liked' ? t('liked') : ctx.kind === 'album' ? ctx.album.Name : ctx.kind === 'mix' ? ctx.mix.title : pl.item.Name;
+    var sub = ctx.kind === 'playlist' ? t('ownerLine', info.ownerName || '') : ctx.kind === 'album' ? t('albumLine', albumArtistLine(ctx.album)) : ctx.kind === 'mix' ? ctx.mix.label : t('playlist');
     var entries = [];
     var jamOk = ML.config().jamEnabled;
 
@@ -2273,7 +2274,7 @@
     var extra = {
       de: {
         forYouToday: 'Für heute empfohlen', forYouSub: 'Passend zu dem, was du zuletzt gehört hast', forUser: 'Für {0}', forUserSub: 'Deine Mixe – passend zu deinem Geschmack', stations: 'Empfohlene Sender', stationsSub: 'Radio zu Künstlern, die du magst',
-        topMixes: 'Deine Top-Mixtapes', topMixesSub: 'Zu deinen meistgehörten Künstlern', likedAlbums: 'Alben mit Songs, die dir gefallen', likedAlbumsSub: 'Mit deinen Lieblingssongs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} Mixtape', mixtapeSub: 'Ausgehend von „{0}“', andMore: ' und mehr', autoplayIsOn: 'Autoplay ist an', autoplayIsOff: 'Autoplay ist aus', autoQueue: 'Empfohlen – Autoplay', eqTitle: 'Equalizer', eqSub: 'Wirkt auf Musik, die in diesem Browser abgespielt wird. Die Bearbeitung läuft auf deinem Gerät, nicht auf dem Server. Änderungen sind nach dem Loslassen sofort zu hören.', eqPresets: 'Voreinstellungen', eq_flat: 'Flach', eq_music: 'Musik', eq_sermon: 'Predigt', eq_audiobook: 'Hörbuch', eq_bass: 'Bass', eq_treble: 'Höhen', eq_custom: 'Eigene', eqDeess: 'De-Esser', eqDeessSub: 'Dämpft scharfe S-Laute bei Sprache.', eqDenoise: 'Rauschunterdrückung', eqDenoiseSub: 'Automatisch, für Sprache und alte Aufnahmen. Bei Musik besser aus.', eqReset: 'Zurücksetzen', eqApply: 'Übernehmen', eqApplied: 'Equalizer übernommen', eqIOS: 'Auf iPhone und iPad ist der Equalizer im Browser nicht verfügbar: Jellyfin selbst vermeidet dort Web Audio, weil es Tempo und Tonhöhe der Wiedergabe stört.', eqUnsupported: 'Dieser Browser unterstützt Web Audio nicht.', eqRemote: 'Gerade läuft die Musik auf einem anderen Gerät. Der Equalizer wirkt erst, wenn du hier abspielst.', eqNoDsp: 'Rauschunterdrückung und De-Esser konnten in diesem Browser nicht gestartet werden.',
+        topMixes: 'Deine Top-Mixtapes', topMixesSub: 'Zu deinen meistgehörten Künstlern', likedAlbums: 'Alben mit Songs, die dir gefallen', likedAlbumsSub: 'Mit deinen Lieblingssongs', mixN: 'Mix {0}', mixLbl: 'Mix', mixtapeLbl: 'Mixtape', radioLbl: 'Radio', mixtapeOf: '{0} Mixtape', mixtapeSub: 'Ausgehend von „{0}“', andMore: ' und mehr', autoplayIsOn: 'Autoplay ist an', autoplayIsOff: 'Autoplay ist aus', autoQueue: 'Empfohlen – Autoplay', eqTitle: 'Equalizer', eqSub: 'Wirkt auf Musik, die in diesem Browser abgespielt wird. Die Bearbeitung läuft auf deinem Gerät, nicht auf dem Server. Änderungen sind nach dem Loslassen sofort zu hören.', eqPresets: 'Voreinstellungen', eq_flat: 'Flach', eq_music: 'Musik', eq_sermon: 'Predigt', eq_audiobook: 'Hörbuch', eq_bass: 'Bass', eq_treble: 'Höhen', eq_custom: 'Eigene', eqDeess: 'De-Esser', eqDeessSub: 'Dämpft scharfe S-Laute bei Sprache.', eqDenoise: 'Rauschunterdrückung', eqDenoiseSub: 'Automatisch, für Sprache und alte Aufnahmen. Bei Musik besser aus.', eqReset: 'Zurücksetzen', eqApply: 'Übernehmen', eqApplied: 'Equalizer übernommen', eqIOS: 'Auf iPhone und iPad ist der Equalizer im Browser nicht verfügbar: Jellyfin selbst vermeidet dort Web Audio, weil es Tempo und Tonhöhe der Wiedergabe stört.', eqUnsupported: 'Dieser Browser unterstützt Web Audio nicht.', eqRemote: 'Gerade läuft die Musik auf einem anderen Gerät. Der Equalizer wirkt erst, wenn du hier abspielst.', eqNoDsp: 'Rauschunterdrückung und De-Esser konnten in diesem Browser nicht gestartet werden.',
         jellyfinHome: 'Jellyfin-Startseite', allLibs: 'Alle Bibliotheken', allLibsHint: 'Zurück zu Jellyfin: Filme, Serien und mehr', appMenu: 'Menü', emptyPlaylist: 'Diese Playlist ist leer.', addFirstSongs: 'Titel hinzufügen',
         upNext: 'Als Nächstes', openPlayer: 'Wiedergabe öffnen', collapse: 'Minimieren', seekLabel: 'Position', queueNow: 'Läuft gerade',
         backToSpotify: 'Spotify-Ansicht', likedSub: 'Playlist • {0}', moreTracks: 'Weitere Titel', noPlaylistsShared: 'Noch nichts mit dir geteilt.',
@@ -2298,7 +2299,7 @@
       },
       en: {
         forYouToday: 'Recommended for today', forYouSub: 'Based on what you listened to lately', forUser: 'Made for {0}', forUserSub: 'Your mixes – picked for your taste', stations: 'Recommended stations', stationsSub: 'Radio for artists you like',
-        topMixes: 'Your top mixtapes', topMixesSub: 'For your most played artists', likedAlbums: 'Albums with songs you like', likedAlbumsSub: 'With your liked songs', mixN: 'Mix {0}', radioLbl: 'Radio', mixtapeOf: '{0} mixtape', mixtapeSub: 'Starting from "{0}"', andMore: ' and more', autoplayIsOn: 'Autoplay is on', autoplayIsOff: 'Autoplay is off', autoQueue: 'Recommended – Autoplay', eqTitle: 'Equalizer', eqSub: 'Applies to music played in this browser. Processing runs on your device, not on the server. Changes are audible as soon as you let go.', eqPresets: 'Presets', eq_flat: 'Flat', eq_music: 'Music', eq_sermon: 'Sermon', eq_audiobook: 'Audiobook', eq_bass: 'Bass', eq_treble: 'Treble', eq_custom: 'Custom', eqDeess: 'De-esser', eqDeessSub: 'Tames harsh S sounds in speech.', eqDenoise: 'Noise reduction', eqDenoiseSub: 'Automatic, for speech and old recordings. Better off for music.', eqReset: 'Reset', eqApply: 'Apply', eqApplied: 'Equalizer applied', eqIOS: 'The equalizer is not available in the browser on iPhone and iPad: Jellyfin itself avoids Web Audio there because it disturbs playback speed and pitch.', eqUnsupported: 'This browser does not support Web Audio.', eqRemote: 'Music is playing on another device. The equalizer only takes effect when you play here.', eqNoDsp: 'Noise reduction and de-esser could not be started in this browser.',
+        topMixes: 'Your top mixtapes', topMixesSub: 'For your most played artists', likedAlbums: 'Albums with songs you like', likedAlbumsSub: 'With your liked songs', mixN: 'Mix {0}', mixLbl: 'Mix', mixtapeLbl: 'Mixtape', radioLbl: 'Radio', mixtapeOf: '{0} mixtape', mixtapeSub: 'Starting from "{0}"', andMore: ' and more', autoplayIsOn: 'Autoplay is on', autoplayIsOff: 'Autoplay is off', autoQueue: 'Recommended – Autoplay', eqTitle: 'Equalizer', eqSub: 'Applies to music played in this browser. Processing runs on your device, not on the server. Changes are audible as soon as you let go.', eqPresets: 'Presets', eq_flat: 'Flat', eq_music: 'Music', eq_sermon: 'Sermon', eq_audiobook: 'Audiobook', eq_bass: 'Bass', eq_treble: 'Treble', eq_custom: 'Custom', eqDeess: 'De-esser', eqDeessSub: 'Tames harsh S sounds in speech.', eqDenoise: 'Noise reduction', eqDenoiseSub: 'Automatic, for speech and old recordings. Better off for music.', eqReset: 'Reset', eqApply: 'Apply', eqApplied: 'Equalizer applied', eqIOS: 'The equalizer is not available in the browser on iPhone and iPad: Jellyfin itself avoids Web Audio there because it disturbs playback speed and pitch.', eqUnsupported: 'This browser does not support Web Audio.', eqRemote: 'Music is playing on another device. The equalizer only takes effect when you play here.', eqNoDsp: 'Noise reduction and de-esser could not be started in this browser.',
         jellyfinHome: 'Jellyfin home', allLibs: 'All libraries', allLibsHint: 'Back to Jellyfin: movies, shows and more', appMenu: 'Menu', emptyPlaylist: 'This playlist is empty.', addFirstSongs: 'Add tracks',
         upNext: 'Up next', openPlayer: 'Open player', collapse: 'Collapse', seekLabel: 'Position', queueNow: 'Playing now',
         backToSpotify: 'Spotify view', likedSub: 'Playlist • {0}', moreTracks: 'More tracks', noPlaylistsShared: 'Nothing shared with you yet.',
@@ -2504,10 +2505,12 @@
     else if (item.Type === 'MusicArtist') p = itemsOf({ ArtistIds: item.Id, IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'PlayCount,SortName', SortOrder: 'Descending,Ascending', Limit: 100 });
     else if (item.Type === 'Audio') p = Promise.resolve([item]);
     else p = Promise.resolve([]);
-    p.then(function (tracks) {
+    var key = item.Type === 'Playlist' ? nid(item.Id) : item.Type === 'MusicAlbum' ? 'album:' + nid(item.Id) : '';
+    return p.then(function (tracks) {
       var ids = idsOf(tracks);
-      if (ids.length) playIds(ids, 0, { ctx: item.Type === 'Playlist' ? nid(item.Id) : '' }); else toast(t('nothingYet'));
-    }, function () { toast(t('playFailed')); });
+      if (ids.length) return playIds(ids, 0, { ctx: key });
+      toast(t('nothingYet')); return false;
+    }, function () { toast(t('playFailed')); return false; });
   }
 
   function tile(opts) {
@@ -2534,17 +2537,18 @@
   function itemTile(item) {
     var round = item.Type === 'MusicArtist';
     var sub = item.Type === 'MusicAlbum' ? albumArtistLine(item) : item.Type === 'MusicArtist' ? t('artist') : item.Type === 'Audio' ? firstArtist(item) : '';
+    var key = item.Type === 'MusicAlbum' ? 'album:' + nid(item.Id) : '';
     return tile({
-      title: item.Name, sub: sub, round: round, img: itemImg(item, 300),
+      ctx: key, title: item.Name, sub: sub, round: round, img: itemImg(item, 300),
       onClick: function () { go(hrefFor(item)); },
-      play: function () { playItemQuick(item); }
+      play: function () { pressCtx(key, function () { return playItemQuick(item); }); }
     });
   }
 
   function playlistTile(pl) {
     var c = playlistCover(pl, 'ml-tile-cover', 300);
     var sub = pl.info.sharedWithMe && !pl.info.isOwner ? t('byOwner', pl.info.ownerName || '') : (pl.item.ChildCount != null ? countText(pl.item.ChildCount) : t('playlist'));
-    return tile({ ctx: pl.id, title: pl.item.Name, sub: sub, coverEl: c, onClick: function () { go(hrefFor(pl.item)); }, play: function () { playItemQuick(pl.item); } });
+    return tile({ ctx: pl.id, title: pl.item.Name, sub: sub, coverEl: c, onClick: function () { go(hrefFor(pl.item)); }, play: function () { pressCtx(nid(pl.id), function () { return playItemQuick(pl.item); }); } });
   }
 
   function shelf(host, title, tiles, extraClass) {
@@ -2737,33 +2741,91 @@
     tracks.forEach(function (x) { var a = firstArtist(x); if (a && !seen[a] && names.length < 3) { seen[a] = 1; names.push(a); } });
     return names.length ? names.join(', ') + t('andMore') : '';
   }
-  function playMixFrom(path, failKey) {
+  function playMixFrom(path, failKey, ctxKey) {
     return call('GET', path, { UserId: uid(), Limit: 60 }).then(function (r) {
       var ids = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); }).map(function (i) { return i.Id; });
-      if (!ids.length) { toast(t(failKey || 'radioFailed')); return; }
-      return playIds(ids, 0);
-    }, function () { toast(t(failKey || 'radioFailed')); });
+      if (!ids.length) { toast(t(failKey || 'radioFailed')); return false; }
+      return playIds(ids, 0, ctxKey ? { ctx: ctxKey } : null);
+    }, function () { toast(t(failKey || 'radioFailed')); return false; });
   }
   function trackShelfTile(tr, ids, i) {
     function go1() { playIds(ids, i); }
     return tile({ title: tr.Name, sub: firstArtist(tr), img: itemImg(tr, 300), onClick: go1, play: go1 });
   }
+
+  // Mixe, Sender und Mixtapes: Antippen oeffnet erst die Titelliste (eigene Seite), der gruene Knopf auf der Kachel spielt direkt.
+  var mixStore = {};   // 'art|id' -> { tracks, n }: dieselben Titel wie auf der Kachel
+  function mixKey(kind, id) { return kind + ':' + nid(id); }
+  function mixHash(kind, id, n, name) {
+    return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=mix&mlkind=' + kind + '&mlid=' + id + '&mln=' + (n || 0) + (name ? '&mlt=' + encodeURIComponent(name) : '');
+  }
+  function openMix(kind, id, n, name) { ensureLibrary().then(function () { go(mixHash(kind, id, n, name)); }); }
+
   function mixTile(n, tracks) {
     var ids = tracks.map(function (x) { return x.Id; });
+    var seed = tracks[0], key = mixKey('mix', seed.Id);
+    mixStore[key] = { tracks: tracks, n: n };
     var holder = cover(null, 'ml-tile-cover');
     var pairs = pairsOf(tracks);
     if (pairs.length) fillCover(holder, pairs);
-    function go1() { playIds(ids, 0); }
-    return tile({ title: t('mixN', n), sub: artistsLine(tracks), coverEl: holder, onClick: go1, play: go1 });
+    return tile({
+      ctx: key, title: t('mixN', n), sub: artistsLine(tracks), coverEl: holder,
+      onClick: function () { openMix('mix', seed.Id, n); },
+      play: function () { pressCtx(key, function () { return playIds(ids, 0, { ctx: key }); }); }
+    });
   }
   function radioTile(artist, track) {
-    function go1() { playMixFrom('Artists/' + artist.Id + '/InstantMix'); }
-    return tile({ title: artist.Name, sub: t('radioLbl'), round: true, img: itemImg(track, 300), onClick: go1, play: go1 });
+    var key = mixKey('radio', artist.Id);
+    return tile({
+      ctx: key, title: artist.Name, sub: t('radioLbl'), round: true, img: itemImg(track, 300),
+      onClick: function () { openMix('radio', artist.Id, 0, artist.Name); },
+      play: function () { pressCtx(key, function () { return playMixFrom('Artists/' + artist.Id + '/InstantMix', null, key); }); }
+    });
   }
   function mixtapeTile(artistName, track) {
-    function go1() { playMixFrom('Songs/' + track.Id + '/InstantMix'); }
-    return tile({ title: t('mixtapeOf', artistName), sub: t('mixtapeSub', track.Name), img: itemImg(track, 300), onClick: go1, play: go1 });
+    var key = mixKey('mixtape', track.Id);
+    return tile({
+      ctx: key, title: t('mixtapeOf', artistName), sub: t('mixtapeSub', track.Name), img: itemImg(track, 300),
+      onClick: function () { openMix('mixtape', track.Id, 0, artistName); },
+      play: function () { pressCtx(key, function () { return playMixFrom('Songs/' + track.Id + '/InstantMix', null, key); }); }
+    });
   }
+
+  // Seite eines Mixes / Senders / Mixtapes: Hero mit Play, darunter die Titel.
+  function showMixDetail(host, seq, kind, id, n, name) {
+    renderDetailLoading(host);
+    var key = mixKey(kind, id);
+    function loadTracks() {
+      var c = mixStore[key];
+      if (c && c.tracks && c.tracks.length) return Promise.resolve({ tracks: c.tracks, n: c.n || n });
+      if (kind === 'mix') {
+        return Promise.all([loadItem(id, ''), loadSongMix(id, 41)]).then(function (res) {
+          var seed = res[0];
+          var rest = res[1].filter(function (x) { return nid(x.Id) !== nid(id); }).slice(0, 40);
+          return { tracks: (seed ? [seed] : []).concat(rest), n: n };
+        });
+      }
+      var path = kind === 'radio' ? 'Artists/' + id + '/InstantMix' : 'Songs/' + id + '/InstantMix';
+      return call('GET', path, { UserId: uid(), Limit: 60 }).then(function (r) {
+        var items = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(String(i.Id || '')); });
+        return { tracks: items, n: n };
+      });
+    }
+    function start() {
+      loadTracks().then(function (res) {
+        if (seq !== state.view) return;
+        if (!res.tracks.length) throw new Error('empty');
+        mixStore[key] = { tracks: res.tracks, n: res.n };
+        var title = kind === 'mix' ? t('mixN', res.n || 1) : kind === 'radio' ? (name || t('radioLbl')) : t('mixtapeOf', name || '');
+        var label = kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl');
+        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, sub: artistsLine(res.tracks) }, tracks: res.tracks, canEdit: false });
+        ctx.reload = function () { delete mixStore[key]; start(); };
+        buildDetail(host, ctx);
+      }, function () { if (seq === state.view) renderDetailFailed(host, function () { renderDetailLoading(host); start(); }); });
+    }
+    start();
+  }
+
   function subShelf(host, title, sub, tiles, cls) {
     var box = shelf(host, title, tiles, cls);
     if (box && sub) box.insertBefore(el('div', 'ml-shelf-sub', sub), box.querySelector('.ml-shelf-row'));
@@ -3310,7 +3372,7 @@
     }
     hero.appendChild(bar);
 
-    var title = ctx.kind === 'liked' ? t('liked') : ctx.kind === 'album' ? ctx.album.Name : ctx.pl.item.Name;
+    var title = ctx.kind === 'liked' ? t('liked') : ctx.kind === 'album' ? ctx.album.Name : ctx.kind === 'mix' ? ctx.mix.title : ctx.pl.item.Name;
     var coverEl = coverFor(ctx, 'ml-hero-cover');
     hero.appendChild(coverEl);
     var heroImg = coverEl.querySelector('img');
@@ -3319,7 +3381,7 @@
 
     if (!edit) {
       var info = el('div', 'ml-hero-info');
-      info.appendChild(el('div', 'ml-hero-kind', ctx.kind === 'album' ? (ctx.book ? t('bookLabel') : t('album')) : t('playlist')));
+      info.appendChild(el('div', 'ml-hero-kind', ctx.kind === 'album' ? (ctx.book ? t('bookLabel') : t('album')) : ctx.kind === 'mix' ? ctx.mix.label : t('playlist')));
       info.appendChild(el('h1', 'ml-hero-title', title));
       var desc = ctx.kind === 'playlist' ? (ctx.pl.item.Overview || '').trim() : '';
       if (desc) info.appendChild(el('p', 'ml-hero-desc', desc));
@@ -3329,6 +3391,8 @@
         who.appendChild(avatar(ctx.pl.info.ownerId, ctx.pl.info.ownerName));
         who.appendChild(el('span', 'ml-owner-name', ctx.pl.info.ownerName || ''));
         if (ctx.pl.info.isOwner) who.appendChild(iconBtn('add', t('invitePeople'), 'ml-owner-add', function () { ML.openShareSheet(ctx.pl.id); }));
+      } else if (ctx.kind === 'mix') {
+        if (ctx.mix.sub) who.appendChild(el('span', 'ml-owner-name', ctx.mix.sub));
       } else if (ctx.kind === 'album' && ctx.book) {
         var au = albumArtistLine(ctx.album);
         who.appendChild(el('span', 'ml-owner-name', [t('bookLabel'), au].filter(Boolean).join(' • ')));
@@ -3357,19 +3421,18 @@
       var left = el('div', 'ml-actions-left');
       if (ctx.kind === 'playlist') left.appendChild(iconBtn('download', t('download'), '', function () { openDownload(ctx.pl); }));
       if (ctx.kind === 'liked') left.appendChild(iconBtn('add', t('addFirstSongs'), 'ml-liked-add', function () { openAddSongs({ liked: true }, ctx.reload); }));
-      if (ctx.kind !== 'liked' && !(ctx.book && ctx.album.Type !== 'MusicAlbum')) left.appendChild(iconBtn('share', t('share'), '', function () {
+      if (ctx.kind !== 'liked' && ctx.kind !== 'mix' && !(ctx.book && ctx.album.Type !== 'MusicAlbum')) left.appendChild(iconBtn('share', t('share'), '', function () {
         if (ctx.kind === 'playlist') shareList(ctx);
         else openShare({ url: linkFor(ctx.album.Id), title: ctx.album.Name, subtitle: albumArtistLine(ctx.album), cover: itemImg(ctx.album, 120), note: '' });
       }));
       left.appendChild(iconBtn('more_v', t('more'), '', function () { playlistMenu(ctx); }));
       var right = el('div', 'ml-actions-right');
       var sh = iconBtn('shuffle', t('shuffle'), 'ml-shuffle-btn', function () { playCtx(ctx, true); });
-      var ctxKey = ctx.kind === 'liked' ? 'liked' : ctx.kind === 'playlist' ? nid(ctx.pl.id) : '';
+      var ctxKey = ctxKeyOf(ctx);
       var pl = iconBtn('play', t('play'), 'ml-play-btn', function () {
-        if (ctxKey && Player.contextId() === ctxKey) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
-        playCtx(ctx, false);
+        pressCtx(ctxKey, function () { return playCtx(ctx, false); });
       });
-      if (ctxKey) { pl.dataset.ctx = ctxKey; setTimeout(syncPlayButtons, 0); }
+      if (ctxKey) { pl.dataset.ctx = nid(ctxKey); setTimeout(syncPlayButtons, 0); }
       right.appendChild(sh); right.appendChild(pl);
       actions.appendChild(left); actions.appendChild(right);
       hero.appendChild(actions);
@@ -3397,17 +3460,43 @@
     if (!ctx) return '';
     if (ctx.kind === 'liked') return 'liked';
     if (ctx.kind === 'playlist' && ctx.pl && ctx.pl.id) return nid(ctx.pl.id);
+    if (ctx.kind === 'mix' && ctx.mix) return ctx.mix.key;
+    if (ctx.kind === 'album' && ctx.album && ctx.album.Id) return 'album:' + nid(ctx.album.Id);
     return '';
   }
   function playCtx(ctx, shuf) {
     var key = ctxKeyOf(ctx);
+    if (key) markPending(key);
     if (ctx.playAll && ctx.subs && ctx.subs.length) {
-      ctx.playAll().then(function (ids) { if (ids.length) playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key }); }, function () { toast(t('playFailed')); });
-      return;
+      return ctx.playAll().then(function (ids) {
+        if (ids.length) return playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key }).then(function (ok) { if (ok === false) clearPending(key); return ok; });
+        clearPending(key); return false;
+      }, function () { clearPending(key); toast(t('playFailed')); return false; });
     }
-    if (!ctx.tracks.length) return;
+    if (!ctx.tracks.length) { clearPending(key); return Promise.resolve(false); }
     var ids = idsOf(ctx.tracks);
-    playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key });
+    return playIds(shuf ? shuffled(ids) : ids, 0, { ctx: key }).then(function (ok) { if (ok === false) clearPending(key); return ok; });
+  }
+
+  // Abspielknopf (Detailseite, Kachel): laeuft diese Liste schon, pausiert/setzt er fort; sonst startet er sie.
+  // Bis der Server den Start bestaetigt hat, zeigt der Knopf schon Pause (kein Warten auf das Dreieck).
+  var pendingCtx = null, pendingTimer = 0;
+  function markPending(key) {
+    pendingCtx = { key: key, until: Date.now() + 9000 };
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(function () { pendingCtx = null; syncPlayButtons(); }, 9100);
+    syncPlayButtons();
+  }
+  function clearPending(key) {
+    if (!pendingCtx || (key && pendingCtx.key !== key)) return;
+    pendingCtx = null; clearTimeout(pendingTimer);
+    syncPlayButtons();
+  }
+  function pressCtx(key, start) {
+    if (key && Player.contextId() === key) { Player.toggle(); setTimeout(syncPlayButtons, 300); return; }
+    if (key) markPending(key);
+    var p = start();
+    if (key && p && typeof p.then === 'function') p.then(function (ok) { if (ok === false) clearPending(key); }, function () { clearPending(key); });
   }
 
   var TRACK_PAGE = 150;
@@ -3482,8 +3571,11 @@
   // Grosser Abspielknopf der Detailseite: zeigt Pause, solange genau diese Playlist laeuft.
   function syncPlayButtons() {
     var cur = Player.contextId(), playing = Player.isPlayingNow();
-    ML.qsa('.ml-play-btn[data-ctx]', content).forEach(function (b) {
-      var on = !!cur && b.dataset.ctx === cur && playing;
+    var pend = pendingCtx && Date.now() < pendingCtx.until ? pendingCtx.key : '';
+    if (pend && cur === pend && playing) { pendingCtx = null; pend = ''; }
+    ML.qsa('.ml-play-btn[data-ctx], .ml-tile[data-ctx] .ml-tile-play', root || document).forEach(function (b) {
+      var key = b.dataset.ctx || (b.closest && b.closest('[data-ctx]') ? b.closest('[data-ctx]').dataset.ctx : '');
+      var on = pend ? key === nid(pend) : (!!cur && key === cur && playing);
       if (b.__on === on) return;
       b.__on = on;
       var ic = b.querySelector('.ml-ic');
@@ -5615,12 +5707,13 @@
       if (state.classic) { hideApp(); toggleClassicFab(true); return; }
 
       var folderId = isLib && route.params && route.params.mlview === 'folder' && ID_RE.test(route.params.mlid || '') ? route.params.mlid : null;
+      var mixKind = isLib && route.params && route.params.mlview === 'mix' && /^(mix|radio|mixtape)$/.test(route.params.mlkind || '') && ID_RE.test(route.params.mlid || '') ? route.params.mlkind : null;
       if (isLib && route.id && !isMediaLib(route.id)) state.libraryId = route.id;
       var key;
-      if (isLib) key = folderId ? 'folder|' + folderId : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
+      if (isLib) key = folderId ? 'folder|' + folderId : mixKind ? 'mix|' + mixKind + '|' + nid(route.params.mlid) : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
       else key = 'detail|' + route.id;
       if (isWide() && state.tab === 'library') state.tab = 'home';
-      var mcat = isLib && route.id && !folderId && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
+      var mcat = isLib && route.id && !folderId && !mixKind && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
       if (mcat && state.autoChip !== route.id) { state.autoChip = route.id; state.chip = mcat; state.tab = 'home'; key = 'tab|home'; }
       if (isDetail && route.params && route.params.mltrack && ID_RE.test(route.params.mltrack)) state.focusTrack = route.params.mltrack;
       var wasShown = root && !root.hidden;
@@ -5633,6 +5726,7 @@
       state.view++;
       var seq = state.view;
       if (folderId) showFolderDetail(content, seq, folderId, route.id);
+      else if (mixKind) showMixDetail(content, seq, mixKind, route.params.mlid, parseInt(route.params.mln, 10) || 0, route.params.mlt || '');
       else if (key === 'liked') showLikedDetail(content, seq);
       else if (isDetail) {
         if (!state.libraryId) ensureLibrary();
