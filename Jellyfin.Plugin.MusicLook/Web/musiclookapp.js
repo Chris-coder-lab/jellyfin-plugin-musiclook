@@ -1973,6 +1973,11 @@
     var input = el('input', 'ml-field ml-field-box');
     input.type = 'text'; input.maxLength = 100; input.placeholder = t('newPlaylistPh'); input.setAttribute('autocomplete', 'off');
     ui.sheet.appendChild(input);
+    if (!(ids && ids.length)) {
+      var imp = btn('ml-sp-link', t('spMenu'));
+      imp.addEventListener('click', function () { ui.close(); openSpotifyImport(); });
+      ui.sheet.appendChild(imp);
+    }
     var row = el('div', 'ml-sheet-actions');
     var no = btn('ml-pill ml-flat', t('cancel'));
     var make = btn('ml-pill ml-primary', t('createPlaylist'));
@@ -2394,6 +2399,294 @@
       }, function () { return []; });
     }
     return { load: load, similar: similar, label: labelOf, artistSeeds: artistSeeds, core: TasteCore, ready: function () { return !!ix; } };
+  })();
+  /* ---------- Spotify-Import: Titelliste lesen und mit der Bibliothek abgleichen ----------
+     Reiner Rechenteil ohne Oberflaeche: Spotify-Seite/CSV/Text -> Titelliste, Abgleich mit den Titeln der Jellyfin-Bibliothek
+     (Titel + Kuenstler, tolerant bei "Remastered", "feat." und Klammern), Tabelle fuer Excel. */
+  var SPCore = (function () {
+    function fold(s) {
+      var x = String(s == null ? '' : s);
+      try { x = x.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) { /* ohne normalize */ }
+      return x.toLowerCase().replace(/ /g, ' ');
+    }
+    function words(s) { return fold(s).replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); }
+    var VERS = /(remaster|version|live|edit|mix|radio|single|mono|stereo|deluxe|bonus|acoustic|demo|explicit|clean|anniversary|\b(19|20)\d\d\b)/;
+    // Kern des Titels: ohne Klammern, ohne "- Remastered 2011", ohne "feat. ..."
+    function coreTitle(s) {
+      var raw = fold(s).replace(/&/g, ' and ');
+      var x = raw.replace(/\s*[(\[][^)\]]*[)\]]/g, ' ');
+      var parts = x.split(/\s+[-–—]\s+/);
+      if (parts.length > 1) {
+        var keep = [parts[0]];
+        for (var i = 1; i < parts.length; i++) if (!VERS.test(parts[i])) keep.push(parts[i]);
+        x = keep.join(' ');
+      }
+      x = x.replace(/\b(feat|ft|featuring)\b\.?.*$/, ' ');
+      x = x.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      return x || words(s);
+    }
+    function artistList(v) {
+      var arr = Array.isArray(v) ? v : [v];
+      var out = [], seen = {};
+      arr.forEach(function (a) {
+        fold(a).replace(/&/g, ',').split(/\s*(?:,|;|\/|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b|\bx\b|\band\b)\s*/).forEach(function (p) {
+          var w = p.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+          if (w && !seen[w]) { seen[w] = 1; out.push(w); }
+        });
+      });
+      return out;
+    }
+    function lev(a, b) {
+      if (a === b) return 0;
+      var n = a.length, m = b.length;
+      if (!n) return m;
+      if (!m) return n;
+      var prev = [], cur = [], i, j;
+      for (j = 0; j <= m; j++) prev[j] = j;
+      for (i = 1; i <= n; i++) {
+        cur[0] = i;
+        for (j = 1; j <= m; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+        var t = prev; prev = cur; cur = t;
+      }
+      return prev[m];
+    }
+    function titleSim(a, b) {
+      if (!a || !b) return 0;
+      if (a === b) return 1;
+      var ratio = 1 - lev(a, b) / Math.max(a.length, b.length);
+      // gleiche Woerter in anderer Reihenfolge / ein Titel steht im anderen
+      var ta = a.split(' '), tb = b.split(' '), set = {}, common = 0;
+      tb.forEach(function (w) { set[w] = 1; });
+      ta.forEach(function (w) { if (set[w]) common++; });
+      var dice = 2 * common / (ta.length + tb.length);
+      return Math.max(ratio, dice >= 1 ? 0.97 : dice * 0.9);
+    }
+    function artistScore(sp, lib) {
+      if (!sp.length) return 0.5;
+      if (!lib.length) return 0.2;
+      var best = 0;
+      sp.forEach(function (a) {
+        lib.forEach(function (b) {
+          var s = 0;
+          if (a === b) s = 1;
+          else if (a.length >= 4 && b.length >= 4 && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0)) s = 0.8;
+          else if (a.length >= 5 && b.length >= 5 && 1 - lev(a, b) / Math.max(a.length, b.length) >= 0.85) s = 0.8;
+          if (s > best) best = s;
+        });
+      });
+      return best;
+    }
+
+    /* ---------- Spotify-Seite -> { name, description, cover, tracks } ---------- */
+    function tryParse(s) {
+      if (s == null) return null;
+      var str = String(s).trim();
+      if (!str) return null;
+      var tries = [function () { return str; }, function () { return decodeURIComponent(str); }, function () { return atob(str); }];
+      for (var i = 0; i < tries.length; i++) {
+        try { var o = JSON.parse(tries[i]()); if (o && typeof o === 'object') return o; } catch (e) { /* naechster Versuch */ }
+      }
+      return null;
+    }
+    function isTrackObj(o) {
+      if (!o || typeof o !== 'object') return false;
+      var x = o.track && typeof o.track === 'object' ? o.track : o.item && typeof o.item === 'object' ? o.item : o;
+      if (typeof x.title === 'string' && (typeof x.subtitle === 'string' || Array.isArray(x.artists))) return true;
+      return typeof x.name === 'string' && Array.isArray(x.artists);
+    }
+    function findTracks(doc) {
+      var best = null;
+      (function walk(node, path, depth) {
+        if (!node || typeof node !== 'object' || depth > 14) return;
+        if (Array.isArray(node)) {
+          if (node.length && node.slice(0, 3).every(isTrackObj) && (!best || node.length > best.arr.length)) {
+            // Besitzer: der naechste uebergeordnete Eintrag mit Namen (die Playlist selbst)
+            var owner = null;
+            for (var i = path.length - 1; i >= 0 && !owner; i--) if (typeof path[i].name === 'string' || typeof path[i].title === 'string') owner = path[i];
+            best = { arr: node, owner: owner || path[path.length - 1] || null };
+          }
+          node.forEach(function (c) { walk(c, path, depth + 1); });
+          return;
+        }
+        var np = path.concat([node]);
+        Object.keys(node).forEach(function (k) { walk(node[k], np, depth + 1); });
+      })(doc, [], 0);
+      return best;
+    }
+    function bestImage(o) {
+      var cands = [];
+      (function walk(n, depth) {
+        if (!n || typeof n !== 'object' || depth > 5) return;
+        if (Array.isArray(n)) { n.forEach(function (c) { walk(c, depth + 1); }); return; }
+        if (typeof n.url === 'string' && /^https?:/.test(n.url)) cands.push({ url: n.url, w: +n.width || +n.maxWidth || 0 });
+        Object.keys(n).forEach(function (k) { if (k !== 'trackList' && k !== 'tracks' && k !== 'items') walk(n[k], depth + 1); });
+      })(o, 0);
+      cands.sort(function (a, b) { return b.w - a.w; });
+      return cands.length ? cands[0].url : '';
+    }
+    function clean(s) { return String(s == null ? '' : s).replace(/ /g, ' ').replace(/\s+/g, ' ').trim(); }
+    function trackFrom(o) {
+      var x = o.track && typeof o.track === 'object' ? o.track : o.item && typeof o.item === 'object' ? o.item : o;
+      var title = clean(x.title != null ? x.title : x.name);
+      var artist = typeof x.subtitle === 'string' ? clean(x.subtitle) : (x.artists || []).map(function (a) { return clean(a && a.name != null ? a.name : a); }).filter(Boolean).join(', ');
+      var dur = +x.duration || +x.duration_ms || +x.durationMs || 0;
+      var album = x.album && x.album.name ? clean(x.album.name) : '';
+      return { title: title, artist: artist, album: album, dur: dur > 1000 ? dur / 1000 : dur, uri: x.uri || '' };
+    }
+    // resp: Antwort des Plugins { scripts: [...], meta: { 'og:title': ..., 'og:image': ... } }
+    function parseSpotify(resp) {
+      var meta = (resp && resp.meta) || {};
+      var found = null;
+      ((resp && resp.scripts) || []).forEach(function (s) {
+        var doc = tryParse(s);
+        if (!doc) return;
+        var f = findTracks(doc);
+        if (f && (!found || f.arr.length > found.arr.length)) found = f;
+      });
+      if (!found) return null;
+      var owner = found.owner || {};
+      var tracks = found.arr.map(trackFrom).filter(function (t) { return t.title; });
+      var name = clean(owner.name || owner.title || '');
+      if (!name) name = clean(String(meta['og:title'] || '').replace(/\s*[|–-]\s*Spotify\s*$/i, ''));
+      var desc = typeof owner.description === 'string' ? clean(owner.description.replace(/<[^>]*>/g, ' ')) : '';
+      var cover = bestImage(owner) || meta['og:image'] || '';
+      return { name: name, description: desc, cover: cover, tracks: tracks };
+    }
+    function playlistId(text) {
+      var m = /playlist[\/:]([A-Za-z0-9]{22})/.exec(String(text || ''));
+      return m ? m[1] : '';
+    }
+
+    /* ---------- Text / CSV -> Titel ---------- */
+    function parseCsvRows(text) {
+      var rows = [], row = [], cell = '', q = false, i, c;
+      var sep = (function () {
+        var first = String(text).split(/\r?\n/)[0] || '';
+        var n = { ',': 0, ';': 0, '\t': 0 };
+        first.replace(/[,;\t]/g, function (ch) { n[ch]++; return ch; });
+        return n[';'] > n[','] && n[';'] >= n['\t'] ? ';' : n['\t'] > n[','] ? '\t' : ',';
+      })();
+      text = String(text).replace(/^﻿/, '');
+      for (i = 0; i < text.length; i++) {
+        c = text.charAt(i);
+        if (q) {
+          if (c === '"') { if (text.charAt(i + 1) === '"') { cell += '"'; i++; } else q = false; } else cell += c;
+        } else if (c === '"') q = true;
+        else if (c === sep) { row.push(cell); cell = ''; }
+        else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else if (c !== '\r') cell += c;
+      }
+      if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+      return rows.filter(function (r) { return r.some(function (x) { return String(x).trim(); }); });
+    }
+    function colIndex(head, names) {
+      var hs = head.map(function (h) { return fold(h).replace(/[^a-z0-9]+/g, ' ').trim(); });
+      for (var j = 0; j < names.length; j++) {
+        for (var i = 0; i < hs.length; i++) if (hs[i] === names[j]) return i;
+        for (i = 0; i < hs.length; i++) if (hs[i].indexOf(names[j] + ' ') === 0) return i;
+      }
+      return -1;
+    }
+    // Liefert { tracks, swap }: swap = true, wenn nicht klar ist, was Titel und was Kuenstler ist (beide Richtungen pruefen)
+    function parseList(text) {
+      var rows = parseCsvRows(text);
+      if (!rows.length) return { tracks: [], swap: false };
+      var head = rows[0];
+      var ti = colIndex(head, ['track name', 'title', 'titel', 'song', 'track', 'name']);
+      var ai = colIndex(head, ['artist name s', 'artist names', 'artist', 'artists', 'kunstler', 'kuenstler', 'interpret']);
+      var bi = colIndex(head, ['album name', 'album']);
+      var di = colIndex(head, ['duration ms', 'duration', 'dauer']);
+      if (ti >= 0 && ai >= 0 && ti !== ai) {
+        var tr = rows.slice(1).map(function (r) {
+          var d = parseFloat(String(r[di] || '').replace(',', '.')) || 0;
+          return { title: clean(r[ti]), artist: clean(r[ai]), album: bi >= 0 ? clean(r[bi]) : '', dur: d > 1000 ? d / 1000 : d, uri: '' };
+        }).filter(function (t) { return t.title; });
+        return { tracks: tr, swap: false };
+      }
+      // ohne Kopfzeile: je Zeile "A - B" oder zwei Spalten
+      var tracks = [];
+      String(text).split(/\r?\n/).forEach(function (line) {
+        line = clean(line.replace(/^\s*\d+\s*[.)]\s+/, ''));
+        if (!line || /^https?:\/\//.test(line)) return;
+        var parts = line.split(/\t|;|\s+[-–—]\s+/);
+        if (parts.length < 2) parts = line.split(/,(?=[^,]*$)/);
+        if (parts.length < 2) { tracks.push({ title: clean(parts[0]), artist: '', album: '', dur: 0, uri: '' }); return; }
+        tracks.push({ title: clean(parts[0]), artist: clean(parts[1]), album: '', dur: 0, uri: '' });
+      });
+      return { tracks: tracks, swap: true };
+    }
+    function swapped(tracks) { return tracks.map(function (t) { return { title: t.artist, artist: t.title, album: t.album, dur: t.dur, uri: t.uri }; }); }
+
+    /* ---------- Abgleich ---------- */
+    function buildLib(items) {
+      var recs = [], byCore = {}, tok = {};
+      (items || []).forEach(function (it) {
+        if (!it || !it.Id) return;
+        var arts = (it.Artists && it.Artists.length ? it.Artists : []).concat(it.AlbumArtist ? [it.AlbumArtist] : []);
+        (it.ArtistItems || []).forEach(function (a) { if (a && a.Name) arts.push(a.Name); });
+        var r = { it: it, core: coreTitle(it.Name), art: artistList(arts), dur: it.RunTimeTicks ? it.RunTimeTicks / 1e7 : 0 };
+        var i = recs.length;
+        recs.push(r);
+        (byCore[r.core] = byCore[r.core] || []).push(i);
+        r.core.split(' ').forEach(function (w, k, all) {
+          if (w.length >= 3 || all.length === 1) (tok[w] = tok[w] || []).push(i);
+        });
+      });
+      return { recs: recs, byCore: byCore, tok: tok };
+    }
+    function candidates(lib, core) {
+      var set = {}, out = [], i;
+      (lib.byCore[core] || []).forEach(function (x) { set[x] = 1; });
+      var ws = core.split(' ').filter(function (w) { return lib.tok[w]; });
+      ws.sort(function (a, b) { return lib.tok[a].length - lib.tok[b].length; });
+      ws.slice(0, 2).forEach(function (w) { lib.tok[w].slice(0, 300).forEach(function (x) { set[x] = 1; }); });
+      for (i in set) out.push(+i);
+      return out;
+    }
+    // Ergebnis je Titel: { src, hit (Jellyfin-Titel oder null), q: 'sure' | 'maybe' | 'none', score }
+    function matchOne(lib, t) {
+      var core = coreTitle(t.title), arts = artistList(t.artist), best = null;
+      if (!core) return { src: t, hit: null, q: 'none', score: 0 };
+      candidates(lib, core).forEach(function (i) {
+        var r = lib.recs[i];
+        if (Math.abs(r.core.length - core.length) > Math.max(4, 0.3 * Math.max(r.core.length, core.length))) return;
+        var ts = titleSim(core, r.core);
+        if (ts < 0.84) return;
+        var as = artistScore(arts, r.art);
+        if (arts.length && as < 0.5) return;
+        var dd = t.dur && r.dur ? Math.abs(t.dur - r.dur) : -1;
+        var db = dd < 0 ? 0.5 : dd <= 3 ? 1 : dd <= 10 ? 0.6 : dd <= 30 ? 0.2 : 0;
+        var score = 0.6 * ts + 0.32 * as + 0.08 * db;
+        if (!best || score > best.score) best = { r: r, score: score, ts: ts, as: as };
+      });
+      if (!best) return { src: t, hit: null, q: 'none', score: 0 };
+      var sure = best.ts >= 0.97 && (best.as >= 0.8 || !arts.length);
+      return { src: t, hit: best.r.it, q: sure ? 'sure' : 'maybe', score: best.score };
+    }
+    function matchAll(tracks, lib) {
+      var used = {};
+      return tracks.map(function (t) {
+        var m = matchOne(lib, t);
+        if (m.hit) {
+          var k = String(m.hit.Id);
+          if (used[k]) { m.dup = true; } else used[k] = 1;
+        }
+        return m;
+      });
+    }
+    function count(res) { return res.filter(function (m) { return m.hit && !m.dup; }).length; }
+
+    /* ---------- Tabelle (CSV fuer Excel: Semikolon, UTF-8 mit BOM) ---------- */
+    function csvCell(v) { var s = String(v == null ? '' : v); return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+    function toCSV(res, labels) {
+      var lines = [['Nr', 'Titel (Spotify)', 'Künstler (Spotify)', 'Album (Spotify)', 'Status', 'Gefunden: Titel', 'Gefunden: Künstler', 'Übernommen'].map(csvCell).join(';')];
+      res.forEach(function (m, i) {
+        var h = m.hit;
+        lines.push([i + 1, m.src.title, m.src.artist, m.src.album || '', labels[m.q] || m.q, h ? h.Name : '', h ? (h.Artists || []).join(', ') : '', m.hit && !m.dup && m.on !== false ? 'ja' : 'nein'].map(csvCell).join(';'));
+      });
+      return '﻿' + lines.join('\r\n') + '\r\n';
+    }
+    return { parseSpotify: parseSpotify, playlistId: playlistId, parseList: parseList, swapped: swapped, buildLib: buildLib, matchOne: matchOne, matchAll: matchAll, count: count, toCSV: toCSV, coreTitle: coreTitle, artistList: artistList, titleSim: titleSim };
   })();
 
   /* ---------- Downloads: Titel auf das Gerät laden (Verwaltung in der Spotify-Ansicht) ---------- */
@@ -3385,6 +3678,7 @@
       av.classList.add('ml-big');
       openMenu({ title: me.name || t('yourLibraryTitle'), subtitle: '', coverEl: av }, [
         { icon: 'add', label: t('mNewPlaylist'), run: openCreatePlaylist },
+        { icon: 'playlist_add', label: t('spMenu'), run: openSpotifyImport },
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
         { hidden: !OFF.available(), icon: 'download_circle', label: t('offMenu'), run: openDownloads },
         { icon: 'wifi_off', label: Net.forced() ? t('offModeOff') : t('offModeOn'), run: function () { OFFV.toggleForced(); } },
@@ -4284,6 +4578,7 @@
     host.appendChild(list);
     ctx.listEl = list;
     ctx.renderTracks();
+    if (ctx.kind === 'playlist' && ctx.pl && !edit) spMissingSection(host, ctx.pl.id);
   }
 
   // Alles abspielen (bei Ordnern mit Unterordnern werden zuerst alle Titel darunter eingesammelt).
@@ -4678,6 +4973,309 @@
       host.appendChild(about);
     }
     if (!ctx.tracks.length && !ctx.albums.length && !bio) host.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
+  }
+  /* ---------- Spotify-Import: Oberflaeche ---------- */
+  (function () {
+    var extra = {
+      de: {
+        spMenu: 'Von Spotify importieren', spTitle: 'Von Spotify importieren',
+        spIntro: 'Füge den Playlist-Link von Spotify ein (in Spotify: Teilen → Link kopieren). Alternativ eine Titelliste (eine Zeile pro Titel, z. B. „Titel – Künstler“) einfügen oder eine CSV-Datei laden. Titel, die du nicht hast, werden als „nicht verfügbar“ markiert.',
+        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'CSV laden', spNext: 'Weiter',
+        spReading: 'Spotify-Playlist wird gelesen …', spMatching: 'Titel werden abgeglichen …',
+        spFailLink: 'Die Spotify-Seite konnte nicht gelesen werden ({0}). Füge stattdessen die Titelliste ein oder lade eine CSV-Datei.',
+        spFailParse: 'In der Spotify-Seite wurden keine Titel gefunden. Füge stattdessen die Titelliste ein oder lade eine CSV-Datei.',
+        spOnlyLinks: 'Einzelne Titel-Links kann ich nicht auflösen. Füge den Playlist-Link oder die Titel mit Namen ein.',
+        spNothing: 'Es wurden keine Titel erkannt.', spLibFail: 'Die Bibliothek konnte nicht gelesen werden.',
+        spFound: '{0} von {1} Titeln in deiner Bibliothek gefunden', spCover: 'Cover von Spotify übernehmen',
+        spSure: 'gefunden', spMaybe: 'ähnlich', spNone: 'nicht verfügbar', spDup: 'doppelt', spFoundAs: 'Gefunden als: {0}',
+        spCreate: 'Playlist erstellen ({0})', spTable: 'Tabelle (CSV)', spCreated: 'Playlist „{0}“ mit {1} Titeln erstellt',
+        spCreateFail: 'Die Playlist konnte nicht erstellt werden.', spCoverFail: 'Das Cover konnte nicht übernommen werden.',
+        spDescFail: 'Die Beschreibung konnte nicht gespeichert werden.',
+        spMissTitle: 'Nicht verfügbar ({0})', spMissNote: 'Aus Spotify, aber nicht in deiner Bibliothek (nur auf diesem Gerät gemerkt).',
+        spOffline: 'Der Import braucht eine Verbindung zum Server.', spBack: 'Zurück', spFile: 'Datei konnte nicht gelesen werden.',
+        spSearching: 'Fehlende Titel werden gesucht …'
+      },
+      en: {
+        spMenu: 'Import from Spotify', spTitle: 'Import from Spotify',
+        spIntro: 'Paste the playlist link from Spotify (in Spotify: Share → Copy link). Or paste a track list (one line per track, e.g. “Title – Artist”) or load a CSV file. Tracks you do not have are marked “not available”.',
+        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Load CSV', spNext: 'Next',
+        spReading: 'Reading the Spotify playlist …', spMatching: 'Matching tracks …',
+        spFailLink: 'The Spotify page could not be read ({0}). Paste the track list instead or load a CSV file.',
+        spFailParse: 'No tracks were found in the Spotify page. Paste the track list instead or load a CSV file.',
+        spOnlyLinks: 'I cannot resolve single track links. Paste the playlist link or the tracks with their names.',
+        spNothing: 'No tracks were recognised.', spLibFail: 'The library could not be read.',
+        spFound: '{0} of {1} tracks found in your library', spCover: 'Use the Spotify cover',
+        spSure: 'found', spMaybe: 'similar', spNone: 'not available', spDup: 'duplicate', spFoundAs: 'Found as: {0}',
+        spCreate: 'Create playlist ({0})', spTable: 'Table (CSV)', spCreated: 'Playlist “{0}” created with {1} tracks',
+        spCreateFail: 'The playlist could not be created.', spCoverFail: 'The cover could not be applied.',
+        spDescFail: 'The description could not be saved.',
+        spMissTitle: 'Not available ({0})', spMissNote: 'From Spotify, but not in your library (remembered on this device only).',
+        spOffline: 'The import needs a connection to the server.', spBack: 'Back', spFile: 'The file could not be read.',
+        spSearching: 'Searching for missing tracks …'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var SP_MISS = 'ml.spmiss.';
+  function spSaveMissing(pid, list) {
+    try { window.localStorage.setItem(SP_MISS + nid(pid), JSON.stringify(list.slice(0, 400))); } catch (e) { /* nur nicht gemerkt */ }
+  }
+  function spLoadMissing(pid) {
+    try { var r = JSON.parse(window.localStorage.getItem(SP_MISS + nid(pid)) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
+  }
+  // Unter den Titeln einer importierten Playlist: was bei Spotify drin war, aber in der Bibliothek fehlt (ausgegraut).
+  function spMissingSection(host, pid) {
+    var list = spLoadMissing(pid);
+    if (!list.length) return;
+    var box = el('div', 'ml-sp-miss');
+    var head = btn('ml-sp-miss-head');
+    head.setAttribute('aria-expanded', 'false');
+    head.appendChild(el('span', 'ml-sp-miss-t', t('spMissTitle', list.length)));
+    box.appendChild(head);
+    var body = el('div', 'ml-sp-miss-body');
+    body.hidden = true;
+    body.appendChild(el('div', 'ml-sp-miss-note', t('spMissNote')));
+    list.forEach(function (m) {
+      var row = el('div', 'ml-sp-miss-row');
+      row.appendChild(el('div', 'ml-sp-miss-name', m.t || ''));
+      if (m.a) row.appendChild(el('div', 'ml-sp-miss-art', m.a));
+      body.appendChild(row);
+    });
+    box.appendChild(body);
+    head.addEventListener('click', function () {
+      body.hidden = !body.hidden;
+      head.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+    });
+    host.appendChild(box);
+  }
+
+  function openSpotifyImport() {
+    if (Net.offline()) { toast(t('spOffline')); return; }
+    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spTitle') });
+    function isAlive() { return ui.sheet.isConnected; }   // auch nach Schliessen ueber den Hintergrund oder Zurueck
+
+    function reset() { ui.sheet.textContent = ''; sheetTitle(ui, t('spTitle')); }
+    function busy(text) {
+      reset();
+      ui.sheet.appendChild(loaderEl());
+      ui.sheet.appendChild(el('div', 'ml-sheet-note ml-center', text));
+    }
+
+    /* --- Schritt 1: Eingabe --- */
+    function stepInput(message, text) {
+      reset();
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spIntro')));
+      var ta = el('textarea', 'ml-field ml-field-box ml-textarea ml-sp-input');
+      ta.rows = 5; ta.placeholder = t('spPh'); ta.value = text || '';
+      ta.setAttribute('autocomplete', 'off'); ta.setAttribute('spellcheck', 'false');
+      ui.sheet.appendChild(ta);
+      var err = el('p', 'ml-sp-err', message || '');
+      err.hidden = !message;
+      ui.sheet.appendChild(err);
+      var file = el('input');
+      file.type = 'file'; file.accept = '.csv,.txt,text/csv,text/plain'; file.hidden = true;
+      ui.sheet.appendChild(file);
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () { ta.value = String(rd.result || ''); err.hidden = true; };
+        rd.onerror = function () { err.textContent = t('spFile'); err.hidden = false; };
+        rd.readAsText(f);
+      });
+      var row = el('div', 'ml-sheet-actions');
+      var csv = btn('ml-pill ml-flat', t('spCsv'));
+      var next = btn('ml-pill ml-primary', t('spNext'));
+      csv.addEventListener('click', function () { file.click(); });
+      add(row, csv, next);
+      ui.sheet.appendChild(row);
+      next.addEventListener('click', function () { submit(ta.value.trim()); });
+      setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 150);
+    }
+
+    function submit(text) {
+      if (!text) return stepInput('', '');
+      var id = SPCore.playlistId(text);
+      if (id && text.length < 300 && text.indexOf('\n') < 0) {
+        busy(t('spReading'));
+        return call('GET', 'MusicLook/Spotify/Playlist', { id: id }).then(function (r) {
+          if (!isAlive()) return;
+          var pl = SPCore.parseSpotify(r);
+          if (!pl || !pl.tracks.length) return stepInput(t('spFailParse'), text);
+          pl.fromLink = true;
+          match(pl);
+        }, function (e) {
+          if (!isAlive()) return;
+          var code = e && (e.status || (e.response && e.response.status));
+          stepInput(t('spFailLink', code ? 'HTTP ' + code : '–'), text);
+        });
+      }
+      if (/open\.spotify\.com\/track\//.test(text) && !/[\p{L}]\s*[-–—;\t]\s*[\p{L}]/u.test(text.replace(/https?:\/\/\S+/g, ''))) return stepInput(t('spOnlyLinks'), text);
+      var parsed = SPCore.parseList(text);
+      if (!parsed.tracks.length) return stepInput(t('spNothing'), text);
+      match({ name: '', description: '', cover: '', tracks: parsed.tracks, swap: parsed.swap });
+    }
+
+    /* --- Schritt 2: Abgleich --- */
+    function libraryItems() {
+      return Taste.load().then(function (ix) { return { items: ix.recs.map(function (r) { return r.it; }), capped: ix.N >= 5990 }; });
+    }
+    function searchMissing(res) {
+      var miss = [];
+      res.forEach(function (m, i) { if (!m.hit && miss.length < 200) miss.push(i); });
+      if (!miss.length) return Promise.resolve();
+      busy(t('spSearching'));
+      var k = 0;
+      function worker() {
+        if (k >= miss.length || !isAlive()) return Promise.resolve();
+        var i = miss[k++], tr = res[i].src;
+        return itemsOf({ SearchTerm: SPCore.coreTitle(tr.title) || tr.title, IncludeItemTypes: 'Audio', Recursive: true, Limit: 15 }).then(function (items) {
+          var m = SPCore.matchOne(SPCore.buildLib(items), tr);
+          if (m.hit) res[i] = m;
+        }, function () { /* naechster */ }).then(worker);
+      }
+      return Promise.all([worker(), worker(), worker(), worker()]);
+    }
+    function match(pl) {
+      busy(t('spMatching'));
+      libraryItems().then(function (lib) {
+        if (!isAlive()) return;
+        var L = SPCore.buildLib(lib.items), res = SPCore.matchAll(pl.tracks, L);
+        if (pl.swap) {
+          var alt = SPCore.matchAll(SPCore.swapped(pl.tracks), L);
+          if (SPCore.count(alt) > SPCore.count(res)) { res = alt; pl.tracks = SPCore.swapped(pl.tracks); }
+        }
+        var more = lib.capped ? searchMissing(res) : Promise.resolve();
+        return more.then(function () {
+          if (!isAlive()) return;
+          // doppelte Treffer nach der Nachsuche erneut kennzeichnen
+          var used = {};
+          res.forEach(function (m) { m.dup = false; if (m.hit) { if (used[m.hit.Id]) m.dup = true; else used[m.hit.Id] = 1; } m.on = !!m.hit && !m.dup; });
+          result(pl, res);
+        });
+      }, function () { if (isAlive()) stepInput(t('spLibFail'), ''); });
+    }
+
+    /* --- Schritt 3: Vorschau und Erstellen --- */
+    function fetchCover(url) {
+      var c = ML.client();
+      return fetch(c.getUrl('MusicLook/Spotify/Image', { url: url, api_key: c.accessToken() }), { credentials: 'omit' }).then(function (r) {
+        if (!r.ok) throw new Error('cover ' + r.status);
+        return r.blob();
+      });
+    }
+    function labelsOf() { return { sure: t('spSure'), maybe: t('spMaybe'), none: t('spNone') }; }
+    function result(pl, res) {
+      reset();
+      var top = el('div', 'ml-sp-top');
+      var thumb = el('div', 'ml-sp-thumb');
+      thumb.hidden = !pl.cover;
+      top.appendChild(thumb);
+      var fields = el('div', 'ml-sp-fields');
+      var name = el('input', 'ml-field ml-field-box');
+      name.type = 'text'; name.maxLength = 100; name.placeholder = t('newPlaylistPh'); name.value = pl.name || '';
+      var desc = el('textarea', 'ml-field ml-field-box ml-textarea');
+      desc.maxLength = 500; desc.rows = 2; desc.placeholder = t('descPh'); desc.value = pl.description || '';
+      add(fields, name, desc);
+      top.appendChild(fields);
+      ui.sheet.appendChild(top);
+
+      var coverBlob = null, coverOn = !!pl.cover, coverRow = null;
+      if (pl.cover) {
+        fetchCover(pl.cover).then(function (blob) {
+          if (!isAlive()) return;
+          coverBlob = blob;
+          var img = el('img', 'ml-sp-img');
+          img.alt = '';
+          img.src = URL.createObjectURL(blob);
+          thumb.appendChild(img);
+        }, function () { if (isAlive()) { thumb.hidden = true; if (coverRow) coverRow.hidden = true; coverOn = false; } });
+        coverRow = el('label', 'ml-sp-check');
+        var cb = el('input'); cb.type = 'checkbox'; cb.checked = true;
+        cb.addEventListener('change', function () { coverOn = cb.checked; });
+        coverRow.appendChild(cb);
+        coverRow.appendChild(el('span', null, t('spCover')));
+        ui.sheet.appendChild(coverRow);
+      }
+
+      var sum = el('div', 'ml-sp-sum');
+      ui.sheet.appendChild(sum);
+      var list = el('div', 'ml-sp-list');
+      ui.sheet.appendChild(list);
+      var create = btn('ml-pill ml-primary', '');
+      function recount() {
+        var n = res.filter(function (m) { return m.hit && !m.dup && m.on; }).length;
+        sum.textContent = t('spFound', SPCore.count(res), res.length);
+        create.textContent = t('spCreate', n);
+        create.disabled = n === 0;
+        return n;
+      }
+      res.forEach(function (m) {
+        var row = el('div', 'ml-sp-row ml-sp-' + (m.dup ? 'dup' : m.q));
+        var ic = el('span', 'ml-sp-ic');
+        ic.appendChild(icon(m.dup || !m.hit ? 'close' : m.q === 'sure' ? 'check' : 'info'));
+        row.appendChild(ic);
+        var txt = el('div', 'ml-sp-txt');
+        txt.appendChild(el('div', 'ml-sp-name', m.src.title));
+        var sub = m.src.artist || '';
+        if (!m.hit) sub = (sub ? sub + ' · ' : '') + t('spNone');
+        else if (m.dup) sub = (sub ? sub + ' · ' : '') + t('spDup');
+        txt.appendChild(el('div', 'ml-sp-art', sub));
+        if (m.hit && !m.dup && m.q === 'maybe') txt.appendChild(el('div', 'ml-sp-as', t('spFoundAs', m.hit.Name + ' – ' + (m.hit.Artists || []).join(', '))));
+        row.appendChild(txt);
+        if (m.hit && !m.dup) {
+          var box = el('input', 'ml-sp-pick'); box.type = 'checkbox'; box.checked = m.on !== false;
+          box.setAttribute('aria-label', m.src.title);
+          box.addEventListener('change', function () { m.on = box.checked; row.classList.toggle('ml-sp-off', !box.checked); recount(); });
+          row.appendChild(box);
+        }
+        list.appendChild(row);
+      });
+
+      var actions = el('div', 'ml-sheet-actions ml-sp-actions');
+      var back = btn('ml-pill ml-flat', t('spBack'));
+      var table = btn('ml-pill ml-flat', t('spTable'));
+      back.addEventListener('click', function () { stepInput('', ''); });
+      table.addEventListener('click', function () {
+        var blob = new Blob([SPCore.toCSV(res, labelsOf())], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = ((name.value.trim() || 'spotify-playlist').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'spotify-playlist') + '.csv';
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      });
+      add(actions, back, table, create);
+      ui.sheet.appendChild(actions);
+      recount();
+
+      create.addEventListener('click', function () {
+        var nm = name.value.trim();
+        if (!nm) { name.focus(); return; }
+        var ids = res.filter(function (m) { return m.hit && !m.dup && m.on; }).map(function (m) { return m.hit.Id; });
+        if (!ids.length) return;
+        create.disabled = true; back.disabled = true;
+        var missing = res.filter(function (m) { return !m.hit; }).map(function (m) { return { t: m.src.title, a: m.src.artist }; });
+        createPlaylistWith(nm, ids).then(function (pid) {
+          var job = Promise.resolve();
+          if (desc.value.trim()) job = job.then(function () { return call('POST', 'MusicLook/Playlist/' + pid + '/Details', null, { description: desc.value.trim() }); }).then(null, function () { toast(t('spDescFail')); });
+          if (coverOn && pl.cover) {
+            job = job.then(function () { return coverBlob || fetchCover(pl.cover); }).then(function (blob) {
+              return imageFileToJpeg(blob).then(function (r) { return postText('MusicLook/Playlist/' + pid + '/Cover', r.base64); });
+            }).then(null, function () { toast(t('spCoverFail')); });
+          }
+          return job.then(function () {
+            if (missing.length) spSaveMissing(pid, missing);
+            invalidatePlaylists(pid);
+            ui.close();
+            toast(t('spCreated', nm, ids.length));
+            go('#/details?id=' + pid + (serverId() ? '&serverId=' + serverId() : ''));
+          });
+        }, function () { create.disabled = false; back.disabled = false; toast(t('spCreateFail')); });
+      });
+    }
+
+    stepInput('', '');
   }
 
   /* ---------- Downloads: Oberfläche (Knöpfe, Seite "Downloads" mit Speicheranzeige) ---------- */

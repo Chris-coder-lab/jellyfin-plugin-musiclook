@@ -1424,3 +1424,39 @@ body.ml-music .mdl-spinner__circle { border-width: 3px !important; }
 body.ml-music .MuiCircularProgress-root { color: var(--ml-accent, #1db954) !important; }
 body.ml-music .MuiCircularProgress-circle { stroke-width: 2.2 !important; stroke-linecap: round; }
 .ml-dl-mode { width: 100%; box-sizing: border-box; }
+
+/* ---------- Version 1.4: Spotify-Import ---------- */
+.ml-sp-link { background: none; border: 0; color: var(--ml-accent, #1ed760); font: inherit; font-weight: 700; padding: 10px 2px 0; cursor: pointer; text-align: left; }
+.ml-sp-input { width: 100%; box-sizing: border-box; min-height: 110px; }
+.ml-sp-err { color: #ff8a8a; font-size: 0.9rem; margin: 8px 0 0; }
+.ml-sp-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+.ml-sp-thumb { flex: 0 0 76px; width: 76px; height: 76px; border-radius: 8px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
+.ml-sp-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ml-sp-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ml-sp-fields .ml-textarea { min-height: 52px; }
+.ml-sp-check { display: flex; align-items: center; gap: 10px; padding: 6px 0 2px; font-size: 0.92rem; cursor: pointer; }
+.ml-sp-sum { font-weight: 800; padding: 10px 0 6px; }
+.ml-sp-list { max-height: 42vh; overflow-y: auto; border-radius: 10px; background: rgba(255, 255, 255, 0.04); scrollbar-width: none; }
+.ml-sp-list::-webkit-scrollbar { display: none; }
+.ml-sp-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.ml-sp-row + .ml-sp-row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.ml-sp-ic { flex: 0 0 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; }
+.ml-sp-ic svg { width: 18px; height: 18px; fill: currentColor; }
+.ml-sp-sure .ml-sp-ic { color: var(--ml-accent, #1ed760); }
+.ml-sp-maybe .ml-sp-ic { color: #ffd166; }
+.ml-sp-none .ml-sp-ic, .ml-sp-dup .ml-sp-ic { color: var(--ml-muted, #b3b3b3); }
+.ml-sp-none .ml-sp-name, .ml-sp-dup .ml-sp-name, .ml-sp-off .ml-sp-name { color: var(--ml-muted, #b3b3b3); }
+.ml-sp-off { opacity: 0.55; }
+.ml-sp-txt { flex: 1; min-width: 0; }
+.ml-sp-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ml-sp-art, .ml-sp-as { font-size: 0.82rem; color: var(--ml-muted, #b3b3b3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ml-sp-as { color: #ffd166; }
+.ml-sp-pick { width: 20px; height: 20px; accent-color: var(--ml-accent, #1ed760); flex: 0 0 auto; }
+.ml-sp-actions { flex-wrap: wrap; }
+.ml-sp-miss { margin: 18px 16px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.ml-sp-miss-head { width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; font-weight: 800; padding: 12px 14px; cursor: pointer; }
+.ml-sp-miss-body { padding: 0 14px 10px; }
+.ml-sp-miss-note { font-size: 0.82rem; color: var(--ml-muted, #b3b3b3); padding-bottom: 6px; }
+.ml-sp-miss-row { padding: 6px 0; opacity: 0.7; }
+.ml-sp-miss-name { font-weight: 700; }
+.ml-sp-miss-art { font-size: 0.82rem; color: var(--ml-muted, #b3b3b3); }

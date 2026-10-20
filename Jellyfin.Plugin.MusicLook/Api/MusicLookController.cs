@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jellyfin.Plugin.MusicLook.Jam;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -300,6 +301,172 @@ public class MusicLookController : ControllerBase
         await playlist.DeleteImageAsync(MediaBrowser.Model.Entities.ImageType.Primary, 0).ConfigureAwait(false);
         CoverMarkers.Set(id, false);
         return NoContent();
+    }
+
+    private const int MaxSpotifyBytes = 6_000_000;
+
+    private static readonly Regex SpotifyScriptTag = new("<script([^>]*)>(.*?)</script>", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(3));
+    private static readonly Regex SpotifyMetaTag = new("<meta[^>]*?(?:property|name)=\"([^\"]+)\"[^>]*?content=\"([^\"]*)\"", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(3));
+    private static readonly HttpClient SpotifyHttp = CreateSpotifyHttp();
+
+    private static HttpClient CreateSpotifyHttp()
+    {
+        var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.8");
+        return client;
+    }
+
+    private static bool HostIs(Uri uri, string domain) =>
+        uri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSpotifyPageHost(Uri uri) => HostIs(uri, "open.spotify.com");
+
+    private static bool IsSpotifyImageHost(Uri uri) => HostIs(uri, "scdn.co") || HostIs(uri, "spotifycdn.com");
+
+    /// <summary>Fetches a Spotify URL and follows redirects only to allowed hosts (no requests to other servers).</summary>
+    private static async Task<HttpResponseMessage?> SpotifyFetch(Uri start, Func<Uri, bool> allowed, CancellationToken token)
+    {
+        var uri = start;
+        for (var hop = 0; hop < 4; hop++)
+        {
+            var res = await SpotifyHttp.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+            var code = (int)res.StatusCode;
+            if (code >= 300 && code < 400 && res.Headers.Location is not null)
+            {
+                var next = res.Headers.Location.IsAbsoluteUri ? res.Headers.Location : new Uri(uri, res.Headers.Location);
+                res.Dispose();
+                if (next.Scheme != Uri.UriSchemeHttps || !allowed(next))
+                {
+                    return null;
+                }
+
+                uri = next;
+                continue;
+            }
+
+            return res;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the public embed page of a Spotify playlist and returns its JSON data blocks and og: meta tags. The browser evaluates them,
+    /// because the page layout is not documented by Spotify and may change.
+    /// </summary>
+    [HttpGet("Spotify/Playlist")]
+    [Authorize]
+    public async Task<IActionResult> SpotifyPlaylist([FromQuery] string id)
+    {
+        if (string.IsNullOrEmpty(id) || !Regex.IsMatch(id, "^[A-Za-z0-9]{22}$"))
+        {
+            return BadRequest(new { error = "bad_id" });
+        }
+
+        try
+        {
+            using var res = await SpotifyFetch(new Uri("https://open.spotify.com/embed/playlist/" + id), IsSpotifyPageHost, HttpContext.RequestAborted).ConfigureAwait(false);
+            if (res is null)
+            {
+                return StatusCode(502, new { error = "redirect" });
+            }
+
+            if (!res.IsSuccessStatusCode)
+            {
+                return StatusCode(502, new { error = "spotify_" + (int)res.StatusCode });
+            }
+
+            if (res.Content.Headers.ContentLength > MaxSpotifyBytes)
+            {
+                return StatusCode(502, new { error = "too_large" });
+            }
+
+            var html = await res.Content.ReadAsStringAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            var scripts = new List<string>();
+            foreach (Match m in SpotifyScriptTag.Matches(html))
+            {
+                var attrs = m.Groups[1].Value;
+                if (attrs.Contains("application/json", StringComparison.OrdinalIgnoreCase)
+                    || attrs.Contains("__NEXT_DATA__", StringComparison.Ordinal)
+                    || attrs.Contains("resource", StringComparison.OrdinalIgnoreCase))
+                {
+                    var body = m.Groups[2].Value.Trim();
+                    if (body.Length > 0 && body.Length < 4_000_000)
+                    {
+                        scripts.Add(body);
+                    }
+
+                    if (scripts.Count >= 6)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            var meta = new Dictionary<string, string>();
+            foreach (Match m in SpotifyMetaTag.Matches(html))
+            {
+                var key = m.Groups[1].Value.ToLowerInvariant();
+                if (key.StartsWith("og:", StringComparison.Ordinal) && !meta.ContainsKey(key))
+                {
+                    meta[key] = System.Net.WebUtility.HtmlDecode(m.Groups[2].Value);
+                }
+            }
+
+            return JsonResult(new { scripts, meta });
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(502, new { error = "unreachable" });
+        }
+        catch (TaskCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(504, new { error = "timeout" });
+        }
+    }
+
+    /// <summary>Loads a playlist cover from Spotify's image servers (only those hosts) so the browser can use it without cross-origin limits.</summary>
+    [HttpGet("Spotify/Image")]
+    [Authorize]
+    public async Task<IActionResult> SpotifyImage([FromQuery] string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || !IsSpotifyImageHost(uri))
+        {
+            return BadRequest(new { error = "bad_url" });
+        }
+
+        try
+        {
+            using var res = await SpotifyFetch(uri, IsSpotifyImageHost, HttpContext.RequestAborted).ConfigureAwait(false);
+            if (res is null || !res.IsSuccessStatusCode)
+            {
+                return StatusCode(502, new { error = "image_failed" });
+            }
+
+            var type = res.Content.Headers.ContentType?.MediaType ?? string.Empty;
+            if (!type.StartsWith("image/", StringComparison.OrdinalIgnoreCase) || res.Content.Headers.ContentLength > MaxSpotifyBytes)
+            {
+                return StatusCode(502, new { error = "not_image" });
+            }
+
+            var bytes = await res.Content.ReadAsByteArrayAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            if (bytes.Length > MaxSpotifyBytes)
+            {
+                return StatusCode(502, new { error = "too_large" });
+            }
+
+            return File(bytes, type);
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(502, new { error = "unreachable" });
+        }
+        catch (TaskCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return StatusCode(504, new { error = "timeout" });
+        }
     }
 
     /// <summary>Removes the current user from the shares of a playlist (also possible without edit rights).</summary>

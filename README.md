@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.3.1.0 && git push origin v1.3.1.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.4.0.0 && git push origin v1.4.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -66,6 +66,14 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 **Mixe, Sender, Mixtapes und Autoplay:** Sie bleiben bei einer Stilrichtung. Das Plugin liest einmal (und dann alle 30 Minuten) die Titel der Musikbibliothek samt Genres, deine Playlists, Lieblingssongs und die zuletzt gehörten Titel und bewertet jeden Titel nach Ähnlichkeit zum Ausgangstitel bzw. Künstler: seltene Genres zählen mehr als sehr häufige, dazu gleiche Künstler und Alben, Künstler und Titel, die in deinen Playlists oder in einer Hörsitzung zusammenstehen, und das Erscheinungsjahr. Zu unähnliche Titel kommen nicht in den Mix, je Künstler gibt es eine Obergrenze. Die Berechnung läuft im Browser; bei einer sehr kleinen Bibliothek (unter 25 Titel) oder einem Fehler gilt Jellyfins Sofortmix. Wie gut die Mixe sind, hängt von den Genre-Angaben und Playlists deiner Bibliothek ab: ohne Genres und ohne Playlists bleibt nur die Ähnlichkeit über Künstler, Alben und Jahr.
 
 **Schnell beim Öffnen:** Playlists, Bibliotheken und Playlist-Cover werden im Browser gemerkt und sofort angezeigt, der Server aktualisiert sie im Hintergrund (wichtig bei laufendem Bibliotheksscan). Bekannte Musik-Seiten werden schon beim Laden abgedeckt, damit das alte Jellyfin-Layout nicht kurz aufblitzt.
+
+## Spotify-Playlist importieren
+Menü (Profilbild) → **Von Spotify importieren** oder im Dialog „Neue Playlist“.
+1. **Playlist-Link einfügen** (in Spotify: Teilen → Link kopieren) – oder eine **Titelliste** einfügen (eine Zeile pro Titel, „Titel – Künstler“ oder „Künstler – Titel“) – oder eine **CSV-Datei** laden (Spalten wie bei gängigen Export-Tools: Track Name, Artist Name(s), Album Name, Duration (ms)).
+2. Die Vorschau zeigt, welche Titel in deiner Bibliothek gefunden wurden (**gefunden**, **ähnlich** mit dem gefundenen Titel, **nicht verfügbar**). Einzelne Treffer lassen sich abwählen; Name und Beschreibung sind änderbar; das Cover wird übernommen, wenn du es lässt.
+3. **Playlist erstellen** legt die Playlist aus den gefundenen Titeln an. Was fehlt, steht eingeklappt unter „Nicht verfügbar“ auf der Playlist-Seite (nur auf diesem Gerät gemerkt). **Tabelle (CSV)** speichert die Liste für Excel.
+
+Grenzen: Der Link-Weg liest die öffentliche Einbettungsseite der Playlist über den Jellyfin-Server. Das ist keine offizielle Spotify-Schnittstelle: Spotify kann den Aufbau jederzeit ändern, und der Server muss `open.spotify.com` und die Bildserver von Spotify erreichen können. Wie viele Titel die Seite enthält, bestimmt Spotify. Klappt der Abruf nicht, bleibt das Einfügen der Titelliste bzw. die CSV-Datei. Die offizielle Spotify-Schnittstelle liefert Titel nur für eigene oder mitbearbeitete Playlists und verlangt eine eigene Spotify-App, daher wird sie nicht verwendet.
 
 ## Downloads und Musik vom Gerät (alles in der Jellyfin-Oberfläche)
 Es wird **keine zusätzliche App** installiert. Downloads, Verwaltung und Abspielen vom Gerät laufen in der Spotify-Ansicht innerhalb der normalen Jellyfin-App bzw. Jellyfin-Weboberfläche.
