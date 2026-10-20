@@ -8,6 +8,32 @@
 
   var rawCall = ML.call, el = ML.el, btn = ML.button, toast = ML.toast, uid = ML.uid, nid = ML.nid, ID_RE = ML.ID_RE;
 
+  // Songtext aus der Jellyfin-Antwort (Audio/{id}/Lyrics): { lines: [{ t (Sekunden oder null), text }], synced } oder null.
+  // "Zeitgenau" richtet sich nach den Zeitmarken der Zeilen. Das Feld Metadata.IsSynced ist bei Jellyfin optional und fehlt je nach Version
+  // auch bei einer .lrc-Datei; nur ein ausdrückliches "false" gilt als reiner Text. Reiner Text hat keine Zeitmarken (oder lauter gleiche).
+  function lyricsFrom(r) {
+    var lines = ((r && r.Lyrics) || []).map(function (l) { return { t: l && l.Start != null ? l.Start / 1e7 : null, text: String(l && l.Text != null ? l.Text : '') }; });
+    if (!lines.some(function (l) { return l.text.trim(); })) return null;
+    return lyricsFix({ lines: lines, synced: false }, r && r.Metadata ? r.Metadata.IsSynced : undefined);
+  }
+  function lyricsFix(ly, flag) {
+    if (!ly || !ly.lines) return ly;
+    var seen = {}, distinct = 0, timed = 0, allTimed = true, sorted = true, last = -1;
+    ly.lines.forEach(function (l) {
+      if (l.t == null) { allTimed = false; return; }
+      timed++;
+      if (!seen[l.t]) { seen[l.t] = 1; distinct++; }
+      if (l.t < last) sorted = false;
+      last = l.t;
+    });
+    ly.synced = flag !== false && timed >= 2 && distinct >= 2;
+    // Mehrere Zeitmarken pro Zeile in einer .lrc koennen die Reihenfolge durcheinanderbringen: nach Zeit ordnen
+    if (ly.synced && allTimed && !sorted) {
+      ly.lines = ly.lines.map(function (l, i) { return { l: l, i: i }; }).sort(function (a, b) { return a.l.t - b.l.t || a.i - b.i; }).map(function (x) { return x.l; });
+    }
+    return ly;
+  }
+
   /* ---------- Verbindung zum Server ----------
      navigator.onLine reicht nicht: Ist ein VPN aktiv, aber ohne Internet, meldet der Browser "online", und Anfragen haengen.
      Darum wird der Server selbst geprueft (kleine Anfrage, kurz zwischengespeichert). Ausserdem gibt es einen Schalter "Offline-Modus". */
@@ -2445,13 +2471,10 @@
     // Songtext wie ihn die Player-Ansicht braucht: { lines: [{ t, text }], synced } oder null (keiner vorhanden); undefined = nicht ermittelbar.
     function fetchLyrics(id) {
       return call('GET', 'Audio/' + id + '/Lyrics').then(function (r) {
-        var lines = ((r && r.Lyrics) || []).map(function (l) { return { t: l.Start != null ? l.Start / 1e7 : null, text: String(l.Text == null ? '' : l.Text) }; });
-        var has = lines.some(function (l) { return l.text.trim(); });
-        var synced = !!(r && r.Metadata && r.Metadata.IsSynced) && lines.some(function (l) { return l.t != null; });
-        return has ? { lines: lines, synced: synced } : null;
+        return lyricsFrom(r);
       }, function (err) { return err && err.status === 404 ? null : undefined; });
     }
-    function lyricsOf(id) { return D.getTrack(id).then(function (r) { return r && r.lyrics ? r.lyrics : null; }, function () { return null; }); }
+    function lyricsOf(id) { return D.getTrack(id).then(function (r) { return r && r.lyrics ? lyricsFix(r.lyrics) : null; }, function () { return null; }); }
     // Bereits geladene Titel ohne gespeicherten Songtext: bei Verbindung im Hintergrund nachladen (einmal je Titel).
     var backfilled = false;
     function backfillLyrics() {
@@ -6399,10 +6422,7 @@
       // Ohne Server (offline oder Wiedergabe vom Geraet): der beim Herunterladen gespeicherte Songtext
       if (OFFPLAY.active() || Net.offline()) return OFF.lyricsOf(id);
       return call('GET', 'Audio/' + id + '/Lyrics').then(function (r) {
-        var lines = ((r && r.Lyrics) || []).map(function (l) { return { t: l.Start != null ? l.Start / 1e7 : null, text: String(l.Text == null ? '' : l.Text) }; });
-        var has = lines.some(function (l) { return l.text.trim(); });
-        var synced = !!(r && r.Metadata && r.Metadata.IsSynced) && lines.some(function (l) { return l.t != null; });
-        lyricCache[k] = has ? { lines: lines, synced: synced } : null;
+        lyricCache[k] = lyricsFrom(r);
         return lyricCache[k];
       }, function (err) {
         if (err && err.status === 404) lyricCache[k] = null;   // kein Songtext; andere Fehler spaeter erneut versuchen
@@ -7010,6 +7030,7 @@
     function progress() {
       if (!P.item) return;
       var d = duration(), p = Math.min(position(), d || position());
+      P.seen = { id: nid(P.item.Id), pos: p, dur: d };
       if (ui.miniFill) ui.miniFill.style.width = d ? (p / d * 100) + '%' : '0%';
       if (bar && !bar.hidden && !seekingBar) {
         ui.bSeek.value = String(d ? Math.round(p / d * 1000) : 0);
@@ -7057,11 +7078,39 @@
       }).then(function () { autoBusy = false; }, function () { autoBusy = false; autoKey = ''; autoRetryAt = Date.now() + 15000; });
     }
 
+    // Rueckfall fuer das Ende der Wiedergabe: Hat das Anhaengen oben nicht geklappt (Sitzung nicht erreichbar, Seite war im Hintergrund,
+    // Jellyfin hat den Befehl ignoriert) und der letzte Titel ist zu Ende, startet hier direkt ein neuer Mix zu den letzten Titeln.
+    var autoFired = '';
+    function autoEnd() {
+      if (!autoplayOn() || !P.item || P.repeat !== 'RepeatNone' || (P.session && P.session.Id === 'local') || Net.offline()) return false;
+      var q = P.queue || [];
+      if (!q.length || queueIndex() !== q.length - 1) return false;
+      var key = nid(P.item.Id) + ':' + q.length;
+      if (autoFired === key) return false;
+      autoFired = key;
+      var have = {}, seeds = q.slice(-3).map(function (x) { return x.Id; });
+      q.forEach(function (x) { have[nid(x.Id)] = 1; });
+      loadSongMix(seeds, 40).then(function (items) {
+        var ids = [], seen = {};
+        items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
+        if (!ids.length || !autoplayOn()) { autoFired = ''; return; }
+        return playIds(ids, 0).then(function () { kick(); });
+      }).then(null, function () { setTimeout(function () { if (autoFired === key) autoFired = ''; }, 15000); });
+      return true;
+    }
+    function nearEnd(margin) {
+      var d = duration() || P.dur, p = position();
+      // Nach dem Ende setzt Jellyfin das Audio-Element zurueck: dann zaehlt die zuletzt gesehene Position
+      if (P.seen && P.item && P.seen.id === nid(P.item.Id)) { p = Math.max(p, P.seen.pos); d = d || P.seen.dur; }
+      return d > 0 && p >= d - margin;
+    }
+
     var gapSince = 0;
     function applySession(s) {
       var np = s && s.NowPlayingItem;
       if (np) gapSince = 0;
       else if (P.item) {
+        if (nearEnd(8) && autoEnd()) return;   // letzter Titel ist zu Ende und nichts folgt
         // Beim Titelwechsel meldet der Server kurz keinen Titel. Die Ansicht bleibt dann stehen, statt die Vollansicht zu schliessen.
         if (!gapSince) gapSince = Date.now();
         if (Date.now() - gapSince < 4500) { fastUntil = Math.max(fastUntil, Date.now() + 2500); return; }
@@ -7083,6 +7132,7 @@
         if (!!ps.IsPaused === pendingPause.want) pendingPause = null; else ps = Object.assign({}, ps, { IsPaused: pendingPause.want });
       } else pendingPause = null;
       P.paused = !!ps.IsPaused;
+      if (P.paused && nearEnd(1.5) && !pendingPause && !isLocal) setTimeout(autoEnd, 0);   // Wiedergabe am Ende stehengeblieben
       P.pos = (ps.PositionTicks || 0) / 1e7; P.at = Date.now();
       P.dur = (np.RunTimeTicks || 0) / 1e7;
       P.repeat = ps.RepeatMode || 'RepeatNone';
@@ -7198,6 +7248,11 @@
       }, true);
     });
     document.addEventListener('visibilitychange', function () { if (!document.hidden && running) kick(); });
+    // Jellyfins Audio-Element meldet das Ende auch dann, wenn die Seite im Hintergrund ist und die Abfrage der Sitzung ruht (Handy, Bildschirm aus)
+    document.addEventListener('ended', function (e) {
+      var a = e.target;
+      if (running && a && a.classList && a.classList.contains('mediaPlayerAudio')) autoEnd();
+    }, true);
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' || !fullOpen || document.querySelector('.ml-backdrop')) return;
       if (panels.length) panels[panels.length - 1].close(); else closeFull();
