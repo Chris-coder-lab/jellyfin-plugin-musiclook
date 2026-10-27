@@ -358,7 +358,30 @@ public class MusicLookController : ControllerBase
     /// </summary>
     [HttpGet("Spotify/Playlist")]
     [Authorize]
-    public async Task<IActionResult> SpotifyPlaylist([FromQuery] string id)
+    public Task<IActionResult> SpotifyPlaylist([FromQuery] string id) => SpotifyEmbed("playlist", id);
+
+    private static readonly SemaphoreSlim SpotifyTrackGate = new(3, 3);
+
+    /// <summary>
+    /// Reads the public embed page of one Spotify track (title and artist). Used to resolve copied track links one by one,
+    /// because the playlist page only ever lists the first 100 tracks. At most three requests run at the same time.
+    /// </summary>
+    [HttpGet("Spotify/Track")]
+    [Authorize]
+    public async Task<IActionResult> SpotifyTrack([FromQuery] string id)
+    {
+        await SpotifyTrackGate.WaitAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+        try
+        {
+            return await SpotifyEmbed("track", id).ConfigureAwait(false);
+        }
+        finally
+        {
+            SpotifyTrackGate.Release();
+        }
+    }
+
+    private async Task<IActionResult> SpotifyEmbed(string kind, string id)
     {
         if (string.IsNullOrEmpty(id) || !Regex.IsMatch(id, "^[A-Za-z0-9]{22}$"))
         {
@@ -367,7 +390,7 @@ public class MusicLookController : ControllerBase
 
         try
         {
-            using var res = await SpotifyFetch(new Uri("https://open.spotify.com/embed/playlist/" + id), IsSpotifyPageHost, HttpContext.RequestAborted).ConfigureAwait(false);
+            using var res = await SpotifyFetch(new Uri("https://open.spotify.com/embed/" + kind + "/" + id), IsSpotifyPageHost, HttpContext.RequestAborted).ConfigureAwait(false);
             if (res is null)
             {
                 return StatusCode(502, new { error = "redirect" });
@@ -467,6 +490,138 @@ public class MusicLookController : ControllerBase
         {
             return StatusCode(504, new { error = "timeout" });
         }
+    }
+
+    private const int MaxSourceBytes = 4_000_000;
+
+    /// <summary>
+    /// Index of the Spotify sources (imported playlists that can be updated) of the playlists the current user may edit:
+    /// id, automatic update on/off and time of the last check. Sources whose playlist no longer exists are removed here.
+    /// </summary>
+    [HttpGet("Spotify/Sources")]
+    [Authorize]
+    public IActionResult SpotifySourceIndex()
+    {
+        var me = CurrentUserId();
+        if (me is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = new Dictionary<string, object>();
+        foreach (var entry in SpotifySources.Snapshot())
+        {
+            if (!Guid.TryParse(entry.Key, out var pid))
+            {
+                continue;
+            }
+
+            if (_library.GetItemById(pid) is null)
+            {
+                SpotifySources.Remove(pid);
+                continue;
+            }
+
+            var playlist = _playlists.GetPlaylistForUser(pid, me.Value);
+            if (playlist is null)
+            {
+                continue;
+            }
+
+            var canEdit = playlist.OwnerUserId.Equals(me.Value)
+                          || playlist.Shares.Any(s => s.CanEdit && s.UserId.Equals(me.Value));
+            if (!canEdit)
+            {
+                continue;
+            }
+
+            var auto = false;
+            long at = 0;
+            try
+            {
+                using var doc = JsonDocument.Parse(entry.Value);
+                auto = doc.RootElement.TryGetProperty("auto", out var a) && a.ValueKind == JsonValueKind.True;
+                at = doc.RootElement.TryGetProperty("at", out var t) && t.ValueKind == JsonValueKind.Number && t.TryGetInt64(out var n) ? n : 0;
+            }
+            catch (JsonException)
+            {
+                // an unreadable entry is listed without flags
+            }
+
+            result[pid.ToString("N")] = new { auto, at };
+        }
+
+        return JsonResult(result);
+    }
+
+    /// <summary>Gets the stored Spotify source (track list and state) of a playlist.</summary>
+    [HttpGet("Spotify/Source/{id}")]
+    [Authorize]
+    public IActionResult SpotifySourceGet([FromRoute] Guid id)
+    {
+        var error = EditCheck(id, out _);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var text = SpotifySources.Get(id);
+        return text is null ? NotFound() : Content(text, "application/json");
+    }
+
+    /// <summary>Stores the Spotify source of a playlist (the browser sends the whole JSON document).</summary>
+    [HttpPost("Spotify/Source/{id}")]
+    [Authorize]
+    [RequestSizeLimit(MaxSourceBytes + 4096)]
+    public async Task<IActionResult> SpotifySourceSet([FromRoute] Guid id)
+    {
+        var error = EditCheck(id, out _);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        string text;
+        using (var reader = new StreamReader(Request.Body, Encoding.UTF8))
+        {
+            text = await reader.ReadToEndAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+        }
+
+        if (text.Length == 0 || text.Length > MaxSourceBytes)
+        {
+            return BadRequest(new { error = "size" });
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return BadRequest(new { error = "object_required" });
+            }
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new { error = "json_required" });
+        }
+
+        SpotifySources.Set(id, text);
+        return NoContent();
+    }
+
+    /// <summary>Removes the stored Spotify source of a playlist.</summary>
+    [HttpDelete("Spotify/Source/{id}")]
+    [Authorize]
+    public IActionResult SpotifySourceDelete([FromRoute] Guid id)
+    {
+        var error = EditCheck(id, out _);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        SpotifySources.Remove(id);
+        return NoContent();
     }
 
     /// <summary>Removes the current user from the shares of a playlist (also possible without edit rights).</summary>
@@ -887,6 +1042,104 @@ internal static class CoverMarkers
 
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             System.IO.File.WriteAllText(path, JsonSerializer.Serialize(ids.Select(i => i.ToString("N")).ToList()));
+        }
+        catch (Exception)
+        {
+            // best effort
+        }
+    }
+}
+
+/// <summary>
+/// Keeps the Spotify source (track list and state) of imported playlists, so they can be updated later from any device.
+/// One JSON document per playlist; the server stores it unchanged.
+/// </summary>
+internal static class SpotifySources
+{
+    private static readonly object Gate = new();
+    private static Dictionary<string, string>? _map;
+
+    public static IReadOnlyDictionary<string, string> Snapshot()
+    {
+        lock (Gate)
+        {
+            return new Dictionary<string, string>(Load());
+        }
+    }
+
+    public static string? Get(Guid id)
+    {
+        lock (Gate)
+        {
+            return Load().TryGetValue(id.ToString("N"), out var text) ? text : null;
+        }
+    }
+
+    public static void Set(Guid id, string json)
+    {
+        lock (Gate)
+        {
+            Load()[id.ToString("N")] = json;
+            Save();
+        }
+    }
+
+    public static void Remove(Guid id)
+    {
+        lock (Gate)
+        {
+            if (Load().Remove(id.ToString("N")))
+            {
+                Save();
+            }
+        }
+    }
+
+    private static string? FilePath()
+    {
+        var folder = Plugin.Instance?.DataFolderPath;
+        return string.IsNullOrEmpty(folder) ? null : Path.Combine(folder, "spotify-sources.json");
+    }
+
+    private static Dictionary<string, string> Load()
+    {
+        if (_map is not null)
+        {
+            return _map;
+        }
+
+        var map = new Dictionary<string, string>();
+        try
+        {
+            var path = FilePath();
+            if (path is not null && System.IO.File.Exists(path))
+            {
+                map = JsonSerializer.Deserialize<Dictionary<string, string>>(System.IO.File.ReadAllText(path)) ?? new Dictionary<string, string>();
+            }
+        }
+        catch (Exception)
+        {
+            // an unreadable file only means that no playlist can be updated until it is imported again
+        }
+
+        _map = map;
+        return map;
+    }
+
+    private static void Save()
+    {
+        try
+        {
+            var path = FilePath();
+            if (path is null || _map is null)
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var tmp = path + ".tmp";
+            System.IO.File.WriteAllText(tmp, JsonSerializer.Serialize(_map));
+            System.IO.File.Move(tmp, path, true);
         }
         catch (Exception)
         {

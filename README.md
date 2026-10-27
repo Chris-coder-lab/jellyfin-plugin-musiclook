@@ -9,7 +9,7 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.4.0.0 && git push origin v1.4.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.5.0.0 && git push origin v1.5.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -69,11 +69,27 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 
 ## Spotify-Playlist importieren
 Menü (Profilbild) → **Von Spotify importieren** oder im Dialog „Neue Playlist“.
-1. **Playlist-Link einfügen** (in Spotify: Teilen → Link kopieren) – oder eine **Titelliste** einfügen (eine Zeile pro Titel, „Titel – Künstler“ oder „Künstler – Titel“) – oder eine **CSV-Datei** laden (Spalten wie bei gängigen Export-Tools: Track Name, Artist Name(s), Album Name, Duration (ms)).
+1. **Playlist-Link einfügen** (in Spotify: Teilen → Link kopieren). Das liefert Name, Beschreibung, Cover und die ersten 100 Titel – mehr zeigt Spotify über den Link nicht (auch nicht im Browser-Einbettungsfeld). Hat die Playlist mehr Titel, weist die Vorschau darauf hin und bietet **Weitere Titel ergänzen** an. Dafür gibt es drei Wege, die sich beliebig kombinieren lassen (schon vorhandene Titel werden nicht doppelt aufgenommen):
+   - **Titel-Links einfügen:** in Spotify die Playlist öffnen, alle Titel markieren (Strg+A), kopieren (Strg+C) und im Feld einfügen. Der Server liest dann jeden Titel einzeln bei Spotify (höchstens drei gleichzeitig, mit Fortschrittsanzeige und Abbrechen; bei vielen Titeln kann das dauern). Liefert Spotify gar nichts, bricht das Lesen früh mit einem Hinweis ab.
+   - **Spotify-Datenexport (JSON):** über die Spotify-Kontoseite die Funktion „Deine Daten herunterladen“ nutzen und die Playlist-Daten anfordern (das kann dauern). Die Datei `Playlist1.json` einfach laden; enthält sie mehrere Playlists, wählst du eine aus.
+   - **CSV-Datei** (z. B. von Exportify, Spalten Track URI / Track Name / Artist Name(s) / Album Name / Duration) oder eine einfache **Titelliste** („Titel – Künstler“ oder „Künstler – Titel“, die Richtung wird erkannt).
 2. Die Vorschau zeigt, welche Titel in deiner Bibliothek gefunden wurden (**gefunden**, **ähnlich** mit dem gefundenen Titel, **nicht verfügbar**). Einzelne Treffer lassen sich abwählen; Name und Beschreibung sind änderbar; das Cover wird übernommen, wenn du es lässt.
-3. **Playlist erstellen** legt die Playlist aus den gefundenen Titeln an. Was fehlt, steht eingeklappt unter „Nicht verfügbar“ auf der Playlist-Seite (nur auf diesem Gerät gemerkt). **Tabelle (CSV)** speichert die Liste für Excel.
+3. **Playlist erstellen** legt die Playlist aus den gefundenen Titeln an und merkt sich die **Quelle** (alle Spotify-Titel, auch die fehlenden, samt Link) auf dem Server, damit sie von jedem Gerät aus aktualisiert werden kann. **Tabelle (CSV)** speichert die Liste für Excel.
 
-Grenzen: Der Link-Weg liest die öffentliche Einbettungsseite der Playlist über den Jellyfin-Server. Das ist keine offizielle Spotify-Schnittstelle: Spotify kann den Aufbau jederzeit ändern, und der Server muss `open.spotify.com` und die Bildserver von Spotify erreichen können. Wie viele Titel die Seite enthält, bestimmt Spotify. Klappt der Abruf nicht, bleibt das Einfügen der Titelliste bzw. die CSV-Datei. Die offizielle Spotify-Schnittstelle liefert Titel nur für eigene oder mitbearbeitete Playlists und verlangt eine eigene Spotify-App, daher wird sie nicht verwendet.
+**Playlist aktualisieren:** Unter den Titeln einer importierten Playlist steht der Abschnitt **Spotify-Abgleich** (Anzahl fehlender Titel, aufklappbar mit der Liste).
+- **Jetzt aktualisieren** lädt die Bibliothek neu, liest den Spotify-Link erneut (neue Titel am Anfang der Spotify-Liste kommen dazu), gleicht alle noch fehlenden Titel ab und zeigt die neuen Treffer zum Auswählen. „Hinzufügen“ hängt sie an die Playlist an; Titel, die du bewusst abwählst, werden nicht mehr vorgeschlagen. Titel, die du aus der Jellyfin-Playlist gelöscht hast, kommen nicht wieder.
+- **Weitere Titel ergänzen** nimmt neue Titel aus Titel-Links, Datei oder Liste dazu (wie beim Import).
+- **Automatisch aktualisieren** (Schalter je Playlist): Beim Öffnen von Music Look wird höchstens einmal am Tag geprüft; sichere Treffer kommen dann von selbst in die Playlist (mit Hinweis). Das läuft im Browser, nicht als Serverdienst: Es passiert also nur, wenn du Music Look öffnest.
+- Aufgeräumt wird von selbst: Die gemerkte Quelle einer gelöschten Playlist wird vom Server entfernt, ältere lokal gemerkte Listen (bis Version 1.4) werden beim ersten Öffnen übernommen bzw. bei gelöschten Playlists entfernt.
+
+Grenzen: Der Link-Weg und das Lesen einzelner Titel nutzen die öffentlichen Einbettungsseiten von Spotify über den Jellyfin-Server. Das ist keine offizielle Spotify-Schnittstelle: Spotify kann den Aufbau jederzeit ändern oder Anfragen drosseln, und der Server muss `open.spotify.com` und die Bildserver von Spotify erreichen können. Die offizielle Spotify-Schnittstelle liefert Titel nur für eigene oder mitbearbeitete Playlists und verlangt eine eigene Spotify-App (und für deren Besitzer Premium), daher wird sie nicht verwendet.
+
+## Musik, Podcasts und Hörbücher bleiben getrennt
+Die Reiter **Musik**, **Podcasts** und **Hörbücher** zeigen nur Inhalte aus ihren eigenen Bibliotheken; nur **Alle** mischt.
+- **Suche:** hat dieselben Reiter wie die Startseite (der Reiter gilt für beide). In „Musik“ werden nur Musik-Bibliotheken durchsucht, in „Podcasts“ nur Podcast-, in „Hörbücher“ nur Hörbuch-Bibliotheken; in „Alle“ wird wie bisher alles durchsucht. Playlists erscheinen in „Alle“ und „Musik“.
+- **Empfehlungen, Mixe, Sender, Mixtapes, „Zuletzt gespielt“, „Neu hinzugefügt“, Bibliothek:** nur Musik. Lieblingssongs: im Reiter „Musik“ nur Musik, im Reiter „Alle“ auch Favoriten aus Podcasts und Hörbüchern.
+- **Autoplay und Song-Radio:** nach einer Podcast-Folge oder einem Hörbuch-Kapitel wird keine Musik angehängt; zu Folgen und Kapiteln gibt es kein Song-Radio. Jellyfins Sofortmix (Rückfall bei kleinen Bibliotheken) wird auf Musik gefiltert.
+- Welche Bibliothek zu welchem Reiter gehört, bestimmen wie bisher die Stichwörter in den Plugin-Einstellungen (Podcast-/Hörbuch-Bibliotheken nach Namen). Liegen Podcasts oder Hörbücher in derselben Bibliothek wie die Musik, kann das Plugin sie nicht trennen.
 
 ## Downloads und Musik vom Gerät (alles in der Jellyfin-Oberfläche)
 Es wird **keine zusätzliche App** installiert. Downloads, Verwaltung und Abspielen vom Gerät laufen in der Spotify-Ansicht innerhalb der normalen Jellyfin-App bzw. Jellyfin-Weboberfläche.

@@ -148,7 +148,7 @@
       nowPlaying: 'Wiedergabe', queue: 'Warteschlange', queueEmpty: 'Die Warteschlange ist leer.', speedTitle: 'Geschwindigkeit', speedNormal: 'Normal',
       volume: 'Lautstärke', repeat: 'Wiederholen', repeatOne: 'Titel wiederholen', repeatOff: 'Wiederholen aus', noPlayer: 'Es läuft gerade nichts.',
       infoTitle: 'Songinfos', iTitle: 'Titel', iArtist: 'Künstler', iAlbum: 'Album', iYear: 'Jahr', iLength: 'Länge', iFormat: 'Format', iBitrate: 'Bitrate',
-      iSampleRate: 'Abtastrate', iSize: 'Größe', iGenre: 'Genre', iTrack: 'Titelnummer', radioFailed: 'Song-Radio nicht verfügbar',
+      iSampleRate: 'Abtastrate', iSize: 'Größe', iGenre: 'Genre', iTrack: 'Titelnummer', radioFailed: 'Song-Radio nicht verfügbar', radioMusicOnly: 'Song-Radio gibt es nur für Musik.',
       pickArtist: 'Künstler*in wählen', hours: 'Std.', minutes: 'Min.', seconds: 'Sek.', byOwner: 'von {0}'
     },
     en: {
@@ -192,7 +192,7 @@
       nowPlaying: 'Now playing', queue: 'Queue', queueEmpty: 'The queue is empty.', speedTitle: 'Speed', speedNormal: 'Normal',
       volume: 'Volume', repeat: 'Repeat', repeatOne: 'Repeat track', repeatOff: 'Repeat off', noPlayer: 'Nothing is playing.',
       infoTitle: 'Song info', iTitle: 'Title', iArtist: 'Artist', iAlbum: 'Album', iYear: 'Year', iLength: 'Length', iFormat: 'Format', iBitrate: 'Bitrate',
-      iSampleRate: 'Sample rate', iSize: 'Size', iGenre: 'Genre', iTrack: 'Track number', radioFailed: 'Song radio not available',
+      iSampleRate: 'Sample rate', iSize: 'Size', iGenre: 'Genre', iTrack: 'Track number', radioFailed: 'Song radio not available', radioMusicOnly: 'Song radio is only available for music.',
       pickArtist: 'Choose artist', hours: 'hr', minutes: 'min', seconds: 'sec', byOwner: 'by {0}'
     }
   };
@@ -1660,8 +1660,16 @@
   function loadAlbumTracks(id) {
     return itemsOf({ ParentId: id, IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'ParentIndexNumber,IndexNumber,SortName', Limit: 1000 });
   }
-  function loadLikedTracks() {
-    return itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio,AudioBook', Recursive: true, SortBy: 'DateCreated,SortName', SortOrder: 'Descending,Ascending', Limit: 2000, Fields: 'ParentId' });
+  // libIds: nur Titel dieser Bibliotheken (z. B. nur Musik); ohne Angabe alle Lieblinge, auch Hoerbuecher und Podcasts
+  function loadLikedTracks(libIds) {
+    var base = { IsFavorite: true, IncludeItemTypes: 'Audio,AudioBook', Recursive: true, SortBy: 'DateCreated,SortName', SortOrder: 'Descending,Ascending', Limit: 2000, Fields: 'ParentId' };
+    if (!libIds || !libIds.length) return itemsOf(base);
+    return Promise.all(libIds.map(function (id) {
+      var p = {};
+      Object.keys(base).forEach(function (k) { p[k] = base[k]; });
+      p.ParentId = id;
+      return itemsOf(p).catch(function () { return []; });
+    })).then(function (lists) { return [].concat.apply([], lists); });
   }
   function loadItem(id, fields) {
     return itemsOf({ Ids: id, Fields: fields || 'Overview,ChildCount,Genres' }).then(function (a) { return a[0] || null; });
@@ -1788,7 +1796,40 @@
     Object.keys(opts || {}).forEach(function (k) { o[k] = opts[k]; });
     return Taste.similar(seeds, o).then(function (list) {
       if (list && list.length >= 8) return list;
-      return instantMix(seeds[0], limit);
+      return instantMix(seeds[0], limit).then(onlyMusic);
+    });
+  }
+
+  /* ---------- Musik, Podcasts und Hoerbuecher bleiben getrennt ---------- */
+  // Zu welcher Art Bibliothek ein Titel gehoert: 'music' | 'podcasts' | 'audiobooks' | '' (unbekannt). Gemerkt je Titel.
+  var catMemo = {};
+  function itemCat(id) {
+    var k = nid(id);
+    if (catMemo[k] !== undefined) return Promise.resolve(catMemo[k]);
+    if (Taste.has(k)) return Promise.resolve((catMemo[k] = 'music'));
+    return Promise.all([loadLibraries(), call('GET', 'Items/' + k + '/Ancestors', { userId: uid() })]).then(function (r) {
+      var cats = {};
+      r[0].forEach(function (l) { cats[nid(l.id)] = l.cat; });
+      var cat = '';
+      (r[1] || []).forEach(function (a) { if (!cat && a && cats[nid(a.Id)]) cat = cats[nid(a.Id)]; });
+      if (cat) catMemo[k] = cat;
+      return cat;
+    }, function () { return ''; });
+  }
+  function isMusicCat(cat) { return !cat || cat === 'music'; }   // unbekannt zaehlt wie Musik (bisheriges Verhalten)
+  // Aus einer Liste (z. B. Jellyfins Sofortmix, das Bibliotheken nicht unterscheidet) alles entfernen, was nicht zur Musik gehoert.
+  function onlyMusic(items) {
+    items = items || [];
+    var rest = items.filter(function (i) { return i && !Taste.has(i.Id) && catMemo[nid(i.Id)] === undefined; }).slice(0, 80);
+    var jobs = [], k = 0;
+    function worker() {
+      if (k >= rest.length) return Promise.resolve();
+      var i = rest[k++];
+      return itemCat(i.Id).then(worker);
+    }
+    jobs.push(worker(), worker(), worker(), worker());
+    return Promise.all(jobs).then(function () {
+      return items.filter(function (i) { return i && (Taste.has(i.Id) || isMusicCat(catMemo[nid(i.Id)])); });
     });
   }
   // Autoplay: nach dem letzten Titel geht es mit passenden Titeln weiter (Standard: an).
@@ -1796,7 +1837,11 @@
   function setAutoplay(on) { try { window.localStorage.setItem('ml.autoplay', on ? '1' : '0'); } catch (e) { /* nur fuer diese Sitzung */ } }
 
   function songRadio(track) {
-    return loadSongMix(track.Id, 100, { own: 6 }).then(function (items) {
+    return itemCat(track.Id).then(function (cat) {
+      if (!isMusicCat(cat)) { toast(t('radioMusicOnly')); return null; }
+      return loadSongMix(track.Id, 100, { own: 6 });
+    }).then(function (items) {
+      if (!items) return;
       var ids = items.map(function (i) { return i.Id; }).filter(function (id) { return nid(id) !== nid(track.Id); });
       if (!ids.length) { toast(t('radioFailed')); return; }
       return playIds([track.Id].concat(ids), 0);
@@ -2103,7 +2148,13 @@
       var my = ++seq;
       var params = q ? { SearchTerm: q, Limit: 40 } : { SortBy: 'DateCreated', SortOrder: 'Descending', Limit: 30 };
       params.IncludeItemTypes = 'Audio'; params.Recursive = true;
-      itemsOf(params).then(function (items) { if (my === seq) show(items); }, function () {
+      // Wie ueberall: nur der gewaehlte Reiter (Musik / Podcasts / Hoerbuecher), im Reiter "Alle" alles
+      var scoped = state.chip === 'all' ? Promise.resolve(null) : loadLibraries().then(function (libs) { return chipLibIds(libs, state.chip); }, function () { return null; });
+      scoped.then(function (ids) {
+        if (!ids || !ids.length) return itemsOf(params);
+        if (!q) params.Fields = 'DateCreated';
+        return perLibrary(ids, params, q ? null : function (a, b) { return (a.DateCreated || '') < (b.DateCreated || '') ? 1 : -1; }, params.Limit);
+      }).then(function (items) { if (my === seq) show(items); }, function () {
         if (my === seq) { list.textContent = ''; list.appendChild(el('div', 'ml-sheet-note', t('loadFailed'))); }
       });
     }
@@ -2398,7 +2449,8 @@
         return out.slice(0, max || 10).map(function (r) { return r.it.Id; });
       }, function () { return []; });
     }
-    return { load: load, similar: similar, label: labelOf, artistSeeds: artistSeeds, core: TasteCore, ready: function () { return !!ix; } };
+    function has(id) { return !!(ix && ix.byId[nid(id)]); }
+    return { has: has, load: load, similar: similar, label: labelOf, artistSeeds: artistSeeds, core: TasteCore, ready: function () { return !!ix; } };
   })();
   /* ---------- Spotify-Import: Titelliste lesen und mit der Bibliothek abgleichen ----------
      Reiner Rechenteil ohne Oberflaeche: Spotify-Seite/CSV/Text -> Titelliste, Abgleich mit den Titeln der Jellyfin-Bibliothek
@@ -2596,10 +2648,11 @@
       var ai = colIndex(head, ['artist name s', 'artist names', 'artist', 'artists', 'kunstler', 'kuenstler', 'interpret']);
       var bi = colIndex(head, ['album name', 'album']);
       var di = colIndex(head, ['duration ms', 'duration', 'dauer']);
+      var ui = colIndex(head, ['track uri', 'spotify uri', 'uri', 'track url', 'spotify url']);
       if (ti >= 0 && ai >= 0 && ti !== ai) {
         var tr = rows.slice(1).map(function (r) {
           var d = parseFloat(String(r[di] || '').replace(',', '.')) || 0;
-          return { title: clean(r[ti]), artist: clean(r[ai]), album: bi >= 0 ? clean(r[bi]) : '', dur: d > 1000 ? d / 1000 : d, uri: '' };
+          return { title: clean(r[ti]), artist: clean(r[ai]), album: bi >= 0 ? clean(r[bi]) : '', dur: d > 1000 ? d / 1000 : d, uri: ui >= 0 ? clean(r[ui]) : '' };
         }).filter(function (t) { return t.title; });
         return { tracks: tr, swap: false };
       }
@@ -2616,6 +2669,79 @@
       return { tracks: tracks, swap: true };
     }
     function swapped(tracks) { return tracks.map(function (t) { return { title: t.artist, artist: t.title, album: t.album, dur: t.dur, uri: t.uri }; }); }
+
+
+    /* ---------- Vollstaendige Listen: Spotify-Datenexport, Titel-Links, Zusammenfuehren ---------- */
+    function uriId(u) { var m = /track[:\/]([A-Za-z0-9]{22})/.exec(String(u || '')); return m ? m[1] : ''; }
+    function keyOf(t) { return coreTitle(t.title) + '|' + (artistList(t.artist)[0] || ''); }
+    // Datei aus "Deine Daten herunterladen" (Playlist1.json): { playlists: [ { name, description, items: [ { track: { trackName, artistName, albumName, trackUri } } ] } ] }
+    function parseExport(text) {
+      var doc;
+      try { doc = JSON.parse(String(text).replace(/^﻿/, '')); } catch (e) { return null; }
+      var arr = Array.isArray(doc) ? doc : doc && Array.isArray(doc.playlists) ? doc.playlists : null;
+      if (!arr) return null;
+      var out = [];
+      arr.forEach(function (pl) {
+        if (!pl || !Array.isArray(pl.items)) return;
+        var tracks = [];
+        pl.items.forEach(function (it) {
+          if (!it || it.episode) return;
+          var x = it.track || it.localTrack || it;
+          var title = clean(x.trackName != null ? x.trackName : x.track != null && typeof x.track === 'string' ? x.track : x.name);
+          if (!title) return;
+          tracks.push({ title: title, artist: clean(x.artistName != null ? x.artistName : x.artist), album: clean(x.albumName != null ? x.albumName : x.album), dur: 0, uri: String(x.trackUri || x.uri || '') });
+        });
+        out.push({ name: clean(pl.name), description: clean(pl.description), tracks: tracks });
+      });
+      return out.length ? out : null;
+    }
+    // Alle Titel-Links in einem eingefuegten Text (Strg+A, Strg+C in Spotify liefert eine Zeile pro Titel)
+    function trackLinkIds(text) {
+      var re = /(?:open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?track\/|spotify:track:)([A-Za-z0-9]{22})/g, m, seen = {}, out = [];
+      while ((m = re.exec(String(text || '')))) if (!seen[m[1]]) { seen[m[1]] = 1; out.push(m[1]); }
+      return out;
+    }
+    function onlyLinks(text) {
+      return !/[\p{L}\p{N}]/u.test(String(text || '').replace(/\S*(?:open\.spotify\.com|spotify:)\S*/g, ' '));
+    }
+    // Einzelner Titel aus der Embed-Seite eines Titels (oder null)
+    function parseSpotifyTrack(resp) {
+      var meta = (resp && resp.meta) || {}, hit = null;
+      ((resp && resp.scripts) || []).forEach(function (s) {
+        if (hit) return;
+        var doc = tryParse(s);
+        if (!doc) return;
+        (function walk(n, depth) {
+          if (hit || !n || typeof n !== 'object' || depth > 14) return;
+          if (!Array.isArray(n) && isTrackObj(n) && (Array.isArray(n.artists) || typeof n.subtitle === 'string')) { hit = trackFrom(n); return; }
+          Object.keys(n).forEach(function (k) { walk(n[k], depth + 1); });
+        })(doc, 0);
+      });
+      if (hit && hit.title) return hit;
+      var title = clean(String(meta['og:title'] || '').replace(/\s*[|–-]\s*Spotify\s*$/i, ''));
+      var desc = clean(String(meta['og:description'] || '').replace(/^.*?\bon Spotify\.\s*/i, ''));
+      var artist = desc.indexOf(' · ') > 0 ? clean(desc.split(' · ')[0]) : '';
+      return title && artist ? { title: title, artist: artist, album: '', dur: 0, uri: '' } : null;
+    }
+    // Anzahl der Titel laut Beschreibung der Spotify-Seite (z. B. "Playlist · 543 items"), sonst 0
+    function totalHint(resp) {
+      var d = String(((resp && resp.meta) || {})['og:description'] || '');
+      var m = /(\d[\d.,]*)\s*(?:items?|songs?|tracks?|titel|lieder|elemente)\b/i.exec(d);
+      return m ? parseInt(m[1].replace(/[.,]/g, ''), 10) || 0 : 0;
+    }
+    // base + alles aus extra, was in base noch nicht vorkommt (gleiche Titel-ID oder gleicher Titel + erster Kuenstler)
+    function mergeTracks(base, extra) {
+      var ids = {}, keys = {};
+      function note(t) { var i = uriId(t.uri); if (i) ids[i] = 1; keys[keyOf(t)] = 1; }
+      base.forEach(note);
+      var out = base.slice();
+      (extra || []).forEach(function (t) {
+        var i = uriId(t.uri);
+        if ((i && ids[i]) || keys[keyOf(t)]) return;
+        note(t); out.push(t);
+      });
+      return out;
+    }
 
     /* ---------- Abgleich ---------- */
     function buildLib(items) {
@@ -2686,7 +2812,7 @@
       });
       return '﻿' + lines.join('\r\n') + '\r\n';
     }
-    return { parseSpotify: parseSpotify, playlistId: playlistId, parseList: parseList, swapped: swapped, buildLib: buildLib, matchOne: matchOne, matchAll: matchAll, count: count, toCSV: toCSV, coreTitle: coreTitle, artistList: artistList, titleSim: titleSim };
+    return { parseExport: parseExport, trackLinkIds: trackLinkIds, onlyLinks: onlyLinks, parseSpotifyTrack: parseSpotifyTrack, totalHint: totalHint, mergeTracks: mergeTracks, uriId: uriId, keyOf: keyOf, parseSpotify: parseSpotify, playlistId: playlistId, parseList: parseList, swapped: swapped, buildLib: buildLib, matchOne: matchOne, matchAll: matchAll, count: count, toCSV: toCSV, coreTitle: coreTitle, artistList: artistList, titleSim: titleSim };
   })();
 
   /* ---------- Downloads: Titel auf das Gerät laden (Verwaltung in der Spotify-Ansicht) ---------- */
@@ -3088,7 +3214,7 @@
       { hidden: !(track.ArtistItems && track.ArtistItems.length), icon: 'person', label: t('mArtist'), run: function () { openArtist(track.ArtistItems); } },
       { icon: 'speed', label: t('mSpeed'), run: openSpeed },
       { hidden: !ML.config().jamEnabled, icon: 'group', label: t('mJam'), run: function () { jamWith([track.Id]); } },
-      { icon: 'radio', label: t('mRadio'), run: function () { songRadio(track); } },
+      { hidden: !isMusicCat(catMemo[nid(track.Id)]), icon: 'radio', label: t('mRadio'), run: function () { songRadio(track); } },
       { icon: 'info', label: t('mInfo'), run: function () { openSongInfo(track); } }
     ]);
   }
@@ -3472,6 +3598,16 @@
   function likedHash() { return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=liked'; }
 
   function musicLibIds(libs) { return libs.filter(function (l) { return l.cat === 'music'; }).map(function (l) { return l.id; }); }
+  // Bibliotheken, aus denen der gewaehlte Reiter (Alle / Musik / Podcasts / Hoerbuecher) seine Inhalte nimmt; null = alle (Reiter "Alle")
+  function chipLibIds(libs, chip) {
+    if (!chip || chip === 'all') return null;
+    return libs.filter(function (l) { return l.cat === chip; }).map(function (l) { return l.id; });
+  }
+  // Lieblingssongs: im Reiter "Alle" auch Favoriten aus Podcasts und Hoerbuechern, sonst nur Musik
+  function likedScope() {
+    if (state.chip === 'all') return Promise.resolve(null);
+    return loadLibraries().then(function (libs) { var ids = musicLibIds(libs); return ids.length ? ids : null; }, function () { return null; });
+  }
 
   // Fuehrt params je Bibliothek aus und mischt die Ergebnisse nach sortFn.
   function perLibrary(libIds, params, sortFn, limit) {
@@ -3844,7 +3980,7 @@
         return Taste.similar(seeds, { n: 60, own: 14, keepSeeds: true });
       }).then(function (list) {
         if (list && list.length >= 8) return list;
-        return call('GET', 'Artists/' + id + '/InstantMix', { UserId: uid(), Limit: 60 }).then(function (r) { return (r && r.Items) || []; });
+        return call('GET', 'Artists/' + id + '/InstantMix', { UserId: uid(), Limit: 60 }).then(function (r) { return onlyMusic((r && r.Items) || []); });
       });
     } else {
       p = loadItem(id, '').then(function (seed) {
@@ -4066,7 +4202,7 @@
         var x = (a.UserData && a.UserData.LastPlayedDate) || '', y = (b.UserData && b.UserData.LastPlayedDate) || '';
         return x < y ? 1 : x > y ? -1 : 0;
       }, 60);
-    var likedP = itemsOf({ IsFavorite: true, IncludeItemTypes: 'Audio', Recursive: true, Limit: 300, Fields: 'ParentId' }).catch(function () { return []; });
+    var likedP = perLibrary(musicIds, { IsFavorite: true, IncludeItemTypes: 'Audio', Recursive: true, Limit: 300, Fields: 'ParentId' }, null, 300).catch(function () { return []; });
     var topP = perLibrary(musicIds, { IncludeItemTypes: 'Audio', Recursive: true, Filters: 'IsPlayed', SortBy: 'PlayCount', SortOrder: 'Descending', Limit: 60 }, null, 60);
     fillForYou({ today: slotToday, user: slotUser, stations: slotStations, top: slotTop, likedAlbums: slotLikedAlbums }, seq,
       { playedP: playedP.catch(function () { return []; }), likedP: likedP, topP: topP });
@@ -4250,6 +4386,11 @@
     var input = el('input', 'ml-field ml-search-big');
     input.type = 'search'; input.placeholder = t('searchPh'); input.setAttribute('autocomplete', 'off'); input.value = searchTerm;
     head.appendChild(input);
+    // Reiter wie auf der Startseite: Musik, Podcasts und Hoerbuecher werden getrennt durchsucht, nur "Alle" mischt
+    head.appendChild(chipRow([
+      { key: 'all', label: t('chipAll') }, { key: 'music', label: t('chipMusic') },
+      { key: 'podcasts', label: t('chipPodcasts') }, { key: 'audiobooks', label: t('chipAudiobooks') }
+    ], state.chip, function (k) { state.chip = k; run(); }, 'ml-top-chips ml-search-chips'));
     host.appendChild(head);
     var out = el('div', 'ml-search-out');
     host.appendChild(out);
@@ -4299,7 +4440,8 @@
 
       function libParams(extra) {
         var p = { IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'SortName' };
-        if (state.libraryId) p.ParentId = state.libraryId;
+        var lid = state.chip === 'podcasts' || state.chip === 'audiobooks' ? state.scopeLib : state.libraryId;
+        if (lid) p.ParentId = lid;
         Object.keys(extra || {}).forEach(function (k) { p[k] = extra[k]; });
         return p;
       }
@@ -4321,7 +4463,44 @@
           }
         }, function () { if (my === token && seq === state.view) failNote(out, function () { showAll(my); }); });
       }
-      ensureLibrary().then(page, page);
+      var prep = state.chip === 'podcasts' || state.chip === 'audiobooks'
+        ? loadLibraries().then(function (libs) { var l = libs.filter(function (x) { return x.cat === state.chip; })[0]; state.scopeLib = l ? l.id : null; })
+        : ensureLibrary();
+      prep.then(function () {
+        if ((state.chip === 'podcasts' || state.chip === 'audiobooks') && !state.scopeLib) { count.textContent = ''; out.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet'))); return; }
+        page();
+      }, page);
+    }
+
+    // Suche im gewaehlten Reiter. "Alle": wie bisher in allen Bibliotheken. Sonst nur in den Bibliotheken dieses Reiters.
+    function searchScoped(q, libs) {
+      var ids = chipLibIds(libs, state.chip) || [];
+      if (!ids.length) return Promise.resolve({ songs: [], albums: [], artists: [], lists: [] });
+      var songsP = perLibrary(ids, { IncludeItemTypes: 'Audio', Recursive: true, SearchTerm: q, SortBy: 'SortName', Limit: 200 }, null, 200);
+      var albumsP = perLibrary(ids, { IncludeItemTypes: 'MusicAlbum', Recursive: true, SearchTerm: q, SortBy: 'SortName', Limit: 30 }, null, 30);
+      var artistsP = Promise.all(ids.map(function (id) {
+        return call('GET', 'Artists/AlbumArtists', { UserId: uid(), SearchTerm: q, ParentId: id, SortBy: 'SortName', Limit: 20 }).then(function (r) { return (r && r.Items) || []; }, function () { return []; });
+      })).then(function (lists) { return [].concat.apply([], lists).slice(0, 20); });
+      // Playlists sind von dir zusammengestellt und gehoeren nur zu Musik
+      var listsP = state.chip === 'music'
+        ? call('GET', 'Search/Hints', { searchTerm: q, UserId: uid(), Limit: 20, IncludeItemTypes: 'Playlist', IncludeMedia: true }).then(function (r) {
+          return ((r && r.SearchHints) || []).filter(function (h) { return h.Type === 'Playlist' && (!h.MediaType || h.MediaType === 'Audio'); });
+        }, function () { return []; })
+        : Promise.resolve([]);
+      return Promise.all([songsP.catch(function () { return []; }), albumsP.catch(function () { return []; }), artistsP, listsP]).then(function (res) {
+        var artistIds = res[2].slice(0, 3).map(function (a) { return a.Id; }).filter(function (id) { return ID_RE.test(String(id)); });
+        var more = artistIds.length
+          ? perLibrary(ids, { IncludeItemTypes: 'Audio', Recursive: true, ArtistIds: artistIds.join(','), SortBy: 'Album,ParentIndexNumber,IndexNumber', Limit: 200 }, null, 200).catch(function () { return []; })
+          : Promise.resolve([]);
+        return more.then(function (m) {
+          return {
+            songs: res[0].concat(m),
+            albums: res[1].map(function (a) { return { Id: a.Id, Name: a.Name, AlbumArtist: a.AlbumArtist, Type: 'MusicAlbum', _img: itemImg(a, 96) }; }),
+            artists: res[2].map(function (a) { return { Id: a.Id, Name: a.Name, Type: 'MusicArtist', _img: itemImg(a, 96) }; }),
+            lists: res[3]
+          };
+        });
+      });
     }
 
     function run() {
@@ -4331,29 +4510,40 @@
       out.textContent = '';
       if (!q) { showAll(my); return; }
       out.appendChild(loaderEl());
-      var hintsReq = call('GET', 'Search/Hints', { searchTerm: q, UserId: uid(), Limit: 30, IncludeItemTypes: 'MusicAlbum,MusicArtist,Playlist', IncludeMedia: true });
-      var songsReq = itemsOf({ IncludeItemTypes: 'Audio', Recursive: true, SearchTerm: q, SortBy: 'SortName', Limit: 200 });
-      Promise.all([hintsReq, songsReq.catch(function () { return []; })]).then(function (res) {
-        var hints = (res[0] && res[0].SearchHints) || [];
-        var artists = hints.filter(function (h) { return h.Type === 'MusicArtist'; });
-        // Titel der gefundenen Kuenstler gehoeren ebenfalls in die Titelliste.
-        var artistIds = artists.slice(0, 3).map(function (h) { return h.ItemId || h.Id; }).filter(function (id) { return ID_RE.test(id); });
-        var byArtist = artistIds.length
-          ? itemsOf({ IncludeItemTypes: 'Audio', Recursive: true, ArtistIds: artistIds.join(','), SortBy: 'Album,ParentIndexNumber,IndexNumber', Limit: 200 }).catch(function () { return []; })
-          : Promise.resolve([]);
-        return byArtist.then(function (more) { return { hints: hints, songs: res[1], more: more }; });
-      }).then(function (r) {
+      var fetched;
+      if (state.chip === 'all') {
+        var hintsReq = call('GET', 'Search/Hints', { searchTerm: q, UserId: uid(), Limit: 30, IncludeItemTypes: 'MusicAlbum,MusicArtist,Playlist', IncludeMedia: true });
+        var songsReq = itemsOf({ IncludeItemTypes: 'Audio', Recursive: true, SearchTerm: q, SortBy: 'SortName', Limit: 200 });
+        fetched = Promise.all([hintsReq, songsReq.catch(function () { return []; })]).then(function (res) {
+          var hints = (res[0] && res[0].SearchHints) || [];
+          var artists = hints.filter(function (h) { return h.Type === 'MusicArtist'; });
+          // Titel der gefundenen Kuenstler gehoeren ebenfalls in die Titelliste.
+          var artistIds = artists.slice(0, 3).map(function (h) { return h.ItemId || h.Id; }).filter(function (id) { return ID_RE.test(id); });
+          var byArtist = artistIds.length
+            ? itemsOf({ IncludeItemTypes: 'Audio', Recursive: true, ArtistIds: artistIds.join(','), SortBy: 'Album,ParentIndexNumber,IndexNumber', Limit: 200 }).catch(function () { return []; })
+            : Promise.resolve([]);
+          return byArtist.then(function (more) {
+            return {
+              songs: res[1].concat(more),
+              albums: hints.filter(function (h) { return h.Type === 'MusicAlbum'; }).map(function (h) { return { Id: h.ItemId || h.Id, Name: h.Name, AlbumArtist: h.AlbumArtist, _img: hintImg(h, 96) }; }),
+              artists: artists.map(function (h) { return { Id: h.ItemId || h.Id, Name: h.Name, _img: hintImg(h, 96) }; }),
+              lists: hints.filter(function (h) { return h.Type === 'Playlist' && (!h.MediaType || h.MediaType === 'Audio'); })
+            };
+          });
+        });
+      } else {
+        fetched = loadLibraries().then(function (libs) { return searchScoped(q, libs); });
+      }
+      fetched.then(function (r) {
         if (my !== token || seq !== state.view) return;
         out.textContent = '';
         var seen = {}, songs = [];
-        r.songs.concat(r.more).forEach(function (tr) {
+        r.songs.forEach(function (tr) {
           var k = nid(tr.Id);
           if (!seen[k]) { seen[k] = true; songs.push(tr); }
         });
         songs = songs.slice(0, 300);
-        var albums = r.hints.filter(function (h) { return h.Type === 'MusicAlbum'; });
-        var artists = r.hints.filter(function (h) { return h.Type === 'MusicArtist'; });
-        var lists = r.hints.filter(function (h) { return h.Type === 'Playlist' && (!h.MediaType || h.MediaType === 'Audio'); });
+        var albums = r.albums, artists = r.artists, lists = r.lists;
         if (songs.length) {
           out.appendChild(el('h2', 'ml-shelf-title', t('songsOfSearch') + ' (' + songs.length + ')'));
           var ctx = songListCtx();
@@ -4362,8 +4552,8 @@
           out.appendChild(ctx.listEl);
           ctx.renderTracks();
         }
-        group(t('albums'), albums.map(function (h) { return row({ title: h.Name, sub: t('album') + (h.AlbumArtist ? ' • ' + h.AlbumArtist : ''), img: hintImg(h, 96), onClick: function () { go(link(h)); } }); }));
-        group(t('artists'), artists.map(function (h) { return row({ title: h.Name, sub: t('artist'), img: hintImg(h, 96), round: true, onClick: function () { go(link(h)); } }); }));
+        group(t('albums'), albums.map(function (h) { return row({ title: h.Name, sub: t('album') + (h.AlbumArtist ? ' • ' + h.AlbumArtist : ''), img: h._img, onClick: function () { go(link(h)); } }); }));
+        group(t('artists'), artists.map(function (h) { return row({ title: h.Name, sub: t('artist'), img: h._img, round: true, onClick: function () { go(link(h)); } }); }));
         group(t('playlists'), lists.map(function (h) { return row({ title: h.Name, sub: t('playlist'), img: hintImg(h, 96), onClick: function () { go(link(h)); } }); }));
         if (!songs.length && !albums.length && !artists.length && !lists.length) out.appendChild(el('p', 'ml-muted ml-pad', t('noResults', q)));
       }, function () {
@@ -4578,7 +4768,7 @@
     host.appendChild(list);
     ctx.listEl = list;
     ctx.renderTracks();
-    if (ctx.kind === 'playlist' && ctx.pl && !edit) spMissingSection(host, ctx.pl.id);
+    if (ctx.kind === 'playlist' && ctx.pl && !edit) spMissingSection(host, ctx.pl.id, ctx);
   }
 
   // Alles abspielen (bei Ordnern mit Unterordnern werden zuerst alle Titel darunter eingesammelt).
@@ -4862,7 +5052,7 @@
     if (Net.offline()) { OFFV.showDetail(host, seq, 'liked', 'liked'); return; }
     renderDetailLoading(host);
     function start() {
-      loadLikedTracks().then(function (tracks) {
+      likedScope().then(loadLikedTracks).then(function (tracks) {
         if (seq !== state.view) return;
         var ctx = makeDetailCtx(host, { kind: 'liked', tracks: tracks, canEdit: false });
         ctx.reload = function () { start(); };
@@ -4979,11 +5169,11 @@
     var extra = {
       de: {
         spMenu: 'Von Spotify importieren', spTitle: 'Von Spotify importieren',
-        spIntro: 'Füge den Playlist-Link von Spotify ein (in Spotify: Teilen → Link kopieren). Alternativ eine Titelliste (eine Zeile pro Titel, z. B. „Titel – Künstler“) einfügen oder eine CSV-Datei laden. Titel, die du nicht hast, werden als „nicht verfügbar“ markiert.',
-        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'CSV laden', spNext: 'Weiter',
+        spIntro: 'Füge den Playlist-Link von Spotify ein (in Spotify: Teilen → Link kopieren). Damit kommen Name, Beschreibung, Cover und die ersten 100 Titel. Hat die Playlist mehr Titel: in Spotify alle Titel markieren (Strg+A), kopieren (Strg+C) und hier einfügen, oder eine Datei laden (Spotify-Datenexport als JSON oder CSV, z. B. von Exportify). Auch eine einfache Liste („Titel – Künstler“, eine Zeile pro Titel) geht. Was du nicht hast, wird als „nicht verfügbar“ markiert.',
+        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Datei laden', spNext: 'Weiter',
         spReading: 'Spotify-Playlist wird gelesen …', spMatching: 'Titel werden abgeglichen …',
-        spFailLink: 'Die Spotify-Seite konnte nicht gelesen werden ({0}). Füge stattdessen die Titelliste ein oder lade eine CSV-Datei.',
-        spFailParse: 'In der Spotify-Seite wurden keine Titel gefunden. Füge stattdessen die Titelliste ein oder lade eine CSV-Datei.',
+        spFailLink: 'Die Spotify-Seite konnte nicht gelesen werden ({0}). Füge stattdessen die Titel ein oder lade eine Datei.',
+        spFailParse: 'In der Spotify-Seite wurden keine Titel gefunden. Füge stattdessen die Titel ein oder lade eine Datei.',
         spOnlyLinks: 'Einzelne Titel-Links kann ich nicht auflösen. Füge den Playlist-Link oder die Titel mit Namen ein.',
         spNothing: 'Es wurden keine Titel erkannt.', spLibFail: 'Die Bibliothek konnte nicht gelesen werden.',
         spFound: '{0} von {1} Titeln in deiner Bibliothek gefunden', spCover: 'Cover von Spotify übernehmen',
@@ -4991,17 +5181,30 @@
         spCreate: 'Playlist erstellen ({0})', spTable: 'Tabelle (CSV)', spCreated: 'Playlist „{0}“ mit {1} Titeln erstellt',
         spCreateFail: 'Die Playlist konnte nicht erstellt werden.', spCoverFail: 'Das Cover konnte nicht übernommen werden.',
         spDescFail: 'Die Beschreibung konnte nicht gespeichert werden.',
-        spMissTitle: 'Nicht verfügbar ({0})', spMissNote: 'Aus Spotify, aber nicht in deiner Bibliothek (nur auf diesem Gerät gemerkt).',
         spOffline: 'Der Import braucht eine Verbindung zum Server.', spBack: 'Zurück', spFile: 'Datei konnte nicht gelesen werden.',
-        spSearching: 'Fehlende Titel werden gesucht …'
+        spSearching: 'Fehlende Titel werden gesucht …',
+        spResolving: 'Titel werden bei Spotify gelesen … {0} von {1}', spResolveFail: '{0} Titel konnten bei Spotify nicht gelesen werden.',
+        spResolveAbort: 'Spotify liefert die Titel nicht aus ({0}). Lade stattdessen eine Datei (Spotify-Datenexport oder CSV).',
+        spPickPl: 'Welche Playlist aus der Datei?', spPickSub: '{0} Titel',
+        spCut: 'Spotify zeigt über den Link nur die ersten 100 Titel. Ergänze die übrigen, damit die Playlist vollständig wird.',
+        spCutN: 'Spotify zeigt über den Link nur 100 von {0} Titeln. Ergänze die übrigen, damit die Playlist vollständig wird.',
+        spMore: 'Weitere Titel ergänzen', spMoreIntro: 'Füge die Titel-Links ein (in Spotify alle Titel markieren mit Strg+A, kopieren mit Strg+C) oder lade eine Datei (Spotify-Datenexport als JSON, CSV). Schon vorhandene Titel werden nicht doppelt aufgenommen.',
+        spMoreAdded: '{0} weitere Titel ergänzt', spMoreNone: 'Es gab keine neuen Titel.',
+        spSecTitle: 'Spotify-Abgleich', spSecMiss: 'Fehlend: {0}', spSecAll: 'Alle Titel vorhanden', spSecCount: '{0} von {1} Titeln in deiner Bibliothek',
+        spSecNote: 'Titel aus Spotify, die (noch) nicht in deiner Bibliothek sind. Kommen sie dazu, kannst du die Playlist aktualisieren.',
+        spUpd: 'Jetzt aktualisieren', spChecking: 'Bibliothek wird geprüft …', spUpdTitle: 'Neue Treffer', spUpdFound: '{0} neue Treffer in deiner Bibliothek',
+        spUpdAdd: 'Hinzufügen ({0})', spUpdDone: '{0} neue Titel zur Playlist hinzugefügt', spUpdNone: 'Nichts Neues. Fehlend: {0}.',
+        spUpdNoneAll: 'Nichts Neues, die Playlist ist vollständig.', spUpdFail: 'Die Playlist konnte nicht aktualisiert werden.', spFromSpotify: '{0} neue Titel aus Spotify',
+        spAuto: 'Automatisch aktualisieren', spAutoNote: 'Beim Öffnen von Music Look wird höchstens einmal täglich geprüft, ob fehlende Titel inzwischen da sind. Sichere Treffer kommen dann von selbst in die Playlist.',
+        spAutoAdded: '„{1}“: {0} neue Titel hinzugefügt', spLast: 'Zuletzt geprüft: {0}', spNever: 'noch nie'
       },
       en: {
         spMenu: 'Import from Spotify', spTitle: 'Import from Spotify',
-        spIntro: 'Paste the playlist link from Spotify (in Spotify: Share → Copy link). Or paste a track list (one line per track, e.g. “Title – Artist”) or load a CSV file. Tracks you do not have are marked “not available”.',
-        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Load CSV', spNext: 'Next',
+        spIntro: 'Paste the playlist link from Spotify (in Spotify: Share → Copy link). It brings the name, description, cover and the first 100 tracks. If the playlist is longer: select all tracks in Spotify (Ctrl+A), copy (Ctrl+C) and paste them here, or load a file (Spotify data export as JSON, or a CSV, e.g. from Exportify). A plain list (“Title – Artist”, one line per track) works too. Tracks you do not have are marked “not available”.',
+        spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Load file', spNext: 'Next',
         spReading: 'Reading the Spotify playlist …', spMatching: 'Matching tracks …',
-        spFailLink: 'The Spotify page could not be read ({0}). Paste the track list instead or load a CSV file.',
-        spFailParse: 'No tracks were found in the Spotify page. Paste the track list instead or load a CSV file.',
+        spFailLink: 'The Spotify page could not be read ({0}). Paste the tracks instead or load a file.',
+        spFailParse: 'No tracks were found in the Spotify page. Paste the tracks instead or load a file.',
         spOnlyLinks: 'I cannot resolve single track links. Paste the playlist link or the tracks with their names.',
         spNothing: 'No tracks were recognised.', spLibFail: 'The library could not be read.',
         spFound: '{0} of {1} tracks found in your library', spCover: 'Use the Spotify cover',
@@ -5009,72 +5212,173 @@
         spCreate: 'Create playlist ({0})', spTable: 'Table (CSV)', spCreated: 'Playlist “{0}” created with {1} tracks',
         spCreateFail: 'The playlist could not be created.', spCoverFail: 'The cover could not be applied.',
         spDescFail: 'The description could not be saved.',
-        spMissTitle: 'Not available ({0})', spMissNote: 'From Spotify, but not in your library (remembered on this device only).',
         spOffline: 'The import needs a connection to the server.', spBack: 'Back', spFile: 'The file could not be read.',
-        spSearching: 'Searching for missing tracks …'
+        spSearching: 'Searching for missing tracks …',
+        spResolving: 'Reading tracks from Spotify … {0} of {1}', spResolveFail: '{0} tracks could not be read from Spotify.',
+        spResolveAbort: 'Spotify does not deliver the tracks ({0}). Load a file instead (Spotify data export or CSV).',
+        spPickPl: 'Which playlist from the file?', spPickSub: '{0} tracks',
+        spCut: 'Spotify shows only the first 100 tracks through the link. Add the rest to make the playlist complete.',
+        spCutN: 'Spotify shows only 100 of {0} tracks through the link. Add the rest to make the playlist complete.',
+        spMore: 'Add more tracks', spMoreIntro: 'Paste the track links (in Spotify select all tracks with Ctrl+A, copy with Ctrl+C) or load a file (Spotify data export as JSON, CSV). Tracks that are already there are not added twice.',
+        spMoreAdded: '{0} more tracks added', spMoreNone: 'There were no new tracks.',
+        spSecTitle: 'Spotify sync', spSecMiss: 'Missing: {0}', spSecAll: 'All tracks available', spSecCount: '{0} of {1} tracks in your library',
+        spSecNote: 'Tracks from Spotify that are not (yet) in your library. Once they are, you can update the playlist.',
+        spUpd: 'Update now', spChecking: 'Checking the library …', spUpdTitle: 'New matches', spUpdFound: '{0} new matches in your library',
+        spUpdAdd: 'Add ({0})', spUpdDone: '{0} new tracks added to the playlist', spUpdNone: 'Nothing new. Missing: {0}.',
+        spUpdNoneAll: 'Nothing new, the playlist is complete.', spUpdFail: 'The playlist could not be updated.', spFromSpotify: '{0} new tracks from Spotify',
+        spAuto: 'Update automatically', spAutoNote: 'When Music Look is opened, it checks at most once a day whether missing tracks have arrived. Sure matches are added to the playlist by themselves.',
+        spAutoAdded: '“{1}”: {0} new tracks added', spLast: 'Last checked: {0}', spNever: 'never'
       }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
   })();
 
-  var SP_MISS = 'ml.spmiss.';
-  function spSaveMissing(pid, list) {
-    try { window.localStorage.setItem(SP_MISS + nid(pid), JSON.stringify(list.slice(0, 400))); } catch (e) { /* nur nicht gemerkt */ }
-  }
+  /* ---------- Gemerkte Quelle einer importierten Playlist (liegt auf dem Server, damit sie auf jedem Geraet gilt) ---------- */
+  var SP_MISS = 'ml.spmiss.';   // aeltere Versionen: nur die fehlenden Titel, nur auf diesem Geraet
   function spLoadMissing(pid) {
     try { var r = JSON.parse(window.localStorage.getItem(SP_MISS + nid(pid)) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
   }
-  // Unter den Titeln einer importierten Playlist: was bei Spotify drin war, aber in der Bibliothek fehlt (ausgegraut).
-  function spMissingSection(host, pid) {
+  function spSrcSave(pid, doc) { return postText('MusicLook/Spotify/Source/' + nid(pid), JSON.stringify(doc)); }
+  function spStatus(e) { return e && (e.status || (e.response && e.response.status)); }
+  function spLegacyDoc(pid) {
     var list = spLoadMissing(pid);
-    if (!list.length) return;
-    var box = el('div', 'ml-sp-miss');
-    var head = btn('ml-sp-miss-head');
-    head.setAttribute('aria-expanded', 'false');
-    head.appendChild(el('span', 'ml-sp-miss-t', t('spMissTitle', list.length)));
-    box.appendChild(head);
-    var body = el('div', 'ml-sp-miss-body');
-    body.hidden = true;
-    body.appendChild(el('div', 'ml-sp-miss-note', t('spMissNote')));
-    list.forEach(function (m) {
-      var row = el('div', 'ml-sp-miss-row');
-      row.appendChild(el('div', 'ml-sp-miss-name', m.t || ''));
-      if (m.a) row.appendChild(el('div', 'ml-sp-miss-art', m.a));
-      body.appendChild(row);
+    if (!list.length) return null;
+    var doc = { v: 1, sp: '', name: '', auto: false, at: 0, partial: true, tracks: list.map(function (m) { return { t: m.t || '', a: m.a || '', id: '' }; }) };
+    spSrcSave(pid, doc).then(function () { try { window.localStorage.removeItem(SP_MISS + nid(pid)); } catch (e) { /* bleibt */ } }, function () { /* naechstes Mal */ });
+    return doc;
+  }
+  function spLoadDoc(pid) {
+    return call('GET', 'MusicLook/Spotify/Source/' + nid(pid)).then(function (r) {
+      return r && Array.isArray(r.tracks) ? r : spLegacyDoc(pid);
+    }, function (e) { return spStatus(e) === 404 ? spLegacyDoc(pid) : null; });
+  }
+  function spToSrc(d) { return { title: d.t || '', artist: d.a || '', album: d.al || '', dur: d.d || 0, uri: d.u || '' }; }
+  function spFromSrc(s) {
+    var o = { t: s.title, a: s.artist || '', id: '' };
+    if (s.album) o.al = s.album;
+    if (s.dur) o.d = Math.round(s.dur);
+    if (s.uri) o.u = s.uri;
+    return o;
+  }
+  function spIsMissing(d) { return !d.id && !d.x; }
+
+  // Playlist-Link bei Spotify lesen -> { name, description, cover, tracks, total } oder null
+  function spReadLink(spId) {
+    return call('GET', 'MusicLook/Spotify/Playlist', { id: spId }).then(function (r) {
+      var pl = SPCore.parseSpotify(r);
+      if (!pl || !pl.tracks.length) return null;
+      pl.total = SPCore.totalHint(r);
+      return pl;
     });
-    box.appendChild(body);
-    head.addEventListener('click', function () {
-      body.hidden = !body.hidden;
-      head.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
-    });
-    host.appendChild(box);
+  }
+  function spLibrary(force) {
+    return Taste.load(force).then(function (ix) { return { items: ix.recs.map(function (r) { return r.it; }), capped: ix.N >= 5990 }; });
+  }
+  // Titel, die bei der Bibliothek-Suche (sehr grosse Bibliotheken) nicht im Index stehen, einzeln nachsuchen
+  function spSearchMissing(res, alive) {
+    var miss = [];
+    res.forEach(function (m, i) { if (!m.hit && miss.length < 200) miss.push(i); });
+    if (!miss.length) return Promise.resolve();
+    var k = 0;
+    function worker() {
+      if (k >= miss.length || !alive()) return Promise.resolve();
+      var i = miss[k++], tr = res[i].src;
+      return itemsOf({ SearchTerm: SPCore.coreTitle(tr.title) || tr.title, IncludeItemTypes: 'Audio', Recursive: true, Limit: 15 }).then(function (items) {
+        var m = SPCore.matchOne(SPCore.buildLib(items), tr);
+        if (m.hit) res[i] = m;
+      }, function () { /* naechster */ }).then(worker);
+    }
+    return Promise.all([worker(), worker(), worker(), worker()]);
+  }
+  function spPlaylistIds(pid) {
+    var out = [], PAGE = 1500;
+    function page(start) {
+      return call('GET', 'Playlists/' + pid + '/Items', { UserId: uid(), StartIndex: start, Limit: PAGE, Fields: '', EnableImages: false, EnableUserData: false }).then(function (r) {
+        var items = (r && r.Items) || [];
+        items.forEach(function (x) { out.push(nid(x.Id)); });
+        return items.length >= PAGE && start < 20000 ? page(start + PAGE) : out;
+      });
+    }
+    return page(0);
   }
 
-  function openSpotifyImport() {
-    if (Net.offline()) { toast(t('spOffline')); return; }
-    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spTitle') });
-    function isAlive() { return ui.sheet.isConnected; }   // auch nach Schliessen ueber den Hintergrund oder Zurueck
+  /* Pruefen: neue Quell-Titel zusammenfuehren, fehlende Titel mit der (aktuellen) Bibliothek abgleichen.
+     opts: { force (Bibliothek neu laden), extra (zusaetzliche Titel), alive } -> { doc, found: [{ i, m, have }], fresh } */
+  function spCheck(pid, opts) {
+    opts = opts || {};
+    var alive = opts.alive || function () { return true; };
+    return spLoadDoc(pid).then(function (doc) {
+      if (!doc) throw new Error('no source');
+      var link = doc.sp ? spReadLink(doc.sp).then(function (p) { return p ? p.tracks : []; }, function () { return []; }) : Promise.resolve([]);
+      return link.then(function (linked) {
+        var incoming = SPCore.mergeTracks(opts.extra || [], linked);
+        var base = doc.tracks.map(spToSrc);
+        var merged = SPCore.mergeTracks(base, incoming);
+        var fresh = merged.length - base.length;
+        merged.slice(base.length).forEach(function (s) { doc.tracks.push(spFromSrc(s)); });
+        if (doc.tracks.length > 5000) doc.tracks.length = 5000;
+        var idx = [], src = [];
+        doc.tracks.forEach(function (d, i) { if (spIsMissing(d)) { idx.push(i); src.push(spToSrc(d)); } });
+        if (!src.length) return { doc: doc, found: [], fresh: fresh };
+        return Promise.all([spLibrary(!!opts.force), spPlaylistIds(pid)]).then(function (r) {
+          if (!alive()) return { doc: doc, found: [], fresh: fresh };
+          var lib = r[0], cur = {}, taken = {};
+          r[1].forEach(function (x) { cur[x] = 1; });
+          doc.tracks.forEach(function (d) { if (d.id) taken[nid(d.id)] = 1; });
+          var res = SPCore.matchAll(src, SPCore.buildLib(lib.items));
+          var more = lib.capped ? spSearchMissing(res, alive) : Promise.resolve();
+          return more.then(function () {
+            var found = [];
+            res.forEach(function (m, k) {
+              if (!m.hit || m.dup || taken[nid(m.hit.Id)]) return;
+              taken[nid(m.hit.Id)] = 1;
+              found.push({ i: idx[k], m: m, have: !!cur[nid(m.hit.Id)] });
+            });
+            return { doc: doc, found: found, fresh: fresh };
+          });
+        });
+      });
+    });
+  }
+  // Treffer uebernehmen (zur Playlist hinzufuegen), abgewaehlte als "ignoriert" merken, Quelle speichern. -> Anzahl hinzugefuegter Titel
+  function spApply(pid, doc, chosen, ignored) {
+    var ids = [];
+    chosen.forEach(function (f) {
+      doc.tracks[f.i].id = f.m.hit.Id;
+      if (!f.have) ids.push(f.m.hit.Id);
+    });
+    (ignored || []).forEach(function (i) { doc.tracks[i].x = 1; });
+    doc.at = Date.now();
+    delete doc.partial;
+    var job = ids.length ? addToPlaylistIds(pid, ids) : Promise.resolve();
+    return job.then(function () { return spSrcSave(pid, doc); }).then(function () { return ids.length; });
+  }
 
-    function reset() { ui.sheet.textContent = ''; sheetTitle(ui, t('spTitle')); }
-    function busy(text) {
-      reset();
+  /* ---------- Eingabe und Einlesen (Import und "Weitere Titel ergaenzen" teilen sich das) ---------- */
+  function spTools(ui) {
+    function isAlive() { return ui.sheet.isConnected; }   // auch nach Schliessen ueber den Hintergrund oder Zurueck
+    function reset(title) { ui.sheet.textContent = ''; sheetTitle(ui, title); }
+    function busy(text, title) {
+      reset(title);
       ui.sheet.appendChild(loaderEl());
-      ui.sheet.appendChild(el('div', 'ml-sheet-note ml-center', text));
+      var note = el('div', 'ml-sheet-note ml-center', text);
+      ui.sheet.appendChild(note);
+      return note;
     }
 
-    /* --- Schritt 1: Eingabe --- */
-    function stepInput(message, text) {
-      reset();
-      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spIntro')));
+    // Eingabeseite: Textfeld + Datei laden + Weiter. cfg: { title, intro, ph, message, text, onSubmit }
+    function inputView(cfg) {
+      reset(cfg.title);
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', cfg.intro));
       var ta = el('textarea', 'ml-field ml-field-box ml-textarea ml-sp-input');
-      ta.rows = 5; ta.placeholder = t('spPh'); ta.value = text || '';
+      ta.rows = 5; ta.placeholder = cfg.ph || ''; ta.value = cfg.text || '';
       ta.setAttribute('autocomplete', 'off'); ta.setAttribute('spellcheck', 'false');
       ui.sheet.appendChild(ta);
-      var err = el('p', 'ml-sp-err', message || '');
-      err.hidden = !message;
+      var err = el('p', 'ml-sp-err', cfg.message || '');
+      err.hidden = !cfg.message;
       ui.sheet.appendChild(err);
       var file = el('input');
-      file.type = 'file'; file.accept = '.csv,.txt,text/csv,text/plain'; file.hidden = true;
+      file.type = 'file'; file.accept = '.csv,.txt,.json,text/csv,text/plain,application/json'; file.hidden = true;
       ui.sheet.appendChild(file);
       file.addEventListener('change', function () {
         var f = file.files && file.files[0];
@@ -5085,13 +5389,109 @@
         rd.readAsText(f);
       });
       var row = el('div', 'ml-sheet-actions');
-      var csv = btn('ml-pill ml-flat', t('spCsv'));
-      var next = btn('ml-pill ml-primary', t('spNext'));
-      csv.addEventListener('click', function () { file.click(); });
-      add(row, csv, next);
+      var load = btn('ml-pill ml-flat', t('spCsv'));
+      var next = btn('ml-pill ml-primary', cfg.nextLabel || t('spNext'));
+      load.addEventListener('click', function () { file.click(); });
+      add(row, load, next);
       ui.sheet.appendChild(row);
-      next.addEventListener('click', function () { submit(ta.value.trim()); });
+      next.addEventListener('click', function () { cfg.onSubmit(ta.value.trim()); });
       setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 150);
+    }
+
+    // Titel-Links einzeln bei Spotify lesen (3 gleichzeitig); bricht ab, wenn Spotify nichts liefert
+    function resolveLinks(ids, title) {
+      ids = ids.slice(0, 2000);
+      var state = { cancel: false }, out = new Array(ids.length), done = 0, fail = 0, good = 0, k = 0, abort = '';
+      var note = busy(t('spResolving', 0, ids.length), title);
+      var stop = btn('ml-pill ml-flat', t('cancel'));
+      stop.addEventListener('click', function () { state.cancel = true; stop.disabled = true; });
+      var row = el('div', 'ml-sheet-actions');
+      row.appendChild(stop);
+      ui.sheet.appendChild(row);
+      function one(i, tries) {
+        return call('GET', 'MusicLook/Spotify/Track', { id: ids[i] }).then(function (r) {
+          var tr = SPCore.parseSpotifyTrack(r);
+          if (!tr) throw { status: 'parse' };
+          if (!tr.uri) tr.uri = 'spotify:track:' + ids[i];
+          out[i] = tr; good++;
+        }).then(null, function (e) {
+          var st = spStatus(e);
+          if (tries < 2 && st !== 400 && st !== 'parse' && !state.cancel && isAlive()) return new Promise(function (res) { setTimeout(res, 1800); }).then(function () { return one(i, tries + 1); });
+          fail++;
+          if (!good && fail >= 6 && !abort) abort = st === 'parse' ? 'parse' : st ? 'HTTP ' + st : '–';
+        });
+      }
+      function worker() {
+        if (state.cancel || abort || !isAlive() || k >= ids.length) return Promise.resolve();
+        var i = k++;
+        return one(i, 0).then(function () {
+          done++;
+          note.textContent = t('spResolving', done, ids.length);
+          return worker();
+        });
+      }
+      return Promise.all([worker(), worker(), worker()]).then(function () {
+        if (abort) throw { msg: t('spResolveAbort', abort === 'parse' ? '–' : abort) };
+        var tracks = out.filter(Boolean);
+        if (!tracks.length) throw { msg: t('spNothing') };
+        return { tracks: tracks, name: '', description: '', swap: false, failed: fail };
+      });
+    }
+
+    // Spotify-Datenexport mit mehreren Playlists: eine auswaehlen
+    function pickPlaylist(list, title, onBack) {
+      reset(title);
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spPickPl')));
+      return new Promise(function (resolve) {
+        var box = el('div', 'ml-sp-list');
+        list.forEach(function (p) {
+          var b = btn('ml-list-row');
+          var txt = el('div', 'ml-row-text');
+          txt.appendChild(el('div', 'ml-row-title', p.name || '–'));
+          txt.appendChild(el('div', 'ml-row-sub', t('spPickSub', p.tracks.length)));
+          b.appendChild(txt);
+          b.addEventListener('click', function () { resolve({ tracks: p.tracks, name: p.name, description: p.description, swap: false, failed: 0 }); });
+          box.appendChild(b);
+        });
+        ui.sheet.appendChild(box);
+        var row = el('div', 'ml-sheet-actions');
+        var back = btn('ml-pill ml-flat', t('spBack'));
+        back.addEventListener('click', function () { resolve(null); onBack(); });
+        row.appendChild(back);
+        ui.sheet.appendChild(row);
+      });
+    }
+
+    // Eingefuegten Text oder Dateiinhalt in Titel umwandeln. Wirft { msg } bei Fehlern, liefert null bei "Zurueck".
+    function collect(text, title, onBack) {
+      if (/^\s*[\[{]/.test(text)) {
+        var ex = SPCore.parseExport(text);
+        if (ex) {
+          ex = ex.filter(function (p) { return p.tracks.length; });
+          if (!ex.length) return Promise.reject({ msg: t('spNothing') });
+          if (ex.length === 1) return Promise.resolve({ tracks: ex[0].tracks, name: ex[0].name, description: ex[0].description, swap: false, failed: 0 });
+          return pickPlaylist(ex, title, onBack);
+        }
+      }
+      var ids = SPCore.trackLinkIds(text);
+      if (ids.length && SPCore.onlyLinks(text)) return resolveLinks(ids, title);
+      var parsed = SPCore.parseList(text);
+      if (!parsed.tracks.length) return Promise.reject({ msg: t('spNothing') });
+      return Promise.resolve({ tracks: parsed.tracks, name: '', description: '', swap: parsed.swap, failed: 0 });
+    }
+    return { isAlive: isAlive, reset: reset, busy: busy, inputView: inputView, collect: collect };
+  }
+
+  function openSpotifyImport() {
+    if (Net.offline()) { toast(t('spOffline')); return; }
+    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spTitle') });
+    var tools = spTools(ui), isAlive = tools.isAlive;
+    var TITLE = t('spTitle');
+    function busy(text) { return tools.busy(text, TITLE); }
+
+    /* --- Schritt 1: Eingabe --- */
+    function stepInput(message, text) {
+      tools.inputView({ title: TITLE, intro: t('spIntro'), ph: t('spPh'), message: message, text: text, onSubmit: submit });
     }
 
     function submit(text) {
@@ -5099,54 +5499,37 @@
       var id = SPCore.playlistId(text);
       if (id && text.length < 300 && text.indexOf('\n') < 0) {
         busy(t('spReading'));
-        return call('GET', 'MusicLook/Spotify/Playlist', { id: id }).then(function (r) {
+        return spReadLink(id).then(function (pl) {
           if (!isAlive()) return;
-          var pl = SPCore.parseSpotify(r);
-          if (!pl || !pl.tracks.length) return stepInput(t('spFailParse'), text);
-          pl.fromLink = true;
+          if (!pl) return stepInput(t('spFailParse'), text);
+          pl.fromLink = true; pl.spId = id;
           match(pl);
         }, function (e) {
           if (!isAlive()) return;
-          var code = e && (e.status || (e.response && e.response.status));
+          var code = spStatus(e);
           stepInput(t('spFailLink', code ? 'HTTP ' + code : '–'), text);
         });
       }
-      if (/open\.spotify\.com\/track\//.test(text) && !/[\p{L}]\s*[-–—;\t]\s*[\p{L}]/u.test(text.replace(/https?:\/\/\S+/g, ''))) return stepInput(t('spOnlyLinks'), text);
-      var parsed = SPCore.parseList(text);
-      if (!parsed.tracks.length) return stepInput(t('spNothing'), text);
-      match({ name: '', description: '', cover: '', tracks: parsed.tracks, swap: parsed.swap });
+      tools.collect(text, TITLE, function () { stepInput('', text); }).then(function (r) {
+        if (!r || !isAlive()) return;
+        match({ name: r.name, description: r.description, cover: '', tracks: r.tracks, swap: r.swap, notice: r.failed ? t('spResolveFail', r.failed) : '' });
+      }, function (e) {
+        if (isAlive()) stepInput(e && e.msg ? e.msg : t('spNothing'), text);
+      });
     }
 
     /* --- Schritt 2: Abgleich --- */
-    function libraryItems() {
-      return Taste.load().then(function (ix) { return { items: ix.recs.map(function (r) { return r.it; }), capped: ix.N >= 5990 }; });
-    }
-    function searchMissing(res) {
-      var miss = [];
-      res.forEach(function (m, i) { if (!m.hit && miss.length < 200) miss.push(i); });
-      if (!miss.length) return Promise.resolve();
-      busy(t('spSearching'));
-      var k = 0;
-      function worker() {
-        if (k >= miss.length || !isAlive()) return Promise.resolve();
-        var i = miss[k++], tr = res[i].src;
-        return itemsOf({ SearchTerm: SPCore.coreTitle(tr.title) || tr.title, IncludeItemTypes: 'Audio', Recursive: true, Limit: 15 }).then(function (items) {
-          var m = SPCore.matchOne(SPCore.buildLib(items), tr);
-          if (m.hit) res[i] = m;
-        }, function () { /* naechster */ }).then(worker);
-      }
-      return Promise.all([worker(), worker(), worker(), worker()]);
-    }
     function match(pl) {
       busy(t('spMatching'));
-      libraryItems().then(function (lib) {
+      spLibrary(false).then(function (lib) {
         if (!isAlive()) return;
         var L = SPCore.buildLib(lib.items), res = SPCore.matchAll(pl.tracks, L);
         if (pl.swap) {
           var alt = SPCore.matchAll(SPCore.swapped(pl.tracks), L);
           if (SPCore.count(alt) > SPCore.count(res)) { res = alt; pl.tracks = SPCore.swapped(pl.tracks); }
         }
-        var more = lib.capped ? searchMissing(res) : Promise.resolve();
+        var more = Promise.resolve();
+        if (lib.capped) { busy(t('spSearching')); more = spSearchMissing(res, isAlive); }
         return more.then(function () {
           if (!isAlive()) return;
           // doppelte Treffer nach der Nachsuche erneut kennzeichnen
@@ -5155,6 +5538,27 @@
           result(pl, res);
         });
       }, function () { if (isAlive()) stepInput(t('spLibFail'), ''); });
+    }
+
+    // Playlist ist laut Spotify laenger als der Link liefert -> Rest ergaenzen (Titel-Links, Datei)
+    function addMore(pl) {
+      function again(message, text) {
+        tools.inputView({
+          title: t('spMore'), intro: t('spMoreIntro'), ph: 'https://open.spotify.com/track/…', message: message, text: text, nextLabel: t('spNext'),
+          onSubmit: function (txt) {
+            if (!txt) return again('', '');
+            tools.collect(txt, t('spMore'), function () { again('', txt); }).then(function (r) {
+              if (!r || !isAlive()) return;
+              // die laengere Liste gibt die Reihenfolge vor, die kuerzere ergaenzt nur, was fehlt
+              pl.tracks = r.tracks.length > pl.tracks.length ? SPCore.mergeTracks(r.tracks, pl.tracks) : SPCore.mergeTracks(pl.tracks, r.tracks);
+              pl.swap = false;
+              if (r.failed) pl.notice = t('spResolveFail', r.failed);
+              match(pl);
+            }, function (e) { if (isAlive()) again(e && e.msg ? e.msg : t('spNothing'), txt); });
+          }
+        });
+      }
+      again('', '');
     }
 
     /* --- Schritt 3: Vorschau und Erstellen --- */
@@ -5167,7 +5571,7 @@
     }
     function labelsOf() { return { sure: t('spSure'), maybe: t('spMaybe'), none: t('spNone') }; }
     function result(pl, res) {
-      reset();
+      tools.reset(TITLE);
       var top = el('div', 'ml-sp-top');
       var thumb = el('div', 'ml-sp-thumb');
       thumb.hidden = !pl.cover;
@@ -5198,6 +5602,18 @@
         coverRow.appendChild(el('span', null, t('spCover')));
         ui.sheet.appendChild(coverRow);
       }
+
+      // Spotify liefert ueber den Link hoechstens 100 Titel: auf den Rest hinweisen
+      var cut = pl.fromLink && (pl.total ? pl.total > pl.tracks.length : pl.tracks.length === 100);
+      if (cut) {
+        var cutBox = el('div', 'ml-sp-cut');
+        cutBox.appendChild(el('div', 'ml-sp-cut-t', pl.total ? t('spCutN', pl.total) : t('spCut')));
+        var moreBtn = btn('ml-pill ml-primary', t('spMore'));
+        moreBtn.addEventListener('click', function () { addMore(pl); });
+        cutBox.appendChild(moreBtn);
+        ui.sheet.appendChild(cutBox);
+      }
+      if (pl.notice) ui.sheet.appendChild(el('p', 'ml-sp-err', pl.notice));
 
       var sum = el('div', 'ml-sp-sum');
       ui.sheet.appendChild(sum);
@@ -5255,7 +5671,13 @@
         var ids = res.filter(function (m) { return m.hit && !m.dup && m.on; }).map(function (m) { return m.hit.Id; });
         if (!ids.length) return;
         create.disabled = true; back.disabled = true;
-        var missing = res.filter(function (m) { return !m.hit; }).map(function (m) { return { t: m.src.title, a: m.src.artist }; });
+        // Quelle fuer spaetere Aktualisierungen: alle Titel von Spotify; id = in der Playlist, x = bewusst nicht uebernommen
+        var doc = { v: 1, sp: pl.spId || '', name: nm, auto: false, at: Date.now(), tracks: res.map(function (m) {
+          var d = spFromSrc(m.src);
+          if (m.hit && !m.dup && m.on) d.id = m.hit.Id;
+          else if (m.hit) d.x = 1;
+          return d;
+        }) };
         createPlaylistWith(nm, ids).then(function (pid) {
           var job = Promise.resolve();
           if (desc.value.trim()) job = job.then(function () { return call('POST', 'MusicLook/Playlist/' + pid + '/Details', null, { description: desc.value.trim() }); }).then(null, function () { toast(t('spDescFail')); });
@@ -5265,7 +5687,14 @@
             }).then(null, function () { toast(t('spCoverFail')); });
           }
           return job.then(function () {
-            if (missing.length) spSaveMissing(pid, missing);
+            return spSrcSave(pid, doc).then(null, function () {
+              // Server ohne Quellspeicher (aelteres Plugin): wenigstens die fehlenden Titel auf diesem Geraet merken
+              try {
+                var miss = doc.tracks.filter(spIsMissing).map(function (d) { return { t: d.t, a: d.a }; });
+                if (miss.length) window.localStorage.setItem(SP_MISS + nid(pid), JSON.stringify(miss.slice(0, 400)));
+              } catch (e) { /* nur nicht gemerkt */ }
+            });
+          }).then(function () {
             invalidatePlaylists(pid);
             ui.close();
             toast(t('spCreated', nm, ids.length));
@@ -5276,6 +5705,178 @@
     }
 
     stepInput('', '');
+  }
+
+  /* ---------- Unter den Titeln einer importierten Playlist: Abgleich, Aktualisieren, Automatik ---------- */
+  function spSection(host, pid, ctx) {
+    if (Net.offline()) return;
+    spLoadDoc(pid).then(function (doc) {
+      if (!doc || !host.isConnected) return;
+      var miss = doc.tracks.filter(spIsMissing);
+      var have = doc.tracks.filter(function (d) { return d.id; }).length;
+      var total = doc.tracks.filter(function (d) { return !d.x; }).length;
+      var box = el('div', 'ml-sp-miss ml-sp-sec');
+      var head = btn('ml-sp-miss-head');
+      head.setAttribute('aria-expanded', 'false');
+      head.appendChild(el('span', 'ml-sp-miss-t', t('spSecTitle')));
+      head.appendChild(el('span', 'ml-sp-miss-n', miss.length ? t('spSecMiss', miss.length) : t('spSecAll')));
+      box.appendChild(head);
+      var body = el('div', 'ml-sp-miss-body');
+      body.hidden = true;
+      if (!doc.partial) body.appendChild(el('div', 'ml-sp-miss-note', t('spSecCount', have, total)));
+      var acts = el('div', 'ml-sp-sec-actions');
+      var upd = btn('ml-pill ml-primary', t('spUpd'));
+      var moreB = btn('ml-pill ml-flat', t('spMore'));
+      add(acts, upd, moreB);
+      body.appendChild(acts);
+      var auto = el('label', 'ml-sp-check ml-sp-auto');
+      var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!doc.auto;
+      auto.appendChild(cb);
+      auto.appendChild(el('span', null, t('spAuto')));
+      body.appendChild(auto);
+      body.appendChild(el('div', 'ml-sp-miss-note', t('spAutoNote')));
+      body.appendChild(el('div', 'ml-sp-miss-note', t('spLast', doc.at ? new Date(doc.at).toLocaleString() : t('spNever'))));
+      if (miss.length) {
+        body.appendChild(el('div', 'ml-sp-miss-note', t('spSecNote')));
+        miss.forEach(function (m) {
+          var row = el('div', 'ml-sp-miss-row');
+          row.appendChild(el('div', 'ml-sp-miss-name', m.t || ''));
+          if (m.a) row.appendChild(el('div', 'ml-sp-miss-art', m.a));
+          body.appendChild(row);
+        });
+      }
+      box.appendChild(body);
+      head.addEventListener('click', function () {
+        body.hidden = !body.hidden;
+        head.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+      });
+      cb.addEventListener('change', function () {
+        doc.auto = cb.checked;
+        spSrcSave(pid, doc).then(null, function () { cb.checked = !cb.checked; doc.auto = cb.checked; toast(t('spUpdFail')); });
+      });
+      function refreshed() { if (ctx && ctx.reload) ctx.reload(); }
+      upd.addEventListener('click', function () { spUpdateSheet(pid, null, refreshed); });
+      moreB.addEventListener('click', function () { spMoreSheet(pid, refreshed); });
+      host.appendChild(box);
+    });
+  }
+  function spMissingSection(host, pid, ctx) { spSection(host, pid, ctx); }
+
+  // Manuell aktualisieren: Treffer anzeigen, auswaehlen, hinzufuegen
+  function spUpdateSheet(pid, extraTracks, done) {
+    if (Net.offline()) { toast(t('spOffline')); return; }
+    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spSecTitle') });
+    var tools = spTools(ui), isAlive = tools.isAlive, TITLE = t('spSecTitle');
+    tools.busy(t('spChecking'), TITLE);
+    spCheck(pid, { force: true, extra: extraTracks, alive: isAlive }).then(function (r) {
+      if (!isAlive()) return;
+      var doc = r.doc;
+      if (!r.found.length) {
+        return spApply(pid, doc, [], []).then(function () {
+          ui.close();
+          var left = doc.tracks.filter(spIsMissing).length;
+          toast((r.fresh ? t('spFromSpotify', r.fresh) + '. ' : '') + (left ? t('spUpdNone', left) : t('spUpdNoneAll')));
+          if (r.fresh && done) done();
+        });
+      }
+      tools.reset(t('spUpdTitle'));
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spUpdFound', r.found.length)));
+      var list = el('div', 'ml-sp-list');
+      var on = r.found.map(function () { return true; });
+      var addB = btn('ml-pill ml-primary', '');
+      function recount() { var n = on.filter(Boolean).length; addB.textContent = t('spUpdAdd', n); addB.disabled = n === 0; }
+      r.found.forEach(function (f, k) {
+        var row = el('div', 'ml-sp-row ml-sp-' + f.m.q);
+        var ic = el('span', 'ml-sp-ic');
+        ic.appendChild(icon(f.m.q === 'sure' ? 'check' : 'info'));
+        row.appendChild(ic);
+        var txt = el('div', 'ml-sp-txt');
+        txt.appendChild(el('div', 'ml-sp-name', f.m.src.title));
+        txt.appendChild(el('div', 'ml-sp-art', f.m.src.artist || ''));
+        if (f.m.q === 'maybe') txt.appendChild(el('div', 'ml-sp-as', t('spFoundAs', f.m.hit.Name + ' – ' + (f.m.hit.Artists || []).join(', '))));
+        row.appendChild(txt);
+        var box = el('input', 'ml-sp-pick'); box.type = 'checkbox'; box.checked = true;
+        box.setAttribute('aria-label', f.m.src.title);
+        box.addEventListener('change', function () { on[k] = box.checked; row.classList.toggle('ml-sp-off', !box.checked); recount(); });
+        row.appendChild(box);
+        list.appendChild(row);
+      });
+      ui.sheet.appendChild(list);
+      var actions = el('div', 'ml-sheet-actions ml-sp-actions');
+      var cancel = btn('ml-pill ml-flat', t('cancel'));
+      add(actions, cancel, addB);
+      ui.sheet.appendChild(actions);
+      recount();
+      function finish(chosen, ignored) {
+        addB.disabled = true; cancel.disabled = true;
+        return spApply(pid, doc, chosen, ignored).then(function (n) {
+          ui.close();
+          if (n) toast(t('spUpdDone', n));
+          if (n || r.fresh) invalidatePlaylists(pid);
+          if (done) done();
+        }, function () { addB.disabled = false; cancel.disabled = false; toast(t('spUpdFail')); });
+      }
+      addB.addEventListener('click', function () {
+        finish(r.found.filter(function (f, k) { return on[k]; }), r.found.filter(function (f, k) { return !on[k]; }).map(function (f) { return f.i; }));
+      });
+      cancel.addEventListener('click', function () { finish([], []); });
+    }, function () { if (isAlive()) { ui.close(); toast(t('spUpdFail')); } });
+  }
+
+  // "Weitere Titel ergaenzen" bei einer bestehenden Playlist: Eingabe -> neue Titel in die Quelle -> normaler Abgleich
+  function spMoreSheet(pid, done) {
+    if (Net.offline()) { toast(t('spOffline')); return; }
+    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spMore') });
+    var tools = spTools(ui), isAlive = tools.isAlive, TITLE = t('spMore');
+    function again(message, text) {
+      tools.inputView({
+        title: TITLE, intro: t('spMoreIntro'), ph: 'https://open.spotify.com/track/…', message: message, text: text,
+        onSubmit: function (txt) {
+          if (!txt) return again('', '');
+          tools.collect(txt, TITLE, function () { again('', txt); }).then(function (r) {
+            if (!r || !isAlive()) return;
+            ui.close();
+            spUpdateSheet(pid, r.tracks, done);
+          }, function (e) { if (isAlive()) again(e && e.msg ? e.msg : t('spNothing'), txt); });
+        }
+      });
+    }
+    again('', '');
+  }
+
+  /* ---------- Automatisch aktualisieren (beim Oeffnen von Music Look, hoechstens einmal taeglich je Playlist) ---------- */
+  var spAutoStarted = false;
+  function spAutoRun() {
+    if (spAutoStarted || Net.offline()) return;
+    spAutoStarted = true;
+    call('GET', 'MusicLook/Spotify/Sources').then(function (index) {
+      // Reste aus aelteren Versionen: gemerkte fehlende Titel geloeschter Playlists entfernen
+      loadPlaylists(false).then(function (pls) {
+        if (!pls || !pls.length) return;
+        var alive = {};
+        pls.forEach(function (p) { alive[nid(p.id)] = 1; });
+        try {
+          var drop = [];
+          for (var i = 0; i < window.localStorage.length; i++) {
+            var k = window.localStorage.key(i);
+            if (k && k.indexOf(SP_MISS) === 0 && !alive[k.slice(SP_MISS.length)]) drop.push(k);
+          }
+          drop.forEach(function (k) { window.localStorage.removeItem(k); });
+        } catch (e) { /* ohne Aufraeumen */ }
+      }, function () { /* spaeter */ });
+      var due = Object.keys(index || {}).filter(function (id) { return index[id] && index[id].auto && Date.now() - (index[id].at || 0) > 20 * 3600000; });
+      return due.reduce(function (p, id) {
+        return p.then(function () {
+          if (Net.offline()) return;
+          return spCheck(id, { force: false }).then(function (r) {
+            var sure = r.found.filter(function (f) { return f.m.q === 'sure'; });
+            return spApply(id, r.doc, sure, []).then(function (n) {
+              if (n) { invalidatePlaylists(id); toast(t('spAutoAdded', n, r.doc.name || '')); }
+            });
+          }).then(null, function () { /* beim naechsten Start wieder */ });
+        });
+      }, Promise.resolve());
+    }).then(null, function () { /* Server ohne Quellspeicher oder offline */ });
   }
 
   /* ---------- Downloads: Oberfläche (Knöpfe, Seite "Downloads" mit Speicheranzeige) ---------- */
@@ -7394,7 +7995,7 @@
     }
     function likedIds() {
       if (likedCache.ids && Date.now() - likedCache.at < 60000 && likedCache.ver === likedVer) return Promise.resolve(likedCache.ids);
-      return loadLikedTracks().then(function (items) {
+      return likedScope().then(loadLikedTracks).then(function (items) {
         likedCache = { at: Date.now(), ver: likedVer, ids: items.map(function (x) { return x.Id; }) };
         return likedCache.ids;
       });
@@ -7664,7 +8265,11 @@
       autoKey = key; autoBusy = true;
       var seed = P.item.Id, have = {};
       q.forEach(function (x) { have[nid(x.Id)] = 1; });
-      loadSongMix(q.slice(-3).map(function (x) { return x.Id; }), 40).then(function (items) {
+      // Nach Hoerbuechern und Podcasts geht es nicht mit Musik weiter: die Reiter bleiben getrennt
+      itemCat(seed).then(function (cat) {
+        return isMusicCat(cat) ? loadSongMix(q.slice(-3).map(function (x) { return x.Id; }), 40) : null;
+      }).then(function (items) {
+        if (!items) return;
         var ids = [], seen = {};
         items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
         // Nur anhaengen, wenn sich inzwischen nichts geaendert hat (anderer Titel, andere Warteschlange, Autoplay aus).
@@ -7688,7 +8293,10 @@
       autoFired = key;
       var have = {}, seeds = q.slice(-3).map(function (x) { return x.Id; });
       q.forEach(function (x) { have[nid(x.Id)] = 1; });
-      loadSongMix(seeds, 40).then(function (items) {
+      itemCat(P.item.Id).then(function (cat) {
+        return isMusicCat(cat) ? loadSongMix(seeds, 40) : null;
+      }).then(function (items) {
+        if (!items) return;   // kein Musik-Autoplay nach Hoerbuch/Podcast
         var ids = [], seen = {};
         items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
         if (!ids.length || !autoplayOn()) { autoFired = ''; return; }
@@ -8247,7 +8855,9 @@
     layout: layout,
     forceLeave: forceLeave,
     eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
-    addToPlaylist: function (ids) { addToPlaylist(ids); }
+    addToPlaylist: function (ids) { addToPlaylist(ids); },
+    cats: { itemCat: function (id) { return itemCat(id); }, onlyMusic: function (items) { return onlyMusic(items); }, loadSongMix: function (id, n) { return loadSongMix(id, n); }, songRadio: function (tr) { return songRadio(tr); } },
+    spAuto: function () { spAutoStarted = false; spAutoRun(); }
   };
 
   // Ohne Server lassen sich heruntergeladene Playlists und Alben trotzdem oeffnen: der Kern fragt hier nach, was die ID ist.
@@ -8262,6 +8872,7 @@
 
   // Der Kern hat die Seite evtl. schon gemeldet, bevor dieses Script geladen war.
   // Stil-Index fuer Mixe im Hintergrund vorbereiten, damit die erste Startseite nicht darauf wartet.
+  setTimeout(function () { try { spAutoRun(); } catch (e) { /* ohne Automatik */ } }, 9000);
   setTimeout(function () { try { if (!Net.offline()) Taste.load().then(null, function () { /* Rueckfall: Sofortmix */ }); } catch (e) { /* ohne Index */ } }, 3500);
   try {
     var first = ML.route();

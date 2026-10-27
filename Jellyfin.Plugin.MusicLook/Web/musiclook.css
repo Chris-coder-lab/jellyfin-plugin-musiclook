@@ -1460,3 +1460,13 @@ body.ml-music .MuiCircularProgress-circle { stroke-width: 2.2 !important; stroke
 .ml-sp-miss-row { padding: 6px 0; opacity: 0.7; }
 .ml-sp-miss-name { font-weight: 700; }
 .ml-sp-miss-art { font-size: 0.82rem; color: var(--ml-muted, #b3b3b3); }
+
+/* ---------- Version 1.5: alle Titel, Aktualisieren ---------- */
+.ml-sp-cut { margin: 12px 0 4px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ml-sp-cut-t { font-size: 0.9rem; line-height: 1.35; }
+.ml-sp-miss-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ml-sp-miss-n { font-weight: 600; font-size: 0.85rem; color: var(--ml-muted, #b3b3b3); }
+.ml-sp-sec-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }
+.ml-sp-auto { padding-top: 2px; }
+.ml-sp .ml-sheet-actions .ml-pill[disabled] { opacity: 0.5; }
+.ml-search-chips { margin-top: 12px; }
