@@ -144,7 +144,7 @@
       queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
       searchPh: 'Was möchtest du hören?', searchHint: 'Suche nach Titeln, Alben, Künstlern und Playlists.', noResults: 'Keine Treffer für „{0}“.',
-      loadMore: 'Mehr laden', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
+      loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung wechseln', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
       nowPlaying: 'Wiedergabe', queue: 'Warteschlange', queueEmpty: 'Die Warteschlange ist leer.', speedTitle: 'Geschwindigkeit', speedNormal: 'Normal',
       volume: 'Lautstärke', repeat: 'Wiederholen', repeatOne: 'Titel wiederholen', repeatOff: 'Wiederholen aus', noPlayer: 'Es läuft gerade nichts.',
       infoTitle: 'Songinfos', iTitle: 'Titel', iArtist: 'Künstler', iAlbum: 'Album', iYear: 'Jahr', iLength: 'Länge', iFormat: 'Format', iBitrate: 'Bitrate',
@@ -188,7 +188,7 @@
       queued: 'Added to queue', playFailed: 'Playback could not be started', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
       searchPh: 'What do you want to listen to?', searchHint: 'Search for tracks, albums, artists and playlists.', noResults: 'No results for "{0}".',
-      loadMore: 'Load more', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
+      loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Change sort order', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
       nowPlaying: 'Now playing', queue: 'Queue', queueEmpty: 'The queue is empty.', speedTitle: 'Speed', speedNormal: 'Normal',
       volume: 'Volume', repeat: 'Repeat', repeatOne: 'Repeat track', repeatOff: 'Repeat off', noPlayer: 'Nothing is playing.',
       infoTitle: 'Song info', iTitle: 'Title', iArtist: 'Artist', iAlbum: 'Album', iYear: 'Year', iLength: 'Length', iFormat: 'Format', iBitrate: 'Bitrate',
@@ -426,13 +426,18 @@
       }
       return n < 8;
     }
-    function reloadOnce() {
-      var au = document.querySelectorAll('audio');
-      for (var i = 0; i < au.length; i++) if (!au[i].paused && !au[i].ended) return;   // laufende Wiedergabe hier nie unterbrechen
-      if (typeof OFFPLAY !== 'undefined' && OFFPLAY.active()) return;   // auch die lokale Wiedergabe vom Gerät nicht unterbrechen
+    // Die Spotify-Ansicht ist beim Verlassen ohnehin beendet (die Wiedergabe der Ansicht stoppt); darum darf die Seite neu geladen werden,
+    // wenn sie sonst haengen bleibt. Hoechstens einmal pro Minute, damit keine Schleife entsteht.
+    function reloadOnce(force) {
+      if (!force) {
+        var au = document.querySelectorAll('audio');
+        for (var i = 0; i < au.length; i++) if (!au[i].paused && !au[i].ended) return;
+        if (typeof OFFPLAY !== 'undefined' && OFFPLAY.active()) return;
+      }
       var now = Date.now(), last = 0;
       try { last = +window.sessionStorage.getItem('ml.leaveReload') || 0; window.sessionStorage.setItem('ml.leaveReload', String(now)); } catch (e) { /* ohne Speicher */ }
       if (now - last < 60000) return;
+      try { if (typeof ML.app === 'object' && ML.app && ML.app.resumeSave) ML.app.resumeSave(); } catch (e) { /* ignorieren */ }
       try { location.reload(); } catch (e) { /* ignorieren */ }
     }
     var moved = false;   // hat sich die Adresse seit dem Klick geaendert? (dann ist der Nutzer selbst weitergegangen)
@@ -440,25 +445,31 @@
     window.addEventListener('hashchange', onNav);
     window.addEventListener('popstate', onNav);
     function done() { window.removeEventListener('hashchange', onNav); window.removeEventListener('popstate', onNav); }
+    function leave() {
+      if (ML.app && typeof ML.app.forceLeave === 'function') { try { ML.app.forceLeave(); } catch (e) { /* naechster Versuch */ } }
+      else { try { ML.refresh(); } catch (e) { /* naechster Versuch */ } }
+    }
     function check(step) {
       if (seq !== leaveSeq) { done(); return; }
-      if (step >= 3) done();
+      if (step >= 4) done();
       if (!same()) {
         // Nur kurz nach dem Klick und nur, wenn die Adresse unveraendert blieb: der Seitenwechsel ist verloren gegangen, also erneut.
-        if (step <= 1 && !moved && location.hash === from) {
+        if (step <= 2 && !moved && location.hash === from) {
           try { location.assign(location.href.split('#')[0] + target); } catch (e) { location.hash = target; }
         }
         return;
       }
       if (appShown()) {
-        if (step >= 1 && ML.app && typeof ML.app.forceLeave === 'function') { try { ML.app.forceLeave(); } catch (e) { /* naechster Versuch */ } }
-        else { try { ML.refresh(); } catch (e) { /* naechster Versuch */ } }
+        leave();
+        // Bleibt die Ansicht trotz richtiger Adresse stehen (Browser haben das Ereignis verschluckt), hilft nur ein Neuladen wie mit F5.
+        if (step >= 3) reloadOnce(true);
         return;
       }
-      if (step >= 2 && blank()) reloadOnce();
+      if (step >= 2 && blank()) reloadOnce(false);
     }
-    go(target);
-    [350, 1100, 2600, 4200].forEach(function (ms, i) { setTimeout(function () { check(i); }, ms); });
+    // Ohne offene Ebenen sofort wechseln (kein Warten auf Verlaufsereignisse); mit offenen Ebenen erst nach deren Abbau.
+    if (OV.pending()) go(target); else location.hash = target;
+    [120, 450, 1100, 2200, 3600].forEach(function (ms, i) { setTimeout(function () { check(i); }, ms); });
   }
 
   /* ---------- Verlauf fuer Ebenen ----------
@@ -467,7 +478,7 @@
   var OV = (function () {
     var stack = [];        // offene Ebenen: { close: function (fromHistory), hasEntry, closed }
     var applied = 0;       // so viele eigene Verlaufseintraege liegen aktuell ueber der Seite
-    var queue = [], busy = false, timer = null, expected = -1;
+    var queue = [], busy = false, timer = null, expected = -1, hashAtBack = '';
 
     function depthOf(st) { return st && typeof st.mlOv === 'number' ? st.mlOv : 0; }
     function entryCount() { return stack.filter(function (e) { return e.hasEntry; }).length; }
@@ -480,6 +491,7 @@
     function back(n) {
       if (n <= 0) { next(); return; }
       busy = true;
+      hashAtBack = location.hash;
       expected = applied - n;
       applied = expected;
       clearTimeout(timer);
@@ -531,6 +543,8 @@
     window.addEventListener('popstate', function (ev) {
       var st = window.history.state;
       var d = depthOf(st);
+      // Ein Seitenwechsel ueber die Adresse (andere Adresse als beim Zurueckgehen) darf nie verschluckt werden, sonst bleibt Jellyfin stehen.
+      if (busy && location.hash !== hashAtBack) { applied = 0; busy = false; clearTimeout(timer); queue.length = 0; var rest = stack.splice(0); rest.reverse().forEach(function (e) { e.closed = true; e.close(true); }); return; }
       if (busy && d === expected && (st || expected === 0)) { ev.stopImmediatePropagation(); finish(); return; }
       if (!applied && !stack.length) return;            // keine Ebene betroffen
       if (st == null) {                                  // Seitenwechsel ueber die Adresse: Ebenen wegraeumen
@@ -558,7 +572,7 @@
       }
     }, true);
 
-    return { push: push, release: release, closeAll: closeAll, count: function () { return stack.length; } };
+    return { push: push, release: release, closeAll: closeAll, count: function () { return stack.length; }, pending: function () { return stack.length > 0 || busy || queue.length > 0 || applied > 0; } };
   })();
 
   /* ---------- Teilen: Adresse des Servers ---------- */
@@ -647,6 +661,80 @@
     function run() { var pal = coverPalette(img); if (pal) setPalette(host, pal); }
     if (img.complete && img.naturalWidth) run(); else img.addEventListener('load', run, { once: true });
   }
+  /* ---------- Speicher pro Benutzer (Version 1.6) ----------
+     Kleine Einstellungen und Listen (manuelle Verknuepfungen, intelligente Playlists) werden in Jellyfins eigenen
+     Anzeige-Einstellungen des Benutzers abgelegt (DisplayPreferences, eigene Kennung "musiclook"). Das ist eine offizielle
+     Schnittstelle, gilt fuer jedes Geraet desselben Benutzers und braucht keinen eigenen Server-Code.
+     Jeder Schluessel liegt unter dem Namen ml_<schluessel> als JSON-Text. Beim Schreiben wird erst frisch gelesen und dann
+     alles zurueckgeschrieben (Jellyfin ersetzt beim Speichern die gesamte Menge). Zusaetzlich gibt es eine lokale Kopie, damit
+     die Daten auch ohne Verbindung lesbar bleiben. */
+  var Store = (function () {
+    var ID = 'musiclook', CLIENT = 'musiclook', PREFIX = 'ml_';
+    var doc = null, docAt = 0, chain = Promise.resolve();
+    function params() { return { userId: uid(), client: CLIENT }; }
+    function lsKey(key) { return 'ml.store.' + uid() + '.' + key; }
+    function lsGet(key) { try { var v = window.localStorage.getItem(lsKey(key)); return v == null ? null : v; } catch (e) { return null; } }
+    function lsSet(key, text) { try { if (text == null) window.localStorage.removeItem(lsKey(key)); else window.localStorage.setItem(lsKey(key), text); } catch (e) { /* nur ohne lokale Kopie */ } }
+    function parse(text, def) {
+      if (text == null || text === '') return def;
+      try { var v = JSON.parse(text); return v == null ? def : v; } catch (e) { return def; }
+    }
+    // Frischer Stand vom Server (nur Schluessel mit Praefix; Jellyfins eigene Eintraege werden nie zurueckgeschrieben).
+    function fetchDoc() {
+      return call('GET', 'DisplayPreferences/' + ID, params()).then(function (r) {
+        var cp = (r && r.CustomPrefs) || {}, out = {};
+        Object.keys(cp).forEach(function (k) { if (k.indexOf(PREFIX) === 0 && cp[k] != null) out[k] = String(cp[k]); });
+        doc = out; docAt = Date.now();
+        return out;
+      });
+    }
+    function push(map) {
+      return call('POST', 'DisplayPreferences/' + ID, params(), { Id: ID, CustomPrefs: map }).then(function () { doc = map; docAt = Date.now(); });
+    }
+    // Wert lesen: Server, sonst lokale Kopie, sonst Vorgabe. Faellt nie mit einem Fehler heraus.
+    function get(key, def, force) {
+      var p = doc && !force ? Promise.resolve(doc) : fetchDoc();
+      return p.then(function (d) {
+        var text = d[PREFIX + key];
+        if (text != null) { lsSet(key, text); return parse(text, def); }
+        return parse(lsGet(key), def);
+      }, function () { return parse(lsGet(key), def); });
+    }
+    // Lesen-Aendern-Schreiben, nacheinander (nie zwei Schreibvorgaenge gleichzeitig). fn bekommt den aktuellen Wert und liefert den neuen.
+    function update(key, def, fn) {
+      var run = function () {
+        return fetchDoc().then(function (d) {
+          var next = fn(parse(d[PREFIX + key], parse(lsGet(key), def)));
+          var map = {};
+          Object.keys(d).forEach(function (k) { map[k] = d[k]; });
+          var text = JSON.stringify(next);
+          map[PREFIX + key] = text;
+          lsSet(key, text);
+          return push(map).then(function () { return next; });
+        });
+      };
+      var res = chain.then(run, run);
+      chain = res.then(function () { /* weiter */ }, function () { /* Fehler stoppen die Kette nicht */ });
+      return res;
+    }
+    function set(key, value) { return update(key, null, function () { return value; }); }
+    // Beim Schliessen der Seite: Wert sofort lokal merken und, soweit der letzte Stand vom Server frisch ist, per sendBeacon zum Server schicken
+    // (normale Anfragen werden beim Schliessen oft abgebrochen). Best-Effort, ohne Rueckmeldung.
+    function beacon(key, value) {
+      var text = JSON.stringify(value);
+      lsSet(key, text);
+      try {
+        var c = ML.client();
+        if (!doc || Date.now() - docAt > 60000 || !c || !navigator.sendBeacon || !c.accessToken) return false;
+        var map = {};
+        Object.keys(doc).forEach(function (k) { map[k] = doc[k]; });
+        map[PREFIX + key] = text;
+        var url = c.getUrl('DisplayPreferences/' + ID, { userId: uid(), client: CLIENT, ApiKey: c.accessToken() });
+        return navigator.sendBeacon(url, new Blob([JSON.stringify({ Id: ID, CustomPrefs: map })], { type: 'application/json' }));
+      } catch (e) { return false; }
+    }
+    return { get: get, set: set, update: update, beacon: beacon, reset: function () { doc = null; } };
+  })();
   /* ---------- Offline-Speicher (IndexedDB im Browser des Geräts; gemeinsam für die Spotify-Ansicht und die Offline-App) ---------- */
   // Speichern: tracks (Metadaten), blobs (Audiodatei), covers (Bild), colls (Alben/Playlists/Mixe, die geladen wurden).
   // Ein Titel gehört zu null oder mehr Sammlungen (colls) und ist ggf. einzeln geladen (explicit). Er wird erst gelöscht,
@@ -2459,7 +2547,8 @@
     function fold(s) {
       var x = String(s == null ? '' : s);
       try { x = x.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) { /* ohne normalize */ }
-      return x.toLowerCase().replace(/ /g, ' ');
+      // Apostrophe fallen weg ("Don't" = "Dont", "D'Angelo" = "Dangelo"), damit Schreibweisen der Bibliothek trotzdem passen
+      return x.toLowerCase().replace(/[’‘ʼ'`´]/g, '').replace(/ /g, ' ');
     }
     function words(s) { return fold(s).replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); }
     var VERS = /(remaster|version|live|edit|mix|radio|single|mono|stereo|deluxe|bonus|acoustic|demo|explicit|clean|anniversary|\b(19|20)\d\d\b)/;
@@ -2474,6 +2563,7 @@
         x = keep.join(' ');
       }
       x = x.replace(/\b(feat|ft|featuring)\b\.?.*$/, ' ');
+      x = x.replace(/\bpt\.?(?=\s|\d)/g, 'part').replace(/\bvol\.?(?=\s|\d)/g, 'volume');
       x = x.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
       return x || words(s);
     }
@@ -2639,8 +2729,49 @@
       }
       return -1;
     }
+    /* ---------- M3U / M3U8 (Playlist-Datei anderer Player) ---------- */
+    // "#EXTINF:215,Kuenstler - Titel" und/oder nur Dateipfade ("…/01 - Kuenstler - Titel.mp3"). Richtung ist nicht sicher -> swap
+    function parseM3U(text) {
+      var tracks = [], pending = null;
+      String(text).replace(/^\uFEFF/, '').split(/\r?\n/).forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        if (line.charAt(0) === '#') {
+          var m = /^#EXTINF:\s*(-?\d+(?:[.,]\d+)?)\s*(?:,\s*(.*))?$/i.exec(line);
+          pending = m ? { dur: Math.max(0, parseFloat(m[1].replace(',', '.')) || 0), label: clean(m[2] || '') } : pending;
+          return;
+        }
+        var label = pending && pending.label ? pending.label : '';
+        if (!label) {
+          var file = line.replace(/[?#].*$/, '').split(/[\\/]/).pop() || '';
+          label = clean(file.replace(/\.[A-Za-z0-9]{2,5}$/, '').replace(/^\d{1,3}\s*[-._)]\s*/, '').replace(/_/g, ' '));
+        }
+        var parts = label.split(/\s+[-–—]\s+/);
+        var a = clean(parts[0]), b = parts.length > 1 ? clean(parts.slice(1).join(' - ')) : '';
+        if (a) tracks.push({ title: a, artist: b, album: '', dur: pending ? pending.dur : 0, uri: '' });
+        pending = null;
+      });
+      return { tracks: tracks, swap: true };
+    }
+    // Gegenstueck: Titel einer Playlist als M3U8-Text. entries: [{ secs, artist, title, path }]; rep = { from, to } ersetzt den Pfadanfang
+    function toM3U(entries, rep) {
+      var from = rep && rep.from ? String(rep.from) : '', to = rep && rep.to != null ? String(rep.to) : '';
+      var sep = to.indexOf('\\') >= 0 ? '\\' : '/';
+      var lines = ['#EXTM3U'];
+      entries.forEach(function (e) {
+        var path = String(e.path || '');
+        if (from && path.toLowerCase().indexOf(from.toLowerCase()) === 0) {
+          var rest = path.slice(from.length).replace(/[\\/]+/g, sep).replace(/^[\\/]+/, '');
+          path = to.replace(/[\\/]+$/, '') + (to ? sep : '') + rest;
+        }
+        if (!path) path = (e.artist ? e.artist + ' - ' : '') + e.title;
+        lines.push('#EXTINF:' + Math.round(e.secs || 0) + ',' + (e.artist ? e.artist + ' - ' : '') + e.title, path);
+      });
+      return lines.join('\r\n') + '\r\n';
+    }
     // Liefert { tracks, swap }: swap = true, wenn nicht klar ist, was Titel und was Kuenstler ist (beide Richtungen pruefen)
     function parseList(text) {
+      if (/^\s*#EXTM3U|^\s*#EXTINF:/m.test(String(text))) return parseM3U(text);
       var rows = parseCsvRows(text);
       if (!rows.length) return { tracks: [], swap: false };
       var head = rows[0];
@@ -2745,20 +2876,21 @@
 
     /* ---------- Abgleich ---------- */
     function buildLib(items) {
-      var recs = [], byCore = {}, tok = {};
+      var recs = [], byCore = {}, tok = {}, byId = {};
       (items || []).forEach(function (it) {
         if (!it || !it.Id) return;
         var arts = (it.Artists && it.Artists.length ? it.Artists : []).concat(it.AlbumArtist ? [it.AlbumArtist] : []);
         (it.ArtistItems || []).forEach(function (a) { if (a && a.Name) arts.push(a.Name); });
-        var r = { it: it, core: coreTitle(it.Name), art: artistList(arts), dur: it.RunTimeTicks ? it.RunTimeTicks / 1e7 : 0 };
+        var r = { it: it, core: coreTitle(it.Name), art: artistList(arts), alb: it.Album ? coreTitle(it.Album) : '', dur: it.RunTimeTicks ? it.RunTimeTicks / 1e7 : 0 };
         var i = recs.length;
         recs.push(r);
+        byId[String(it.Id)] = i;
         (byCore[r.core] = byCore[r.core] || []).push(i);
         r.core.split(' ').forEach(function (w, k, all) {
           if (w.length >= 3 || all.length === 1) (tok[w] = tok[w] || []).push(i);
         });
       });
-      return { recs: recs, byCore: byCore, tok: tok };
+      return { recs: recs, byCore: byCore, tok: tok, byId: byId };
     }
     function candidates(lib, core) {
       var set = {}, out = [], i;
@@ -2782,23 +2914,41 @@
         if (arts.length && as < 0.5) return;
         var dd = t.dur && r.dur ? Math.abs(t.dur - r.dur) : -1;
         var db = dd < 0 ? 0.5 : dd <= 3 ? 1 : dd <= 10 ? 0.6 : dd <= 30 ? 0.2 : 0;
-        var score = 0.6 * ts + 0.32 * as + 0.08 * db;
+        // Album nur als Zusatz: gleicher Titel auf Single/Album/Sampler -> das Album des Originals gewinnt
+        var ab = t.album && r.alb ? titleSim(coreTitle(t.album), r.alb) : 0;
+        var score = 0.56 * ts + 0.3 * as + 0.08 * db + 0.06 * (ab >= 0.84 ? ab : 0);
         if (!best || score > best.score) best = { r: r, score: score, ts: ts, as: as };
       });
       if (!best) return { src: t, hit: null, q: 'none', score: 0 };
       var sure = best.ts >= 0.97 && (best.as >= 0.8 || !arts.length);
       return { src: t, hit: best.r.it, q: sure ? 'sure' : 'maybe', score: best.score };
     }
-    function matchAll(tracks, lib) {
+    // Manuelle Verknuepfung: Schluessel ist die Spotify-Titel-ID, sonst Titel|Kuenstler (keyOf). links = { schluessel: Jellyfin-Id }
+    function linkFor(links, t) {
+      if (!links) return '';
+      var id = uriId(t.uri);
+      return (id && links[id]) || links[keyOf(t)] || '';
+    }
+    function matchAll(tracks, lib, links) {
       var used = {};
       return tracks.map(function (t) {
-        var m = matchOne(lib, t);
+        var lk = linkFor(links, t), at = lk && lib.byId ? lib.byId[String(lk)] : undefined;
+        var m = at !== undefined ? { src: t, hit: lib.recs[at].it, q: 'sure', score: 1, manual: true } : matchOne(lib, t);
         if (m.hit) {
           var k = String(m.hit.Id);
           if (used[k]) { m.dup = true; } else used[k] = 1;
         }
         return m;
       });
+    }
+    // Derselbe Titel? Gleiche Spotify-ID, sonst gleicher Titelkern und passender Kuenstler (fuer "nicht mehr bei Spotify" und die Reihenfolge)
+    function sameTrack(a, b) {
+      var ia = uriId(a.uri), ib = uriId(b.uri);
+      if (ia && ib) return ia === ib;
+      var ca = coreTitle(a.title), cb = coreTitle(b.title);
+      if (!ca || !cb || titleSim(ca, cb) < 0.9) return false;
+      var aa = artistList(a.artist), ab = artistList(b.artist);
+      return !aa.length || !ab.length || artistScore(aa, ab) >= 0.8;
     }
     function count(res) { return res.filter(function (m) { return m.hit && !m.dup; }).length; }
 
@@ -2812,7 +2962,7 @@
       });
       return '﻿' + lines.join('\r\n') + '\r\n';
     }
-    return { parseExport: parseExport, trackLinkIds: trackLinkIds, onlyLinks: onlyLinks, parseSpotifyTrack: parseSpotifyTrack, totalHint: totalHint, mergeTracks: mergeTracks, uriId: uriId, keyOf: keyOf, parseSpotify: parseSpotify, playlistId: playlistId, parseList: parseList, swapped: swapped, buildLib: buildLib, matchOne: matchOne, matchAll: matchAll, count: count, toCSV: toCSV, coreTitle: coreTitle, artistList: artistList, titleSim: titleSim };
+    return { parseExport: parseExport, trackLinkIds: trackLinkIds, onlyLinks: onlyLinks, parseSpotifyTrack: parseSpotifyTrack, totalHint: totalHint, mergeTracks: mergeTracks, uriId: uriId, keyOf: keyOf, parseSpotify: parseSpotify, playlistId: playlistId, parseList: parseList, swapped: swapped, buildLib: buildLib, matchOne: matchOne, matchAll: matchAll, linkFor: linkFor, sameTrack: sameTrack, parseM3U: parseM3U, toM3U: toM3U, count: count, toCSV: toCSV, coreTitle: coreTitle, artistList: artistList, titleSim: titleSim };
   })();
 
   /* ---------- Downloads: Titel auf das Gerät laden (Verwaltung in der Spotify-Ansicht) ---------- */
@@ -2843,8 +2993,8 @@
 
     function audioUrl(id, q) {
       var c = ML.client();
-      if (q === 'mp3') return c.getUrl('Audio/' + id + '/stream.mp3', { audioCodec: 'mp3', audioBitRate: 192000, api_key: c.accessToken() });
-      return c.getUrl('Audio/' + id + '/stream', { static: true, api_key: c.accessToken() });
+      if (q === 'mp3') return c.getUrl('Audio/' + id + '/stream.mp3', { audioCodec: 'mp3', audioBitRate: 192000, ApiKey: c.accessToken() });
+      return c.getUrl('Audio/' + id + '/stream', { static: true, ApiKey: c.accessToken() });
     }
     function canPlayMime(mime) {
       if (!mime || /octet-stream|^text\//i.test(mime)) return true;
@@ -2884,7 +3034,7 @@
       var pr = pairOf(tr);
       if (!pr) return Promise.resolve(null);
       var c = ML.client();
-      var url = c.getUrl('Items/' + pr[0] + '/Images/Primary', { maxWidth: 400, quality: 85, tag: pr[1], api_key: c.accessToken() });
+      var url = c.getUrl('Items/' + pr[0] + '/Images/Primary', { maxWidth: 400, quality: 85, tag: pr[1], ApiKey: c.accessToken() });
       return fetch(url, { signal: signal, credentials: 'omit' }).then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) { return b && b.size ? { key: nid(pr[0]), blob: b } : null; }, function () { return null; });
     }
     // Songtext wie ihn die Player-Ansicht braucht: { lines: [{ t, text }], synced } oder null (keiner vorhanden); undefined = nicht ermittelbar.
@@ -3052,7 +3202,7 @@
     var go = btn('ml-pill ml-primary', t('dlStart'));
     go.addEventListener('click', function () {
       var c = ML.client();
-      var url = c.getUrl('MusicLook/Playlist/' + pl.id + '/Download', { api_key: c.accessToken() });
+      var url = c.getUrl('MusicLook/Playlist/' + pl.id + '/Download', { ApiKey: c.accessToken() });
       startDownload(url, pl.item.Name + '.zip', pl.item.Name, pl.id);
       toast(t('dlStarted'));
       ui.close();
@@ -3189,7 +3339,8 @@
     if (Net.offline() || track.__local) {   // ohne Server: nur, was auf dem Geraet geht
       openMenu({ title: track.Name, subtitle: firstArtist(track), cover: itemImg(track, 120) }, [
         offTrackEntry(track),
-        { icon: 'speed', label: t('mSpeed'), run: openSpeed }
+        { icon: 'speed', label: t('mSpeed'), run: openSpeed },
+        { icon: 'moon', label: t('sleepMenu'), run: function () { Sleep.open(); } }
       ]);
       return;
     }
@@ -3213,6 +3364,7 @@
       } },
       { hidden: !(track.ArtistItems && track.ArtistItems.length), icon: 'person', label: t('mArtist'), run: function () { openArtist(track.ArtistItems); } },
       { icon: 'speed', label: t('mSpeed'), run: openSpeed },
+      { icon: 'moon', label: t('sleepMenu'), run: function () { Sleep.open(); } },
       { hidden: !ML.config().jamEnabled, icon: 'group', label: t('mJam'), run: function () { jamWith([track.Id]); } },
       { hidden: !isMusicCat(catMemo[nid(track.Id)]), icon: 'radio', label: t('mRadio'), run: function () { songRadio(track); } },
       { icon: 'info', label: t('mInfo'), run: function () { openSongInfo(track); } }
@@ -3409,6 +3561,7 @@
         { hidden: !info.canEdit, icon: 'camera', label: t('mCover'), run: function () { openDetails(ctx, { pickCover: true }); } },
         { hidden: !info.isOwner, icon: 'del', label: t('mDelete'), danger: true, run: function () { deletePlaylist(ctx); } },
         { icon: 'download', label: t('mDownload'), run: function () { openDownload(pl); } },
+        { icon: 'download', label: t('m3uMenu'), run: function () { openM3uExport(pl); } },
         { icon: 'queue', label: t('mQueue'), run: function () { queueIds(ids); } },
         { icon: 'playlist_add', label: t('mAddOther'), run: function () { addToPlaylist(ids, { excludeId: pl.id }); } },
         { hidden: !info.isOwner, icon: 'person_add', label: t('mInvite'), run: function () { ML.openShareSheet(pl.id); } },
@@ -3427,10 +3580,17 @@
         { hidden: !albumArtistItems(ctx.album).length, icon: 'person', label: t('mArtist'), run: function () { openArtist(albumArtistItems(ctx.album)); } }
       ];
     } else {
+      var isMix = ctx.kind === 'mix' && ctx.mix, isSmart = isMix && ctx.mix.kind === 'smart', dyn = isMix && (ctx.mix.kind === 'smart' || ctx.mix.kind === 'genre');
       entries = [
+        { hidden: !isSmart, icon: 'tune', label: t('smartEdit'), run: function () { Smart.byId(ctx.mix.id).then(function (r) { if (r) Smart.edit(r, function () { if (ctx.reload) ctx.reload(); }); }); } },
+        { hidden: !dyn, icon: 'repeat', label: t('smartRefresh'), run: function () { if (ctx.reload) ctx.reload(); } },
+        { hidden: !isMix || !ids.length, icon: 'playlist_add', label: t('smartToPlaylist'), run: function () {
+          newPlaylistDialog(ids, { onCreated: function (pid) { invalidatePlaylists(); go('#/details?id=' + pid + (serverId() ? '&serverId=' + serverId() : '')); } });
+        } },
         { icon: 'queue', label: t('mQueue'), run: function () { queueIds(ids); } },
         { icon: 'playlist_add', label: t('mAddToPlaylist'), run: function () { addToPlaylist(ids); } },
-        { hidden: !jamOk, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } }
+        { hidden: !jamOk, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } },
+        { hidden: !isSmart, icon: 'del', label: t('smartDelete'), danger: true, run: function () { Smart.byId(ctx.mix.id).then(function (r) { if (r) Smart.confirmRemove(r, leaveDetail); }); } }
       ];
     }
     if (!ctx.offline) entries.unshift(offLocalEntry(ctx));
@@ -3573,7 +3733,7 @@
   })();
 
   /* ---------- Zustand ---------- */
-  var state = { libraryId: null, tab: 'home', chip: 'all', libSeg: 'playlists', classic: false, key: '', view: 0, trail: [] };
+  var state = { libraryId: null, tab: 'home', chip: 'all', libSeg: 'playlists', libSort: (function () { try { return window.localStorage.getItem('ml.libsort') === 'alpha' ? 'alpha' : 'recent'; } catch (e) { return 'recent'; } })(), classic: false, key: '', view: 0, trail: [] };
   // Die klassische Ansicht gilt nur bis zum Neustart der App/des Tabs (sessionStorage); ein alter, dauerhaft gespeicherter Wert wird entfernt.
   ML.safeStore('ml.classic', null);
   try { if (window.sessionStorage.getItem('ml.classic') === '1') state.classic = true; } catch (e) { /* ohne Speicher: Spotify-Ansicht */ }
@@ -3818,6 +3978,10 @@
         { hidden: !ML.config().jamEnabled, icon: 'group', label: t('jam'), run: function () { ML.openJamSheet(); } },
         { hidden: !OFF.available(), icon: 'download_circle', label: t('offMenu'), run: openDownloads },
         { icon: 'wifi_off', label: Net.forced() ? t('offModeOff') : t('offModeOn'), run: function () { OFFV.toggleForced(); } },
+        { icon: 'tune', label: t('smartTitle'), run: function () { openAux('smarts'); } },
+        { icon: 'library', label: t('genresTitle'), run: function () { openAux('genres'); } },
+        { icon: 'chart', label: t('statsTitle'), run: function () { openAux('stats'); } },
+        { icon: 'moon', label: t('sleepMenu'), run: function () { Sleep.open(); } },
         { icon: 'equalizer', label: t('eqTitle'), run: openEqualizer },
         { icon: 'radio', label: t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff'), run: function () { setAutoplay(!autoplayOn()); toast(t(autoplayOn() ? 'autoplayIsOn' : 'autoplayIsOff')); } },
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
@@ -3893,6 +4057,7 @@
     var pre = peekLists();
     function paint(libs, pls) {
       body.textContent = '';
+      if (!Net.offline()) Resume.card(body, chip);
       if (chip === 'podcasts') return fillMedia(body, seq, libs.filter(function (l) { return l.cat === 'podcasts'; }), 'podcasts');
       if (chip === 'audiobooks') return fillMedia(body, seq, libs.filter(function (l) { return l.cat === 'audiobooks'; }), 'audiobooks');
       var r = fillMusic(body, seq, libs, pls, chip === 'all');
@@ -3982,6 +4147,10 @@
         if (list && list.length >= 8) return list;
         return call('GET', 'Artists/' + id + '/InstantMix', { UserId: uid(), Limit: 60 }).then(function (r) { return onlyMusic((r && r.Items) || []); });
       });
+    } else if (kind === 'smart') {
+      p = Smart.byId(id).then(function (rule) { return rule ? Smart.tracks(rule) : []; });
+    } else if (kind === 'genre') {
+      p = Genres.tracks(id);
     } else {
       p = loadItem(id, '').then(function (seed) {
         return loadSongMix(id, 60, { own: 10 }).then(function (list) {
@@ -4016,6 +4185,9 @@
   var mixStore = {};   // 'art|id' -> { tracks, n }: dieselben Titel wie auf der Kachel
   var mixTitles = {};  // Schluessel -> Anzeigename (fuer "Wiedergabe aus Mix")
   function mixKey(kind, id) { return kind + ':' + nid(id); }
+  function mixLabelOf(kind) {
+    return kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : kind === 'smart' ? t('smartLabel') : kind === 'genre' ? t('genreLabel') : t('mixtapeLbl');
+  }
   function mixHash(kind, id, n, name) {
     return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=mix&mlkind=' + kind + '&mlid=' + id + '&mln=' + (n || 0) + (name ? '&mlt=' + encodeURIComponent(name) : '');
   }
@@ -4058,7 +4230,7 @@
   function showMixDetail(host, seq, kind, id, n, name) {
     var key = mixKey(kind, id);
     if (Net.offline()) {
-      OFFV.showDetail(host, seq, 'mix', id, { kind: kind, id: id, key: key, name: name || '', label: kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl') });
+      OFFV.showDetail(host, seq, 'mix', id, { kind: kind, id: id, key: key, name: name || '', label: mixLabelOf(kind) });
       return;
     }
     renderDetailLoading(host);
@@ -4068,14 +4240,17 @@
       return mixTracksOf(kind, id).then(function (tracks) { return { tracks: tracks, n: n }; });
     }
     function start() {
-      loadTracks().then(function (res) {
+      var ruleP = kind === 'smart' ? Smart.byId(id) : Promise.resolve(null);
+      Promise.all([loadTracks(), ruleP]).then(function (both) {
+        var res = both[0], rule = both[1];
         if (seq !== state.view) return;
-        if (!res.tracks.length) throw new Error('empty');
-        mixStore[key] = { tracks: res.tracks, n: res.n };
-        var title = kind === 'mix' ? t('mixN', res.n || 1) : kind === 'radio' ? (name || t('radioLbl')) : t('mixtapeOf', name || '');
+        if (!res.tracks.length && kind !== 'smart') throw new Error('empty');
+        if (res.tracks.length) mixStore[key] = { tracks: res.tracks, n: res.n };
+        var title = kind === 'mix' ? t('mixN', res.n || 1) : kind === 'radio' ? (name || t('radioLbl')) : kind === 'smart' ? ((rule && rule.name) || name || t('smartLabel')) : kind === 'genre' ? (name || t('genreLabel')) : t('mixtapeOf', name || '');
         mixTitles[key] = title;
-        var label = kind === 'mix' ? t('mixLbl') : kind === 'radio' ? t('radioLbl') : t('mixtapeLbl');
-        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, name: name || '', sub: mixSub(res.tracks) }, tracks: res.tracks, canEdit: false });
+        var label = mixLabelOf(kind);
+        var sub = kind === 'smart' && rule ? Smart.summary(rule) : mixSub(res.tracks);
+        var ctx = makeDetailCtx(host, { kind: 'mix', mix: { kind: kind, id: id, key: key, title: title, label: label, name: name || '', sub: sub }, tracks: res.tracks, canEdit: false });
         ctx.reload = function () { delete mixStore[key]; start(); };
         buildDetail(host, ctx);
       }, function () { if (seq === state.view) renderDetailFailed(host, function () { renderDetailLoading(host); start(); }); });
@@ -4191,6 +4366,9 @@
     var mineBox = shelf(body, t('yourPlaylists'), [newTile].concat(mine.map(playlistTile)));
     if (!mine.length && mineBox) mineBox.appendChild(el('p', 'ml-muted ml-pad', t('noPlaylistsYet')));
     shelf(body, t('sharedPlaylists'), shared.map(playlistTile));
+    var slotDiscover = el('div');
+    body.appendChild(slotDiscover);
+    fillDiscover(slotDiscover, seq);
 
     var slotAdded = el('div');
     body.appendChild(slotAdded);
@@ -4306,8 +4484,8 @@
   function loadGenreAudiobooks() {
     var words = ['hörbuch', 'hoerbuch', 'audiobook', 'hörspiel', 'hoerspiel', 'spoken'];
     ((ML.config().audiobookKeywords) || []).forEach(function (k) { k = String(k || '').toLowerCase(); if (k && words.indexOf(k) < 0) words.push(k); });
-    return call('GET', 'MusicGenres', { UserId: uid(), Limit: 500 }).then(function (r) {
-      var names = ((r && r.Items) || []).map(function (g) { return g.Name; }).filter(function (n) {
+    return Genres.list().then(function (gl) {
+      var names = gl.map(function (g) { return g.name; }).filter(function (n) {
         var low = String(n || '').toLowerCase();
         return words.some(function (w) { return low.indexOf(w) >= 0; });
       });
@@ -4590,6 +4768,7 @@
       var pre = peekLists(), psig = null;
       function paintPls(pls) {
         list.textContent = '';
+        if (state.libSort === 'alpha') pls = pls.slice().sort(function (x, y) { return String(x.item.Name || '').localeCompare(String(y.item.Name || ''), undefined, { sensitivity: 'base', numeric: true }); });
         list.appendChild(libRow({ id: 'liked', coverEl: likedCoverEl('ml-row-cover'), title: t('liked'), sub: t('playlist'), onClick: function () { ensureLibrary().then(function () { go(likedHash()); }); } }));
         pls.forEach(function (p) {
           var sub = t('playlist') + ' • ' + (p.info.isOwner ? (p.info.isPublic ? t('publicBadge') : t('privateBadge')) : (p.info.ownerName || t('sharedBadge')));
@@ -5144,6 +5323,7 @@
     ctx.renderTracks();
 
     shelf(host, t('artistAlbums'), ctx.albums.map(itemTile));
+    similarArtistsShelf(host, a.Id);
 
     var bio = (a.Overview || '').trim();
     if (bio) {
@@ -5169,7 +5349,7 @@
     var extra = {
       de: {
         spMenu: 'Von Spotify importieren', spTitle: 'Von Spotify importieren',
-        spIntro: 'Füge den Playlist-Link von Spotify ein (in Spotify: Teilen → Link kopieren). Damit kommen Name, Beschreibung, Cover und die ersten 100 Titel. Hat die Playlist mehr Titel: in Spotify alle Titel markieren (Strg+A), kopieren (Strg+C) und hier einfügen, oder eine Datei laden (Spotify-Datenexport als JSON oder CSV, z. B. von Exportify). Auch eine einfache Liste („Titel – Künstler“, eine Zeile pro Titel) geht. Was du nicht hast, wird als „nicht verfügbar“ markiert.',
+        spIntro: 'Füge den Playlist-Link von Spotify ein (in Spotify: Teilen → Link kopieren). Damit kommen Name, Beschreibung, Cover und die ersten 100 Titel. Hat die Playlist mehr Titel: in Spotify alle Titel markieren (Strg+A), kopieren (Strg+C) und hier einfügen, oder eine Datei laden (Spotify-Datenexport als JSON, CSV z. B. von Exportify, oder eine M3U-Datei). Auch eine einfache Liste („Titel – Künstler“, eine Zeile pro Titel) geht. Was du nicht hast, wird als „nicht verfügbar“ markiert.',
         spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Datei laden', spNext: 'Weiter',
         spReading: 'Spotify-Playlist wird gelesen …', spMatching: 'Titel werden abgeglichen …',
         spFailLink: 'Die Spotify-Seite konnte nicht gelesen werden ({0}). Füge stattdessen die Titel ein oder lade eine Datei.',
@@ -5196,11 +5376,17 @@
         spUpdAdd: 'Hinzufügen ({0})', spUpdDone: '{0} neue Titel zur Playlist hinzugefügt', spUpdNone: 'Nichts Neues. Fehlend: {0}.',
         spUpdNoneAll: 'Nichts Neues, die Playlist ist vollständig.', spUpdFail: 'Die Playlist konnte nicht aktualisiert werden.', spFromSpotify: '{0} neue Titel aus Spotify',
         spAuto: 'Automatisch aktualisieren', spAutoNote: 'Beim Öffnen von Music Look wird höchstens einmal täglich geprüft, ob fehlende Titel inzwischen da sind. Sichere Treffer kommen dann von selbst in die Playlist.',
-        spAutoAdded: '„{1}“: {0} neue Titel hinzugefügt', spLast: 'Zuletzt geprüft: {0}', spNever: 'noch nie'
+        spAutoAdded: '„{1}“: {0} neue Titel hinzugefügt', spLast: 'Zuletzt geprüft: {0}', spNever: 'noch nie',
+        spLink: 'Verknüpfen', spLinkTitle: 'Titel verknüpfen', spLinkIntro: 'Suche den passenden Titel in deiner Bibliothek. Die Verknüpfung wird gemerkt und gilt für alle deine Playlists.',
+        spLinkFor: 'Spotify: {0}', spLinkDone: 'Verknüpft: {0}', spLinkFail: 'Die Verknüpfung konnte nicht gespeichert werden.', spLinkAdded: 'Verknüpft und zur Playlist hinzugefügt',
+        spLinkMine: 'Verknüpft', spUnlink: 'Verknüpfung lösen',
+        spRemoveOpt: 'Nicht mehr bei Spotify: {0} Titel aus der Playlist entfernen', spOrderOpt: 'Reihenfolge wie bei Spotify herstellen',
+        spApply: 'Übernehmen', spRemoved: '{0} Titel entfernt', spReordered: 'Reihenfolge angepasst', spOrdering: 'Reihenfolge wird angepasst … {0} von {1}',
+        spOptTitle: 'Weitere Änderungen', spRemoveNote: 'Diese Titel gibt es bei Spotify nicht mehr (die Titel selbst bleiben in deiner Bibliothek):'
       },
       en: {
         spMenu: 'Import from Spotify', spTitle: 'Import from Spotify',
-        spIntro: 'Paste the playlist link from Spotify (in Spotify: Share → Copy link). It brings the name, description, cover and the first 100 tracks. If the playlist is longer: select all tracks in Spotify (Ctrl+A), copy (Ctrl+C) and paste them here, or load a file (Spotify data export as JSON, or a CSV, e.g. from Exportify). A plain list (“Title – Artist”, one line per track) works too. Tracks you do not have are marked “not available”.',
+        spIntro: 'Paste the playlist link from Spotify (in Spotify: Share → Copy link). It brings the name, description, cover and the first 100 tracks. If the playlist is longer: select all tracks in Spotify (Ctrl+A), copy (Ctrl+C) and paste them here, or load a file (Spotify data export as JSON, a CSV e.g. from Exportify, or an M3U file). A plain list (“Title – Artist”, one line per track) works too. Tracks you do not have are marked “not available”.',
         spPh: 'https://open.spotify.com/playlist/…', spCsv: 'Load file', spNext: 'Next',
         spReading: 'Reading the Spotify playlist …', spMatching: 'Matching tracks …',
         spFailLink: 'The Spotify page could not be read ({0}). Paste the tracks instead or load a file.',
@@ -5227,7 +5413,13 @@
         spUpdAdd: 'Add ({0})', spUpdDone: '{0} new tracks added to the playlist', spUpdNone: 'Nothing new. Missing: {0}.',
         spUpdNoneAll: 'Nothing new, the playlist is complete.', spUpdFail: 'The playlist could not be updated.', spFromSpotify: '{0} new tracks from Spotify',
         spAuto: 'Update automatically', spAutoNote: 'When Music Look is opened, it checks at most once a day whether missing tracks have arrived. Sure matches are added to the playlist by themselves.',
-        spAutoAdded: '“{1}”: {0} new tracks added', spLast: 'Last checked: {0}', spNever: 'never'
+        spAutoAdded: '“{1}”: {0} new tracks added', spLast: 'Last checked: {0}', spNever: 'never',
+        spLink: 'Link', spLinkTitle: 'Link track', spLinkIntro: 'Search for the matching track in your library. The link is remembered and applies to all your playlists.',
+        spLinkFor: 'Spotify: {0}', spLinkDone: 'Linked: {0}', spLinkFail: 'The link could not be saved.', spLinkAdded: 'Linked and added to the playlist',
+        spLinkMine: 'Linked', spUnlink: 'Remove link',
+        spRemoveOpt: 'No longer on Spotify: remove {0} tracks from the playlist', spOrderOpt: 'Restore the Spotify order',
+        spApply: 'Apply', spRemoved: '{0} tracks removed', spReordered: 'Order adjusted', spOrdering: 'Adjusting the order … {0} of {1}',
+        spOptTitle: 'More changes', spRemoveNote: 'These tracks are gone from Spotify (the tracks themselves stay in your library):'
       }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
@@ -5290,6 +5482,113 @@
     }
     return Promise.all([worker(), worker(), worker(), worker()]);
   }
+  /* ---------- Manuelle Verknuepfungen (gelten fuer alle Playlists des Benutzers) ---------- */
+  var spLinksMem = null;
+  function spLinkKey(src) { return SPCore.uriId(src.uri) || SPCore.keyOf(src); }
+  function spLinks() { return Store.get('links', {}).then(function (m) { spLinksMem = m && typeof m === 'object' && !Array.isArray(m) ? m : {}; return spLinksMem; }); }
+  function spLinkSave(src, itemId) {
+    var key = spLinkKey(src);
+    return Store.update('links', {}, function (m) {
+      m = m && typeof m === 'object' && !Array.isArray(m) ? m : {};
+      if (itemId) m[key] = nid(itemId); else delete m[key];
+      var keys = Object.keys(m);
+      if (keys.length > 3000) keys.slice(0, keys.length - 3000).forEach(function (k) { delete m[k]; });   // aelteste zuerst
+      return m;
+    }).then(function (m) { spLinksMem = m; return m; });
+  }
+  // Titel in der Musikbibliothek suchen und waehlen. onPick(item) wird mit dem gewaehlten Jellyfin-Titel aufgerufen.
+  function spPickSheet(src, onPick) {
+    var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spLinkTitle') });
+    sheetTitle(ui, t('spLinkTitle'), t('spLinkFor', src.title + (src.artist ? ' – ' + src.artist : '')));
+    ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spLinkIntro')));
+    var input = el('input', 'ml-field ml-search-field');
+    input.type = 'search'; input.placeholder = t('searchSongsPh'); input.setAttribute('autocomplete', 'off');
+    input.value = src.title || '';
+    ui.sheet.appendChild(input);
+    var list = el('div', 'ml-sheet-list');
+    ui.sheet.appendChild(list);
+    var seq = 0;
+    function show(items) {
+      list.textContent = '';
+      items.forEach(function (it) {
+        var row = btn('ml-list-row');
+        row.appendChild(cover(itemImg(it, 96), 'ml-row-cover'));
+        var txt = el('div', 'ml-row-text');
+        txt.appendChild(el('div', 'ml-row-title', it.Name));
+        txt.appendChild(el('div', 'ml-row-sub', firstArtist(it) + (it.Album ? ' · ' + it.Album : '')));
+        row.appendChild(txt);
+        row.addEventListener('click', function () { ui.close(); onPick(it); });
+        list.appendChild(row);
+      });
+      if (!items.length) list.appendChild(el('div', 'ml-sheet-note', t('nothingYet')));
+    }
+    function run() {
+      var q = input.value.trim(), my = ++seq;
+      if (!q) { show([]); return; }
+      var params = { SearchTerm: q, Limit: 40, IncludeItemTypes: 'Audio', Recursive: true };
+      loadLibraries().then(function (libs) { return chipLibIds(libs, 'music'); }, function () { return null; }).then(function (ids) {
+        return ids && ids.length ? perLibrary(ids, params, null, params.Limit) : itemsOf(params);
+      }).then(function (items) { if (my === seq) show(items); }, function () {
+        if (my === seq) { list.textContent = ''; list.appendChild(el('div', 'ml-sheet-note', t('loadFailed'))); }
+      });
+    }
+    input.addEventListener('input', debounce(run, 300));
+    run();
+    setTimeout(function () { try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); } }, 200);
+  }
+  // Fehlenden Titel einer importierten Playlist von Hand verknuepfen: merken (fuer alle Playlists), in die Playlist legen, Quelle speichern
+  function spLinkTrack(pid, doc, d, item, done) {
+    spLinkSave(spToSrc(d), item.Id).then(function () {
+      d.id = item.Id; delete d.x;
+      return spPlaylistIds(pid).then(function (ids) {
+        var job = ids.indexOf(nid(item.Id)) >= 0 ? Promise.resolve() : addToPlaylistIds(pid, [item.Id]);
+        return job.then(function () { return spSrcSave(pid, doc); });
+      });
+    }).then(function () {
+      invalidatePlaylists(pid);
+      toast(t('spLinkAdded'));
+      if (done) done();
+    }, function () { toast(t('spLinkFail')); });
+  }
+  // Eintraege einer Playlist in Reihenfolge: [{ id (Titel), eid (Eintrag in der Playlist) }]
+  function spPlaylistEntries(pid) {
+    var out = [], PAGE = 1500;
+    function page(start) {
+      return call('GET', 'Playlists/' + pid + '/Items', { UserId: uid(), StartIndex: start, Limit: PAGE, Fields: '', EnableImages: false, EnableUserData: false }).then(function (r) {
+        var items = (r && r.Items) || [];
+        items.forEach(function (x) { out.push({ id: nid(x.Id), eid: x.PlaylistItemId }); });
+        return items.length >= PAGE && start < 20000 ? page(start + PAGE) : out;
+      });
+    }
+    return page(0);
+  }
+  // Jellyfin-Ids der Quell-Titel in der Reihenfolge, die Spotify jetzt hat (nur Titel, die in der Playlist sein sollen)
+  function spOrderTarget(doc, linked) {
+    var out = [], seen = {};
+    (linked || []).forEach(function (l) {
+      for (var i = 0; i < doc.tracks.length; i++) {
+        var d = doc.tracks[i];
+        if (!d.id || d.x || seen[nid(d.id)]) continue;
+        if (SPCore.sameTrack(l, spToSrc(d))) { seen[nid(d.id)] = 1; out.push(nid(d.id)); break; }
+      }
+    });
+    return out;
+  }
+  // Verschiebungen, mit denen die Playlist die Reihenfolge target bekommt; fremde Titel rutschen ans Ende
+  function spOrderPlan(entries, target) {
+    var cur = entries.map(function (e) { return { id: e.id, eid: e.eid }; }), have = {}, moves = [];
+    cur.forEach(function (e) { have[e.id] = 1; });
+    var T = target.filter(function (id) { return have[id]; });
+    for (var i = 0; i < T.length; i++) {
+      if (cur[i] && cur[i].id === T[i]) continue;
+      var j = -1;
+      for (var k = i + 1; k < cur.length; k++) if (cur[k].id === T[i]) { j = k; break; }
+      if (j < 0) continue;
+      moves.push({ eid: cur[j].eid, to: i });
+      cur.splice(i, 0, cur.splice(j, 1)[0]);
+    }
+    return moves;
+  }
   function spPlaylistIds(pid) {
     var out = [], PAGE = 1500;
     function page(start) {
@@ -5303,46 +5602,58 @@
   }
 
   /* Pruefen: neue Quell-Titel zusammenfuehren, fehlende Titel mit der (aktuellen) Bibliothek abgleichen.
-     opts: { force (Bibliothek neu laden), extra (zusaetzliche Titel), alive } -> { doc, found: [{ i, m, have }], fresh } */
+     Ist die Spotify-Liste vollstaendig lesbar (hoechstens 100 Titel), werden zusaetzlich Titel erkannt, die es bei Spotify nicht mehr gibt,
+     und die Reihenfolge verglichen. opts: { force (Bibliothek neu laden), extra (zusaetzliche Titel), alive, auto (nur Treffer suchen) }
+     -> { doc, found: [{ i, m, have }], fresh, removed: [Index in doc.tracks], linked (nur wenn vollstaendig), moves (Anzahl Verschiebungen) } */
   function spCheck(pid, opts) {
     opts = opts || {};
     var alive = opts.alive || function () { return true; };
     return spLoadDoc(pid).then(function (doc) {
       if (!doc) throw new Error('no source');
-      var link = doc.sp ? spReadLink(doc.sp).then(function (p) { return p ? p.tracks : []; }, function () { return []; }) : Promise.resolve([]);
-      return link.then(function (linked) {
+      var link = doc.sp ? spReadLink(doc.sp).then(function (p) { return p || null; }, function () { return null; }) : Promise.resolve(null);
+      return Promise.all([link, spLinks().then(null, function () { return {}; })]).then(function (lr) {
+        var pl = lr[0], links = lr[1], linked = pl ? pl.tracks : [];
+        var complete = !!pl && linked.length > 0 && (pl.total ? pl.total <= linked.length : linked.length < 100);
         var incoming = SPCore.mergeTracks(opts.extra || [], linked);
         var base = doc.tracks.map(spToSrc);
         var merged = SPCore.mergeTracks(base, incoming);
         var fresh = merged.length - base.length;
         merged.slice(base.length).forEach(function (s) { doc.tracks.push(spFromSrc(s)); });
         if (doc.tracks.length > 5000) doc.tracks.length = 5000;
+        var removed = [];
+        if (complete && !opts.auto) base.forEach(function (s, i) { if (!linked.some(function (l) { return SPCore.sameTrack(l, s); })) removed.push(i); });
+        var gone = {};
+        removed.forEach(function (i) { gone[i] = 1; });
         var idx = [], src = [];
-        doc.tracks.forEach(function (d, i) { if (spIsMissing(d)) { idx.push(i); src.push(spToSrc(d)); } });
-        if (!src.length) return { doc: doc, found: [], fresh: fresh };
-        return Promise.all([spLibrary(!!opts.force), spPlaylistIds(pid)]).then(function (r) {
-          if (!alive()) return { doc: doc, found: [], fresh: fresh };
-          var lib = r[0], cur = {}, taken = {};
-          r[1].forEach(function (x) { cur[x] = 1; });
+        doc.tracks.forEach(function (d, i) { if (spIsMissing(d) && !gone[i]) { idx.push(i); src.push(spToSrc(d)); } });
+        var out = { doc: doc, found: [], fresh: fresh, removed: removed, linked: complete && !opts.auto ? linked : null, moves: 0 };
+        var needEntries = !!out.linked;
+        if (!src.length && !needEntries) return out;
+        return Promise.all([src.length ? spLibrary(!!opts.force) : Promise.resolve(null), spPlaylistEntries(pid)]).then(function (r) {
+          if (!alive()) return out;
+          var lib = r[0], entries = r[1], cur = {}, taken = {};
+          entries.forEach(function (x) { cur[x.id] = 1; });
           doc.tracks.forEach(function (d) { if (d.id) taken[nid(d.id)] = 1; });
-          var res = SPCore.matchAll(src, SPCore.buildLib(lib.items));
+          if (out.linked) out.moves = spOrderPlan(entries, spOrderTarget(doc, out.linked)).length;
+          if (!lib) return out;
+          var res = SPCore.matchAll(src, SPCore.buildLib(lib.items), links);
           var more = lib.capped ? spSearchMissing(res, alive) : Promise.resolve();
           return more.then(function () {
-            var found = [];
             res.forEach(function (m, k) {
               if (!m.hit || m.dup || taken[nid(m.hit.Id)]) return;
               taken[nid(m.hit.Id)] = 1;
-              found.push({ i: idx[k], m: m, have: !!cur[nid(m.hit.Id)] });
+              out.found.push({ i: idx[k], m: m, have: !!cur[nid(m.hit.Id)] });
             });
-            return { doc: doc, found: found, fresh: fresh };
+            return out;
           });
         });
       });
     });
   }
-  // Treffer uebernehmen (zur Playlist hinzufuegen), abgewaehlte als "ignoriert" merken, Quelle speichern. -> Anzahl hinzugefuegter Titel
-  function spApply(pid, doc, chosen, ignored) {
-    var ids = [];
+  // Treffer uebernehmen (zur Playlist hinzufuegen), abgewaehlte als "ignoriert" merken, Quelle speichern. -> { added, removed, moved }
+  // extra (optional): { removeIdx: [Index in doc.tracks], linked: Spotify-Liste fuer die Reihenfolge, onProgress(n, total) } -> { added, removed, moved }
+  function spApply(pid, doc, chosen, ignored, extra) {
+    var ids = [], stat = { removed: 0, moved: 0 };
     chosen.forEach(function (f) {
       doc.tracks[f.i].id = f.m.hit.Id;
       if (!f.have) ids.push(f.m.hit.Id);
@@ -5351,7 +5662,31 @@
     doc.at = Date.now();
     delete doc.partial;
     var job = ids.length ? addToPlaylistIds(pid, ids) : Promise.resolve();
-    return job.then(function () { return spSrcSave(pid, doc); }).then(function () { return ids.length; });
+    var rm = extra && extra.removeIdx && extra.removeIdx.length ? extra.removeIdx.slice().sort(function (a, b) { return a - b; }) : [];
+    if (rm.length) {
+      job = job.then(function () { return spPlaylistEntries(pid); }).then(function (entries) {
+        var want = {};
+        rm.forEach(function (i) { if (doc.tracks[i] && doc.tracks[i].id) want[nid(doc.tracks[i].id)] = 1; });
+        var eids = entries.filter(function (e) { return want[e.id]; }).map(function (e) { return e.eid; });
+        return ML.chunk(eids, 40).reduce(function (p, part) {
+          return p.then(function () { return call('DELETE', 'Playlists/' + pid + '/Items', { entryIds: part.join(',') }); });
+        }, Promise.resolve()).then(function () { stat.removed = rm.length; });
+      }).then(function () {
+        for (var k = rm.length - 1; k >= 0; k--) doc.tracks.splice(rm[k], 1);
+      });
+    }
+    if (extra && extra.linked) {
+      job = job.then(function () { return spPlaylistEntries(pid); }).then(function (entries) {
+        var moves = spOrderPlan(entries, spOrderTarget(doc, extra.linked));
+        return moves.reduce(function (p, mv, n) {
+          return p.then(function () {
+            if (extra.onProgress) extra.onProgress(n + 1, moves.length);
+            return call('POST', 'Playlists/' + pid + '/Items/' + mv.eid + '/Move/' + mv.to);
+          });
+        }, Promise.resolve()).then(function () { stat.moved = moves.length; });
+      });
+    }
+    return job.then(function () { return spSrcSave(pid, doc); }).then(function () { return { added: ids.length, removed: stat.removed, moved: stat.moved }; });
   }
 
   /* ---------- Eingabe und Einlesen (Import und "Weitere Titel ergaenzen" teilen sich das) ---------- */
@@ -5378,7 +5713,7 @@
       err.hidden = !cfg.message;
       ui.sheet.appendChild(err);
       var file = el('input');
-      file.type = 'file'; file.accept = '.csv,.txt,.json,text/csv,text/plain,application/json'; file.hidden = true;
+      file.type = 'file'; file.accept = '.csv,.txt,.json,.m3u,.m3u8,text/csv,text/plain,application/json,audio/x-mpegurl,application/vnd.apple.mpegurl'; file.hidden = true;
       ui.sheet.appendChild(file);
       file.addEventListener('change', function () {
         var f = file.files && file.files[0];
@@ -5521,11 +5856,12 @@
     /* --- Schritt 2: Abgleich --- */
     function match(pl) {
       busy(t('spMatching'));
-      spLibrary(false).then(function (lib) {
+      Promise.all([spLibrary(false), spLinks().then(null, function () { return {}; })]).then(function (lr) {
+        var lib = lr[0], links = lr[1];
         if (!isAlive()) return;
-        var L = SPCore.buildLib(lib.items), res = SPCore.matchAll(pl.tracks, L);
+        var L = SPCore.buildLib(lib.items), res = SPCore.matchAll(pl.tracks, L, links);
         if (pl.swap) {
-          var alt = SPCore.matchAll(SPCore.swapped(pl.tracks), L);
+          var alt = SPCore.matchAll(SPCore.swapped(pl.tracks), L, links);
           if (SPCore.count(alt) > SPCore.count(res)) { res = alt; pl.tracks = SPCore.swapped(pl.tracks); }
         }
         var more = Promise.resolve();
@@ -5564,7 +5900,7 @@
     /* --- Schritt 3: Vorschau und Erstellen --- */
     function fetchCover(url) {
       var c = ML.client();
-      return fetch(c.getUrl('MusicLook/Spotify/Image', { url: url, api_key: c.accessToken() }), { credentials: 'omit' }).then(function (r) {
+      return fetch(c.getUrl('MusicLook/Spotify/Image', { url: url, ApiKey: c.accessToken() }), { credentials: 'omit' }).then(function (r) {
         if (!r.ok) throw new Error('cover ' + r.status);
         return r.blob();
       });
@@ -5585,7 +5921,7 @@
       top.appendChild(fields);
       ui.sheet.appendChild(top);
 
-      var coverBlob = null, coverOn = !!pl.cover, coverRow = null;
+      var coverBlob = null, coverOn = !!pl.cover && !pl.coverOff, coverRow = null;
       if (pl.cover) {
         fetchCover(pl.cover).then(function (blob) {
           if (!isAlive()) return;
@@ -5596,7 +5932,7 @@
           thumb.appendChild(img);
         }, function () { if (isAlive()) { thumb.hidden = true; if (coverRow) coverRow.hidden = true; coverOn = false; } });
         coverRow = el('label', 'ml-sp-check');
-        var cb = el('input'); cb.type = 'checkbox'; cb.checked = true;
+        var cb = el('input'); cb.type = 'checkbox'; cb.checked = coverOn;
         cb.addEventListener('change', function () { coverOn = cb.checked; });
         coverRow.appendChild(cb);
         coverRow.appendChild(el('span', null, t('spCover')));
@@ -5639,7 +5975,22 @@
         else if (m.dup) sub = (sub ? sub + ' · ' : '') + t('spDup');
         txt.appendChild(el('div', 'ml-sp-art', sub));
         if (m.hit && !m.dup && m.q === 'maybe') txt.appendChild(el('div', 'ml-sp-as', t('spFoundAs', m.hit.Name + ' – ' + (m.hit.Artists || []).join(', '))));
+        if (m.manual) txt.appendChild(el('div', 'ml-sp-as', t('spLinkMine') + ': ' + m.hit.Name + ' – ' + (m.hit.Artists || []).join(', ')));
         row.appendChild(txt);
+        if (!m.dup && (!m.hit || m.q === 'maybe')) {
+          var lk = btn('ml-sp-lnk', t('spLink'));
+          lk.addEventListener('click', function () {
+            spPickSheet(m.src, function (item) {
+              spLinkSave(m.src, item.Id).then(null, function () { toast(t('spLinkFail')); });   // gemerkt fuer alle Playlists
+              m.hit = item; m.q = 'sure'; m.manual = true; m.on = true;
+              var used = {};
+              res.forEach(function (x) { x.dup = false; if (x.hit) { if (used[nid(x.hit.Id)]) { x.dup = true; x.on = false; } else used[nid(x.hit.Id)] = 1; } });
+              pl.name = name.value; pl.description = desc.value; pl.coverOff = !coverOn;
+              result(pl, res);
+            });
+          });
+          row.appendChild(lk);
+        }
         if (m.hit && !m.dup) {
           var box = el('input', 'ml-sp-pick'); box.type = 'checkbox'; box.checked = m.on !== false;
           box.setAttribute('aria-label', m.src.title);
@@ -5742,6 +6093,11 @@
           var row = el('div', 'ml-sp-miss-row');
           row.appendChild(el('div', 'ml-sp-miss-name', m.t || ''));
           if (m.a) row.appendChild(el('div', 'ml-sp-miss-art', m.a));
+          var lkb = btn('ml-sp-lnk', t('spLink'));
+          lkb.addEventListener('click', function () {
+            spPickSheet(spToSrc(m), function (item) { spLinkTrack(pid, doc, m, item, refreshed); });
+          });
+          row.appendChild(lkb);
           body.appendChild(row);
         });
       }
@@ -5762,7 +6118,7 @@
   }
   function spMissingSection(host, pid, ctx) { spSection(host, pid, ctx); }
 
-  // Manuell aktualisieren: Treffer anzeigen, auswaehlen, hinzufuegen
+  // Manuell aktualisieren: Treffer anzeigen, auswaehlen, hinzufuegen; auf Wunsch entfernte Titel loeschen und die Reihenfolge angleichen
   function spUpdateSheet(pid, extraTracks, done) {
     if (Net.offline()) { toast(t('spOffline')); return; }
     var ui = makeSheet({ cls: 'ml-tall ml-sp', title: t('spSecTitle') });
@@ -5771,7 +6127,8 @@
     spCheck(pid, { force: true, extra: extraTracks, alive: isAlive }).then(function (r) {
       if (!isAlive()) return;
       var doc = r.doc;
-      if (!r.found.length) {
+      var canOrder = !!r.linked && (r.moves > 0 || r.found.length > 0);
+      if (!r.found.length && !r.removed.length && !canOrder) {
         return spApply(pid, doc, [], []).then(function () {
           ui.close();
           var left = doc.tracks.filter(spIsMissing).length;
@@ -5779,47 +6136,88 @@
           if (r.fresh && done) done();
         });
       }
-      tools.reset(t('spUpdTitle'));
-      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spUpdFound', r.found.length)));
-      var list = el('div', 'ml-sp-list');
+      tools.reset(r.found.length ? t('spUpdTitle') : t('spOptTitle'));
       var on = r.found.map(function () { return true; });
       var addB = btn('ml-pill ml-primary', '');
-      function recount() { var n = on.filter(Boolean).length; addB.textContent = t('spUpdAdd', n); addB.disabled = n === 0; }
-      r.found.forEach(function (f, k) {
-        var row = el('div', 'ml-sp-row ml-sp-' + f.m.q);
-        var ic = el('span', 'ml-sp-ic');
-        ic.appendChild(icon(f.m.q === 'sure' ? 'check' : 'info'));
-        row.appendChild(ic);
-        var txt = el('div', 'ml-sp-txt');
-        txt.appendChild(el('div', 'ml-sp-name', f.m.src.title));
-        txt.appendChild(el('div', 'ml-sp-art', f.m.src.artist || ''));
-        if (f.m.q === 'maybe') txt.appendChild(el('div', 'ml-sp-as', t('spFoundAs', f.m.hit.Name + ' – ' + (f.m.hit.Artists || []).join(', '))));
-        row.appendChild(txt);
-        var box = el('input', 'ml-sp-pick'); box.type = 'checkbox'; box.checked = true;
-        box.setAttribute('aria-label', f.m.src.title);
-        box.addEventListener('change', function () { on[k] = box.checked; row.classList.toggle('ml-sp-off', !box.checked); recount(); });
-        row.appendChild(box);
-        list.appendChild(row);
-      });
-      ui.sheet.appendChild(list);
+      var removeOn = false, orderOn = false;
+      var hasOpts = r.removed.length > 0 || canOrder;
+      function recount() {
+        var n = on.filter(Boolean).length;
+        addB.textContent = hasOpts ? t('spApply') : t('spUpdAdd', n);
+        addB.disabled = hasOpts ? !(n || removeOn || orderOn) : n === 0;
+      }
+      if (r.found.length) {
+        ui.sheet.appendChild(el('div', 'ml-sheet-note', t('spUpdFound', r.found.length)));
+        var list = el('div', 'ml-sp-list');
+        r.found.forEach(function (f, k) {
+          var row = el('div', 'ml-sp-row ml-sp-' + f.m.q);
+          var ic = el('span', 'ml-sp-ic');
+          ic.appendChild(icon(f.m.q === 'sure' ? 'check' : 'info'));
+          row.appendChild(ic);
+          var txt = el('div', 'ml-sp-txt');
+          txt.appendChild(el('div', 'ml-sp-name', f.m.src.title));
+          txt.appendChild(el('div', 'ml-sp-art', f.m.src.artist || ''));
+          if (f.m.q === 'maybe') txt.appendChild(el('div', 'ml-sp-as', t('spFoundAs', f.m.hit.Name + ' – ' + (f.m.hit.Artists || []).join(', '))));
+          row.appendChild(txt);
+          var box = el('input', 'ml-sp-pick'); box.type = 'checkbox'; box.checked = true;
+          box.setAttribute('aria-label', f.m.src.title);
+          box.addEventListener('change', function () { on[k] = box.checked; row.classList.toggle('ml-sp-off', !box.checked); recount(); });
+          row.appendChild(box);
+          list.appendChild(row);
+        });
+        ui.sheet.appendChild(list);
+      }
+      if (hasOpts) {
+        var opts = el('div', 'ml-sp-opts');
+        if (r.removed.length) {
+          var lab = el('label', 'ml-sp-check');
+          var cbr = el('input'); cbr.type = 'checkbox'; cbr.checked = false;
+          cbr.addEventListener('change', function () { removeOn = cbr.checked; recount(); });
+          lab.appendChild(cbr);
+          lab.appendChild(el('span', null, t('spRemoveOpt', r.removed.length)));
+          opts.appendChild(lab);
+          opts.appendChild(el('div', 'ml-sp-miss-note', t('spRemoveNote')));
+          r.removed.slice(0, 12).forEach(function (i) {
+            var d = doc.tracks[i];
+            opts.appendChild(el('div', 'ml-sp-miss-row', (d.t || '') + (d.a ? ' – ' + d.a : '')));
+          });
+          if (r.removed.length > 12) opts.appendChild(el('div', 'ml-sp-miss-note', '… +' + (r.removed.length - 12)));
+        }
+        if (canOrder) {
+          var lab2 = el('label', 'ml-sp-check');
+          var cbo = el('input'); cbo.type = 'checkbox'; cbo.checked = false;
+          cbo.addEventListener('change', function () { orderOn = cbo.checked; recount(); });
+          lab2.appendChild(cbo);
+          lab2.appendChild(el('span', null, t('spOrderOpt')));
+          opts.appendChild(lab2);
+        }
+        ui.sheet.appendChild(opts);
+      }
       var actions = el('div', 'ml-sheet-actions ml-sp-actions');
       var cancel = btn('ml-pill ml-flat', t('cancel'));
       add(actions, cancel, addB);
       ui.sheet.appendChild(actions);
       recount();
-      function finish(chosen, ignored) {
+      function finish(chosen, ignored, extra) {
         addB.disabled = true; cancel.disabled = true;
-        return spApply(pid, doc, chosen, ignored).then(function (n) {
+        if (extra && extra.linked) extra.onProgress = function (n, total) { addB.textContent = t('spOrdering', n, total); };
+        return spApply(pid, doc, chosen, ignored, extra).then(function (st) {
           ui.close();
-          if (n) toast(t('spUpdDone', n));
-          if (n || r.fresh) invalidatePlaylists(pid);
+          var parts = [];
+          if (st.added) parts.push(t('spUpdDone', st.added));
+          if (st.removed) parts.push(t('spRemoved', st.removed));
+          if (st.moved) parts.push(t('spReordered'));
+          if (parts.length) toast(parts.join(' · '));
+          if (st.added || st.removed || st.moved || r.fresh) invalidatePlaylists(pid);
           if (done) done();
         }, function () { addB.disabled = false; cancel.disabled = false; toast(t('spUpdFail')); });
       }
       addB.addEventListener('click', function () {
-        finish(r.found.filter(function (f, k) { return on[k]; }), r.found.filter(function (f, k) { return !on[k]; }).map(function (f) { return f.i; }));
+        finish(r.found.filter(function (f, k) { return on[k]; }), r.found.filter(function (f, k) { return !on[k]; }).map(function (f) { return f.i; }), {
+          removeIdx: removeOn ? r.removed : [], linked: orderOn ? r.linked : null
+        });
       });
-      cancel.addEventListener('click', function () { finish([], []); });
+      cancel.addEventListener('click', function () { finish([], [], null); });
     }, function () { if (isAlive()) { ui.close(); toast(t('spUpdFail')); } });
   }
 
@@ -5868,16 +6266,889 @@
       return due.reduce(function (p, id) {
         return p.then(function () {
           if (Net.offline()) return;
-          return spCheck(id, { force: false }).then(function (r) {
+          return spCheck(id, { force: false, auto: true }).then(function (r) {
             var sure = r.found.filter(function (f) { return f.m.q === 'sure'; });
-            return spApply(id, r.doc, sure, []).then(function (n) {
-              if (n) { invalidatePlaylists(id); toast(t('spAutoAdded', n, r.doc.name || '')); }
+            return spApply(id, r.doc, sure, []).then(function (st) {
+              if (st.added) { invalidatePlaylists(id); toast(t('spAutoAdded', st.added, r.doc.name || '')); }
             });
           }).then(null, function () { /* beim naechsten Start wieder */ });
         });
       }, Promise.resolve());
     }).then(null, function () { /* Server ohne Quellspeicher oder offline */ });
   }
+  /* ---------- Version 1.6: M3U, intelligente Playlists, Genres, Statistik, Einschlaf-Timer ---------- */
+  (function () {
+    var extra = {
+      de: {
+        m3uMenu: 'Als M3U-Datei speichern', m3uTitle: 'Als M3U-Datei speichern',
+        m3uIntro: 'Die Datei enthält die Titel der Playlist mit ihren Dateipfaden auf dem Server (für andere Player). Damit die Pfade auf deinem Gerät stimmen, kannst du den Anfang ersetzen.',
+        m3uFrom: 'Pfadanfang auf dem Server', m3uTo: 'Ersetzen durch (leer = relative Pfade)', m3uSave: 'Speichern', m3uReading: 'Titel werden gelesen …',
+        m3uNoPaths: 'Der Server liefert keine Dateipfade. Die Datei enthält dann nur Künstler und Titel.', m3uSaved: 'M3U-Datei gespeichert', m3uFail: 'Die Titel konnten nicht gelesen werden.',
+        m3uEmpty: 'Die Playlist ist leer.'
+      },
+      en: {
+        m3uMenu: 'Save as M3U file', m3uTitle: 'Save as M3U file',
+        m3uIntro: 'The file lists the playlist tracks with their file paths on the server (for other players). To make the paths fit your device, you can replace the beginning.',
+        m3uFrom: 'Path start on the server', m3uTo: 'Replace with (empty = relative paths)', m3uSave: 'Save', m3uReading: 'Reading tracks …',
+        m3uNoPaths: 'The server does not provide file paths. The file then contains only artist and title.', m3uSaved: 'M3U file saved', m3uFail: 'The tracks could not be read.',
+        m3uEmpty: 'The playlist is empty.'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  // Text als Datei auf das Geraet laden
+  function saveTextFile(name, text, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (String(name || 'datei').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'datei');
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  // Gemeinsamer Ordner-Anfang aller Pfade (bis zum letzten Trenner)
+  function commonDir(paths) {
+    var list = paths.filter(Boolean);
+    if (!list.length) return '';
+    var first = list[0], n = first.length, i;
+    list.forEach(function (p) { var k = 0; while (k < n && k < p.length && p.charAt(k) === first.charAt(k)) k++; n = k; });
+    var pre = first.slice(0, n), cut = Math.max(pre.lastIndexOf('/'), pre.lastIndexOf('\\'));
+    if (list.length === 1) { cut = Math.max(first.lastIndexOf('/'), first.lastIndexOf('\\')); pre = first; }
+    return cut > 0 ? pre.slice(0, cut) : '';
+  }
+
+  /* ---------- Playlist als M3U-Datei ---------- */
+  function openM3uExport(pl) {
+    var ui = makeSheet({ title: t('m3uTitle') });
+    sheetTitle(ui, t('m3uTitle'), pl.item.Name);
+    ui.sheet.appendChild(loaderEl());
+    var note = el('div', 'ml-sheet-note ml-center', t('m3uReading'));
+    ui.sheet.appendChild(note);
+    var out = [], PAGE = 1500;
+    function page(start) {
+      return call('GET', 'Playlists/' + pl.id + '/Items', { UserId: uid(), StartIndex: start, Limit: PAGE, Fields: 'Path', EnableImages: false, EnableUserData: false }).then(function (r) {
+        var items = (r && r.Items) || [];
+        items.forEach(function (x) { out.push(x); });
+        return items.length >= PAGE && start < 20000 ? page(start + PAGE) : out;
+      });
+    }
+    page(0).then(function (items) {
+      if (!ui.sheet.isConnected) return;
+      ui.sheet.textContent = '';
+      sheetTitle(ui, t('m3uTitle'), pl.item.Name);
+      if (!items.length) { ui.sheet.appendChild(el('div', 'ml-sheet-note', t('m3uEmpty'))); return; }
+      var paths = items.map(function (x) { return x.Path || ''; });
+      var havePaths = paths.some(Boolean);
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('m3uIntro')));
+      var saved = {};
+      try { saved = JSON.parse(window.localStorage.getItem('ml.m3u') || '{}') || {}; } catch (e) { saved = {}; }
+      var dir = commonDir(paths);
+      var from = el('input', 'ml-field ml-field-box'), to = el('input', 'ml-field ml-field-box');
+      from.type = 'text'; to.type = 'text';
+      from.setAttribute('aria-label', t('m3uFrom')); to.setAttribute('aria-label', t('m3uTo'));
+      from.placeholder = t('m3uFrom'); to.placeholder = t('m3uTo');
+      from.value = saved.from && dir.indexOf(saved.from) === 0 ? saved.from : dir;
+      to.value = saved.from && dir.indexOf(saved.from) === 0 ? (saved.to || '') : '';
+      from.setAttribute('autocomplete', 'off'); to.setAttribute('autocomplete', 'off');
+      if (havePaths) {
+        ui.sheet.appendChild(el('label', 'ml-sp-miss-note', t('m3uFrom')));
+        ui.sheet.appendChild(from);
+        ui.sheet.appendChild(el('label', 'ml-sp-miss-note', t('m3uTo')));
+        ui.sheet.appendChild(to);
+      } else ui.sheet.appendChild(el('p', 'ml-sp-err', t('m3uNoPaths')));
+      var row = el('div', 'ml-sheet-actions');
+      var save = btn('ml-pill ml-primary', t('m3uSave'));
+      row.appendChild(save);
+      ui.sheet.appendChild(row);
+      save.addEventListener('click', function () {
+        var rep = havePaths ? { from: from.value.trim(), to: to.value.trim() } : null;
+        var entries = items.map(function (x) {
+          return { secs: (x.RunTimeTicks || 0) / 1e7, artist: (x.Artists && x.Artists[0]) || x.AlbumArtist || '', title: x.Name || '', path: x.Path || '' };
+        });
+        try { if (rep) window.localStorage.setItem('ml.m3u', JSON.stringify(rep)); } catch (e) { /* ohne Merken */ }
+        saveTextFile(pl.item.Name + '.m3u8', SPCore.toM3U(entries, rep), 'audio/x-mpegurl;charset=utf-8');
+        ui.close();
+        toast(t('m3uSaved'));
+      });
+    }, function () { if (ui.sheet.isConnected) { ui.close(); toast(t('m3uFail')); } });
+  }
+  /* ---------- Version 2.0: Weiterhören (serverseitig pro Benutzer) ----------
+     Was gerade läuft (Warteschlange, aktueller Titel, Position, Herkunft) wird in den Anzeige-Einstellungen des Benutzers auf dem
+     Jellyfin-Server gemerkt (Store, Schlüssel "resume"). Auf jedem Gerät steht dann oben auf der Startseite die Karte "Weiter hören":
+     ein Tipp startet genau dort, wo man aufgehört hat - Playlist, Album, Mix, einzelner Titel oder Hörbuch. */
+  (function () {
+    var extra = {
+      de: {
+        resumeLabel: 'Weiter hören', resumeBook: 'Hörbuch fortsetzen', resumePod: 'Folge fortsetzen',
+        resumeAt: 'bei {0} von {1}', resumeFromCtx: 'aus {0}', resumeHide: 'Ausblenden', resumeStarted: 'Wiedergabe wird fortgesetzt …',
+        resumeOn: 'zuletzt auf {0}', resumeItems: '{0} Titel in der Warteschlange'
+      },
+      en: {
+        resumeLabel: 'Continue listening', resumeBook: 'Continue audiobook', resumePod: 'Continue episode',
+        resumeAt: 'at {0} of {1}', resumeFromCtx: 'from {0}', resumeHide: 'Hide', resumeStarted: 'Resuming playback …',
+        resumeOn: 'last on {0}', resumeItems: '{0} tracks in the queue'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var Resume = (function () {
+    var KEY = 'resume', MAX_IDS = 600, SAVE_EVERY = 20000;
+    var cur = null, loadP = null;
+    var lastSig = '', lastPaused = null, lastSaveAt = 0, lastSaved = '', want = null, timer = null, hooked = false;
+
+    function valid(v) { return !!(v && typeof v === 'object' && typeof v.ids === 'string' && v.ids.length >= 32 && typeof v.i === 'number'); }
+    function load(force) {
+      if (!loadP || force) loadP = Store.get(KEY, null, !!force).then(function (v) { cur = valid(v) ? v : null; return cur; }, function () { return cur; });
+      return loadP;
+    }
+    function idList(v) { return String(v.ids || '').split(',').filter(function (x) { return ID_RE.test(x); }); }
+
+    // Aus dem Zustand des Players wird der Stand zum Speichern; sehr lange Warteschlangen werden auf ein Fenster um den Titel gekürzt.
+    function pack(s) {
+      var ids = s.ids.slice(), i = clamp(s.i, 0, Math.max(0, ids.length - 1));
+      if (ids.length > MAX_IDS) {
+        var from = clamp(i - 20, 0, ids.length - MAX_IDS);
+        ids = ids.slice(from, from + MAX_IDS); i -= from;
+      }
+      return {
+        v: 1, ids: ids.join(','), i: i, pos: Math.round((s.pos || 0) * 10) / 10, dur: Math.round((s.dur || 0) * 10) / 10,
+        ctx: s.ctx || '', name: s.name || '', title: s.title || '', artist: s.artist || '', album: s.album || '', cid: nid(s.cid || ''),
+        cat: s.cat || '', paused: !!s.paused, ts: Date.now(), dev: s.dev || ''
+      };
+    }
+    function save(force) {
+      clearTimeout(timer); timer = null;
+      var s = want;
+      if (!s || (Net && Net.offline())) return Promise.resolve();
+      var rec = pack(s);
+      var text = JSON.stringify(rec);
+      lastSaveAt = Date.now();
+      if (text === lastSaved && !force) return Promise.resolve();
+      lastSaved = text;
+      cur = rec; loadP = Promise.resolve(rec);
+      return Store.set(KEY, rec).then(null, function () { lastSaved = ''; });
+    }
+    // Wird vom Player bei jeder Abfrage der Sitzung aufgerufen. Sofort speichern nur bei Titel-/Listenwechsel und Pause/Weiter
+    // (leicht verzögert), sonst höchstens alle 20 Sekunden.
+    function note(s) {
+      if (!s || !s.ids || !s.ids.length) return;
+      want = s;
+      var sig = s.ids.length + '|' + s.ids[clamp(s.i, 0, s.ids.length - 1)] + '|' + s.ctx;
+      var changed = sig !== lastSig || s.paused !== lastPaused;
+      lastSig = sig; lastPaused = s.paused;
+      if (changed) { clearTimeout(timer); timer = setTimeout(function () { save(false); }, 1500); return; }
+      if (!s.paused && Date.now() - lastSaveAt >= SAVE_EVERY && !timer) timer = setTimeout(function () { save(false); }, 0);
+    }
+    // Beim Schließen der Seite: letzter Stand lokal und, wenn möglich, per sendBeacon zum Server
+    function flush() {
+      var s = want;
+      if (!s || (Net && Net.offline())) return;
+      var rec = pack(s);
+      cur = rec;
+      Store.beacon(KEY, rec);
+    }
+    function hook() {
+      if (hooked) return; hooked = true;
+      window.addEventListener('pagehide', flush);
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { if (want) { flush(); save(true); } }
+      });
+    }
+    function clear() {
+      want = null; cur = null; loadP = Promise.resolve(null); lastSaved = '';
+      return Store.set(KEY, null);
+    }
+
+    function catLabel(v) { return v.cat === 'audiobooks' ? t('resumeBook') : v.cat === 'podcasts' ? t('resumePod') : t('resumeLabel'); }
+    function matchesChip(v, chip) {
+      if (!chip || chip === 'all') return true;
+      if (chip === 'music') return !v.cat || v.cat === 'music';
+      return v.cat === chip;
+    }
+
+    // Stand wieder abspielen: Warteschlange ab dem gemerkten Titel, der erste Titel startet an der gemerkten Position.
+    function play(v) {
+      var ids = idList(v);
+      if (!ids.length) return Promise.resolve(false);
+      var i = clamp(v.i, 0, ids.length - 1);
+      var pos = v.pos || 0;
+      if (v.dur && pos > v.dur - 5) pos = 0;   // am Ende des Titels beginnt er wieder von vorn
+      toast(t('resumeStarted'));
+      return playIds(ids, i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '' });
+    }
+
+    function cardEl(v) {
+      var box = el('div', 'ml-resume');
+      var b = btn('ml-resume-main');
+      var url = v.cid ? imgUrl(v.cid, null, 160) : null;
+      b.appendChild(cover(url, 'ml-resume-cover'));
+      var txt = el('div', 'ml-resume-txt');
+      txt.appendChild(el('div', 'ml-resume-kicker', catLabel(v)));
+      txt.appendChild(el('div', 'ml-resume-title', v.title || ''));
+      var sub = [v.artist, v.name ? t('resumeFromCtx', v.name) : ''].filter(Boolean).join(' · ');
+      if (sub) txt.appendChild(el('div', 'ml-resume-sub', sub));
+      if (v.dur > 0) {
+        var meta = el('div', 'ml-resume-sub', t('resumeAt', fmtClock(v.pos || 0), fmtClock(v.dur)));
+        txt.appendChild(meta);
+        var bar = el('div', 'ml-resume-bar'), fill = el('span');
+        fill.style.width = clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%';
+        bar.appendChild(fill);
+        txt.appendChild(bar);
+      }
+      b.appendChild(txt);
+      var pb = el('span', 'ml-resume-play'); pb.appendChild(icon('play'));
+      b.appendChild(pb);
+      b.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || ''));
+      b.addEventListener('click', function () { play(v).then(function () { if (box.parentNode) box.parentNode.removeChild(box); }); });
+      box.appendChild(b);
+      var x = iconBtn('close', t('resumeHide'), 'ml-resume-x', function () { clear(); if (box.parentNode) box.parentNode.removeChild(box); });
+      box.appendChild(x);
+      return box;
+    }
+    // Karte oben auf der Startseite (nur, wenn gerade nichts läuft). Der Platz wird sofort reserviert, der Inhalt kommt, sobald der Stand gelesen ist.
+    function card(host, chip) {
+      var slot = el('div', 'ml-resume-slot');
+      host.appendChild(slot);
+      hook();
+      if (Net && Net.offline()) return slot;
+      load().then(function (v) {
+        if (!v || !slot.isConnected || !matchesChip(v, chip)) return;
+        if (Player.isPlayingNow() || Player.hasUi()) return;
+        if (Date.now() - (v.ts || 0) > 90 * 86400000) return;
+        if (!idList(v).length) return;
+        slot.appendChild(cardEl(v));
+      });
+      return slot;
+    }
+    return { load: load, note: note, flush: flush, save: save, card: card, play: play, clear: clear, get: function () { return cur; }, hook: hook };
+  })();
+  /* ---------- Version 2.0: Intelligente Playlists, Genres, Statistik, ähnliche Künstler, Einschlaf-Timer ----------
+     Alles läuft im Browser über Jellyfins offizielle Schnittstellen (Items, Genres, Artists/{id}/Similar); die Regeln der intelligenten
+     Playlists liegen pro Benutzer im Store (Anzeige-Einstellungen auf dem Server), gelten also auf jedem Gerät. */
+  (function () {
+    var extra = {
+      de: {
+        homeSmart: 'Intelligente Playlists', homeSmartSub: 'Regeln statt fester Titel – die Liste füllt sich von selbst',
+        homeGenres: 'Genres', homeGenresAll: 'Alle anzeigen', seeAll: 'Alle anzeigen',
+        smartTitle: 'Intelligente Playlists', smartLabel: 'Intelligente Playlist', smartNew: 'Neue intelligente Playlist', smartEdit: 'Regeln bearbeiten',
+        smartIntro: 'Eine intelligente Playlist hat keine festen Titel, sondern Regeln. Bei jedem Öffnen sucht sie die passenden Titel in deiner Musik.',
+        smartName: 'Name', smartNamePh: 'z. B. Ungehörte Rocksongs', smartGenres: 'Genres (ein Treffer genügt, keine Auswahl = alle)', smartYears: 'Erscheinungsjahr',
+        smartFrom: 'von', smartTo: 'bis', smartState: 'Titel', smartSort: 'Sortierung', smartLimit: 'Höchstens',
+        stAll: 'Alle', stFav: 'Lieblingssongs', stNew: 'Noch nicht gehört', stPlayed: 'Schon gehört',
+        soRandom: 'Zufällig', soAdded: 'Neu hinzugefügt', soPlays: 'Meistgespielt', soRecent: 'Zuletzt gespielt', soName: 'Name', soYear: 'Jahr (neu zuerst)',
+        smartSave: 'Speichern', smartDelete: 'Löschen', smartDeleteText: '„{0}“ wird gelöscht. Deine Musik bleibt unverändert.', smartRefresh: 'Neu zusammenstellen',
+        smartToPlaylist: 'Als normale Playlist speichern', smartSaved: 'Gespeichert', smartSaveFail: 'Konnte nicht gespeichert werden.', smartDeleted: 'Gelöscht',
+        smartEmpty: 'Keine Titel passen zu diesen Regeln.', smartNone: 'Noch keine intelligente Playlist.', smartNeedName: 'Bitte einen Namen eingeben.',
+        smartRule: 'Genre: {0}', smartRuleYears: 'Jahre: {0}', smartRuleNew: 'ungehört', smartRuleFav: 'Lieblingssongs', smartRulePlayed: 'schon gehört', smartRuleAll: 'ganze Bibliothek',
+        smartPickGenres: 'Genres werden geladen …',
+        genresTitle: 'Genres', genresSub: 'Stöbere nach Stilrichtungen in deiner Musik', genreLabel: 'Genre', genresNone: 'Keine Genres gefunden. Sie stammen aus den Tags deiner Musikdateien.',
+        genreSongs: '{0} Titel',
+        statsTitle: 'Statistik', statsSub: 'Was du am meisten hörst – aus den Wiedergabezählern von Jellyfin für dein Konto',
+        statPlays: 'Wiedergaben', statTime: 'Hörzeit', statTracks: 'verschiedene Titel', statLiked: 'Lieblingssongs', statLib: 'Titel in der Bibliothek',
+        statTopTracks: 'Top-Titel', statTopArtists: 'Top-Künstler', statTopGenres: 'Top-Genres', statDecades: 'Jahrzehnte', statRecent: 'Zuletzt gehört',
+        statPlayTop: 'Top-Titel abspielen', statEmpty: 'Noch keine gespielten Titel. Sobald du Musik gehört hast, erscheint hier deine Statistik.',
+        statNote: 'Ausgewertet: {0} gespielte Titel.', statCapped: ' (die {0} meistgespielten)', statTimes: '{0}×', statDays: '{0} Std.', statHM: '{0} Std. {1} Min.', statMin: '{0} Min.',
+        similarArtists: 'Ähnliche Künstler',
+        sleepTitle: 'Einschlaf-Timer', sleepMenu: 'Einschlaf-Timer', sleepIntro: 'Die Wiedergabe wird nach der gewählten Zeit pausiert (die letzten Sekunden leiser).',
+        sleepMin: '{0} Minuten', sleepEnd: 'Am Ende des Titels', sleepOff: 'Timer ausschalten', sleepSet: 'Pause in {0} Min.', sleepSetEnd: 'Pause am Ende des Titels',
+        sleepDone: 'Einschlaf-Timer: Wiedergabe pausiert', sleepCancelled: 'Timer aus', sleepActive: 'Läuft noch {0}', sleepActiveEnd: 'Pause am Ende des Titels',
+        fromSmartCtx: 'Wiedergabe aus intelligenter Playlist', fromGenreCtx: 'Wiedergabe aus Genre'
+      },
+      en: {
+        homeSmart: 'Smart playlists', homeSmartSub: 'Rules instead of fixed tracks – the list fills itself',
+        homeGenres: 'Genres', homeGenresAll: 'Show all', seeAll: 'Show all',
+        smartTitle: 'Smart playlists', smartLabel: 'Smart playlist', smartNew: 'New smart playlist', smartEdit: 'Edit rules',
+        smartIntro: 'A smart playlist has no fixed tracks, only rules. Each time you open it, it looks up the matching tracks in your music.',
+        smartName: 'Name', smartNamePh: 'e.g. Unheard rock songs', smartGenres: 'Genres (one match is enough, none = all)', smartYears: 'Release year',
+        smartFrom: 'from', smartTo: 'to', smartState: 'Tracks', smartSort: 'Sort by', smartLimit: 'At most',
+        stAll: 'All', stFav: 'Liked songs', stNew: 'Not heard yet', stPlayed: 'Already heard',
+        soRandom: 'Random', soAdded: 'Recently added', soPlays: 'Most played', soRecent: 'Recently played', soName: 'Name', soYear: 'Year (newest first)',
+        smartSave: 'Save', smartDelete: 'Delete', smartDeleteText: '“{0}” will be deleted. Your music stays untouched.', smartRefresh: 'Refresh selection',
+        smartToPlaylist: 'Save as regular playlist', smartSaved: 'Saved', smartSaveFail: 'Could not be saved.', smartDeleted: 'Deleted',
+        smartEmpty: 'No tracks match these rules.', smartNone: 'No smart playlist yet.', smartNeedName: 'Please enter a name.',
+        smartRule: 'Genre: {0}', smartRuleYears: 'Years: {0}', smartRuleNew: 'unheard', smartRuleFav: 'liked songs', smartRulePlayed: 'already heard', smartRuleAll: 'whole library',
+        smartPickGenres: 'Loading genres …',
+        genresTitle: 'Genres', genresSub: 'Browse the styles in your music', genreLabel: 'Genre', genresNone: 'No genres found. They come from the tags of your music files.',
+        genreSongs: '{0} tracks',
+        statsTitle: 'Statistics', statsSub: 'What you listen to most – from Jellyfin’s play counters for your account',
+        statPlays: 'Plays', statTime: 'Listening time', statTracks: 'different tracks', statLiked: 'Liked songs', statLib: 'Tracks in library',
+        statTopTracks: 'Top tracks', statTopArtists: 'Top artists', statTopGenres: 'Top genres', statDecades: 'Decades', statRecent: 'Recently played',
+        statPlayTop: 'Play top tracks', statEmpty: 'No played tracks yet. Your statistics appear here once you have listened to music.',
+        statNote: 'Analysed: {0} played tracks.', statCapped: ' (the {0} most played)', statTimes: '{0}×', statDays: '{0} h', statHM: '{0} h {1} min', statMin: '{0} min',
+        similarArtists: 'Similar artists',
+        sleepTitle: 'Sleep timer', sleepMenu: 'Sleep timer', sleepIntro: 'Playback pauses after the chosen time (the last seconds get quieter).',
+        sleepMin: '{0} minutes', sleepEnd: 'At the end of the track', sleepOff: 'Turn timer off', sleepSet: 'Pause in {0} min', sleepSetEnd: 'Pause at the end of the track',
+        sleepDone: 'Sleep timer: playback paused', sleepCancelled: 'Timer off', sleepActive: '{0} left', sleepActiveEnd: 'Pause at the end of the track',
+        fromSmartCtx: 'Playing from smart playlist', fromGenreCtx: 'Playing from genre'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+    ICONS.tune = 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z';
+    ICONS.moon = 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z';
+    ICONS.chart = 'M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z';
+  })();
+
+  /* ---------- Gemeinsame Helfer ---------- */
+  function randomId() {
+    var a = new Uint8Array(16), out = '';
+    try { (window.crypto || window.msCrypto).getRandomValues(a); } catch (e) { for (var i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256); }
+    for (var k = 0; k < 16; k++) out += (a[k] < 16 ? '0' : '') + a[k].toString(16);
+    return out;
+  }
+  function hueOf(text) {
+    var h = 0, s = String(text || '');
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return h;
+  }
+  function auxHash(kind) { return homeHash() + (state.libraryId ? '&' : '?') + 'mlview=' + kind; }
+  function openAux(kind) { ensureLibrary().then(function () { go(auxHash(kind)); }); }
+  function musicLibsOnly() {
+    return loadLibraries().then(function (libs) { return musicLibIds(libs); }, function () { return []; });
+  }
+
+  /* ---------- Genres ---------- */
+  var Genres = (function () {
+    var cache = { at: 0, uid: '', list: null };
+    // Jellyfin 12: "Genres" mit der Musikbibliothek als Eltern liefert Musik-Genres (der alte Pfad "MusicGenres" ist als veraltet markiert, dient als Rueckfall).
+    function fetchFor(libId) {
+      var p = { userId: uid(), SortBy: 'SortName', SortOrder: 'Ascending', IncludeItemTypes: 'Audio', EnableImages: false, Recursive: true };
+      if (libId) p.ParentId = libId;
+      return call('GET', 'Genres', p).then(function (r) { return (r && r.Items) || []; }).then(function (items) {
+        if (items.length) return items;
+        return call('GET', 'MusicGenres', p).then(function (r2) { return (r2 && r2.Items) || []; });
+      });
+    }
+    function list(force) {
+      if (!force && cache.list && cache.uid === uid() && Date.now() - cache.at < 10 * 60000) return Promise.resolve(cache.list);
+      return musicLibsOnly().then(function (ids) {
+        return Promise.all((ids.length ? ids : [null]).map(function (id) { return fetchFor(id).catch(function () { return []; }); }));
+      }).then(function (lists) {
+        var byName = {};
+        [].concat.apply([], lists).forEach(function (g) {
+          if (!g || !g.Name || !ID_RE.test(nid(g.Id))) return;
+          var k = g.Name.toLowerCase();
+          if (!byName[k]) byName[k] = { id: nid(g.Id), name: g.Name, songs: g.SongCount || 0 };
+          else byName[k].songs += g.SongCount || 0;
+        });
+        var out = Object.keys(byName).map(function (k) { return byName[k]; });
+        out.sort(function (a, b) { return (b.songs - a.songs) || a.name.localeCompare(b.name); });
+        cache = { at: Date.now(), uid: uid(), list: out };
+        return out;
+      });
+    }
+    // Titel eines Genres (zufaellig gemischt, bis 300)
+    function tracks(id) {
+      return musicLibsOnly().then(function (ids) {
+        var q = { GenreIds: id, IncludeItemTypes: 'Audio', Recursive: true, SortBy: 'Random', Limit: 300, Fields: 'ParentId' };
+        return perLibrary(ids, q, null, 300);
+      }).then(function (items) { return shuffled(items).slice(0, 300); });
+    }
+    function card(g) {
+      var b = btn('ml-genre-card');
+      var h = hueOf(g.name);
+      b.style.background = 'linear-gradient(135deg, hsl(' + h + ',55%,38%), hsl(' + ((h + 40) % 360) + ',60%,24%))';
+      b.appendChild(el('span', 'ml-genre-name', g.name));
+      if (g.songs) b.appendChild(el('span', 'ml-genre-count', t('genreSongs', g.songs)));
+      b.addEventListener('click', function () { openMix('genre', g.id, 0, g.name); });
+      return b;
+    }
+    return { list: list, tracks: tracks, card: card };
+  })();
+
+  /* ---------- Intelligente Playlists ---------- */
+  var Smart = (function () {
+    var KEY = 'smart', cache = null;
+    var STATES = ['all', 'fav', 'new', 'played'], SORTS = ['random', 'added', 'plays', 'recent', 'name', 'year'], LIMITS = [25, 50, 100, 200, 500];
+    function clean(r) {
+      r = r || {};
+      var y1 = parseInt(r.y1, 10), y2 = parseInt(r.y2, 10);
+      return {
+        id: ID_RE.test(String(r.id || '')) ? nid(r.id) : randomId(),
+        name: String(r.name || '').trim().slice(0, 80),
+        g: (Array.isArray(r.g) ? r.g : []).map(String).filter(Boolean).slice(0, 40),
+        y1: y1 > 1000 && y1 < 3000 ? y1 : 0, y2: y2 > 1000 && y2 < 3000 ? y2 : 0,
+        st: STATES.indexOf(r.st) >= 0 ? r.st : 'all',
+        so: SORTS.indexOf(r.so) >= 0 ? r.so : 'random',
+        n: LIMITS.indexOf(+r.n) >= 0 ? +r.n : 100
+      };
+    }
+    function list(force) {
+      if (cache && !force) return Promise.resolve(cache);
+      return Store.get(KEY, [], !!force).then(function (v) {
+        cache = (Array.isArray(v) ? v : []).map(clean).filter(function (r) { return r.name; });
+        return cache;
+      });
+    }
+    function saveRule(rule) {
+      var r = clean(rule);
+      return Store.update(KEY, [], function (cur) {
+        var arr = (Array.isArray(cur) ? cur : []).map(clean), found = false;
+        arr = arr.map(function (x) { if (x.id === r.id) { found = true; return r; } return x; });
+        if (!found) arr.push(r);
+        cache = arr;
+        return arr;
+      }).then(function () { return r; });
+    }
+    function remove(id) {
+      return Store.update(KEY, [], function (cur) {
+        var arr = (Array.isArray(cur) ? cur : []).map(clean).filter(function (x) { return x.id !== nid(id); });
+        cache = arr;
+        return arr;
+      });
+    }
+    function byId(id) { return list().then(function (arr) { return arr.filter(function (r) { return r.id === nid(id); })[0] || null; }); }
+
+    function summary(r) {
+      var parts = [];
+      if (r.g.length) parts.push(t('smartRule', r.g.slice(0, 3).join(', ') + (r.g.length > 3 ? ' …' : '')));
+      if (r.y1 || r.y2) parts.push(t('smartRuleYears', (r.y1 || '…') + '–' + (r.y2 || '…')));
+      if (r.st === 'new') parts.push(t('smartRuleNew')); else if (r.st === 'fav') parts.push(t('smartRuleFav')); else if (r.st === 'played') parts.push(t('smartRulePlayed'));
+      return parts.length ? parts.join(' · ') : t('smartRuleAll');
+    }
+    var SORT_Q = {
+      random: ['Random', 'Ascending'], added: ['DateCreated', 'Descending'], plays: ['PlayCount,SortName', 'Descending,Ascending'],
+      recent: ['DatePlayed', 'Descending'], name: ['SortName', 'Ascending'], year: ['ProductionYear,SortName', 'Descending,Ascending']
+    };
+    function cmpFor(so) {
+      function ud(x, k) { return (x.UserData && x.UserData[k]) || 0; }
+      if (so === 'plays') return function (a, b) { return ud(b, 'PlayCount') - ud(a, 'PlayCount'); };
+      if (so === 'recent') return function (a, b) { var x = (a.UserData && a.UserData.LastPlayedDate) || '', y = (b.UserData && b.UserData.LastPlayedDate) || ''; return x < y ? 1 : x > y ? -1 : 0; };
+      if (so === 'added') return function (a, b) { var x = a.DateCreated || '', y = b.DateCreated || ''; return x < y ? 1 : x > y ? -1 : 0; };
+      if (so === 'name') return function (a, b) { return String(a.Name || '').localeCompare(String(b.Name || '')); };
+      if (so === 'year') return function (a, b) { return (b.ProductionYear || 0) - (a.ProductionYear || 0); };
+      return null;
+    }
+    // Titel nach den Regeln: je Musikbibliothek eine Abfrage, danach gemeinsam sortiert und gekuerzt
+    function tracks(rule) {
+      var r = clean(rule);
+      return musicLibsOnly().then(function (ids) {
+        var q = { IncludeItemTypes: 'Audio', Recursive: true, Fields: 'ParentId,DateCreated', Limit: r.n };
+        var s = SORT_Q[r.so] || SORT_Q.random;
+        q.SortBy = s[0]; q.SortOrder = s[1];
+        if (r.g.length) q.Genres = r.g.join('|');
+        if (r.y1 || r.y2) {
+          var a = r.y1 || r.y2, b = r.y2 || r.y1, ys = [];
+          if (a > b) { var tmp = a; a = b; b = tmp; }
+          for (var y = a; y <= b && ys.length < 150; y++) ys.push(y);
+          q.Years = ys.join(',');
+        }
+        if (r.st === 'fav') q.IsFavorite = true;
+        else if (r.st === 'new') q.IsPlayed = false;
+        else if (r.st === 'played') q.IsPlayed = true;
+        return perLibrary(ids, q, cmpFor(r.so), r.so === 'random' ? 0 : r.n);
+      }).then(function (items) {
+        items = items.filter(function (i) { return i && ID_RE.test(String(i.Id || '')); });
+        if (r.so === 'random') items = shuffled(items);
+        return items.slice(0, r.n);
+      });
+    }
+
+    function chips(parent, label, options, current, onPick, multi) {
+      var box = el('div', 'ml-smart-group');
+      box.appendChild(el('div', 'ml-smart-label', label));
+      var row = el('div', 'ml-smart-chips');
+      var sel = multi ? current : null;
+      options.forEach(function (o) {
+        var on = multi ? sel.indexOf(o.key) >= 0 : o.key === current;
+        var c = btn('ml-chip' + (on ? ' ml-on' : ''), o.label);
+        c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        c.addEventListener('click', function () {
+          if (multi) {
+            var i = sel.indexOf(o.key);
+            if (i >= 0) sel.splice(i, 1); else sel.push(o.key);
+            c.classList.toggle('ml-on', i < 0); c.setAttribute('aria-pressed', i < 0 ? 'true' : 'false');
+          } else {
+            ML.qsa('.ml-chip', row).forEach(function (x) { x.classList.remove('ml-on'); x.setAttribute('aria-pressed', 'false'); });
+            c.classList.add('ml-on'); c.setAttribute('aria-pressed', 'true');
+            onPick(o.key);
+          }
+        });
+        row.appendChild(c);
+      });
+      box.appendChild(row);
+      parent.appendChild(box);
+      return row;
+    }
+    // Dialog zum Anlegen / Bearbeiten
+    function edit(existing, done) {
+      var r = clean(existing || {});
+      var ui = makeSheet({ cls: 'ml-dialog ml-smart-edit', top: true, title: t('smartNew') });
+      sheetTitle(ui, existing ? t('smartEdit') : t('smartNew'));
+      ui.sheet.appendChild(el('div', 'ml-sheet-note', t('smartIntro')));
+      var name = el('input', 'ml-field ml-field-box');
+      name.type = 'text'; name.maxLength = 80; name.placeholder = t('smartNamePh'); name.value = r.name; name.setAttribute('autocomplete', 'off');
+      name.setAttribute('aria-label', t('smartName'));
+      ui.sheet.appendChild(name);
+      var genreBox = el('div'); ui.sheet.appendChild(genreBox);
+      genreBox.appendChild(el('div', 'ml-sheet-note', t('smartPickGenres')));
+      Genres.list().then(function (gl) {
+        if (!ui.sheet.isConnected) return;
+        genreBox.textContent = '';
+        if (!gl.length) return;
+        var picked = r.g.slice();
+        // bereits gewaehlte Genres bleiben auch dann sichtbar, wenn sie (noch) nicht in der Liste stehen
+        var names = gl.map(function (g) { return g.name; });
+        picked.forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
+        r.g = picked;
+        chips(genreBox, t('smartGenres'), names.map(function (n) { return { key: n, label: n }; }), picked, null, true);
+      }, function () { genreBox.textContent = ''; });
+      var yb = el('div', 'ml-smart-group');
+      yb.appendChild(el('div', 'ml-smart-label', t('smartYears')));
+      var yrow = el('div', 'ml-smart-years');
+      var y1 = el('input', 'ml-field ml-field-box'), y2 = el('input', 'ml-field ml-field-box');
+      [y1, y2].forEach(function (i) { i.type = 'number'; i.min = 1000; i.max = 2999; i.inputMode = 'numeric'; i.setAttribute('autocomplete', 'off'); });
+      y1.placeholder = t('smartFrom'); y2.placeholder = t('smartTo');
+      y1.setAttribute('aria-label', t('smartFrom')); y2.setAttribute('aria-label', t('smartTo'));
+      y1.value = r.y1 || ''; y2.value = r.y2 || '';
+      yrow.appendChild(y1); yrow.appendChild(el('span', 'ml-muted', '–')); yrow.appendChild(y2);
+      yb.appendChild(yrow); ui.sheet.appendChild(yb);
+      chips(ui.sheet, t('smartState'), [{ key: 'all', label: t('stAll') }, { key: 'fav', label: t('stFav') }, { key: 'new', label: t('stNew') }, { key: 'played', label: t('stPlayed') }], r.st, function (k) { r.st = k; });
+      chips(ui.sheet, t('smartSort'), [{ key: 'random', label: t('soRandom') }, { key: 'added', label: t('soAdded') }, { key: 'plays', label: t('soPlays') }, { key: 'recent', label: t('soRecent') }, { key: 'name', label: t('soName') }, { key: 'year', label: t('soYear') }], r.so, function (k) { r.so = k; });
+      chips(ui.sheet, t('smartLimit'), LIMITS.map(function (n) { return { key: n, label: String(n) }; }), r.n, function (k) { r.n = +k; });
+      var row = el('div', 'ml-sheet-actions');
+      var no = btn('ml-pill ml-flat', t('cancel'));
+      var ok = btn('ml-pill ml-primary', t('smartSave'));
+      no.addEventListener('click', function () { ui.close(); });
+      ok.addEventListener('click', function () {
+        var nm = name.value.trim();
+        if (!nm) { toast(t('smartNeedName')); name.focus(); return; }
+        r.name = nm; r.y1 = parseInt(y1.value, 10) || 0; r.y2 = parseInt(y2.value, 10) || 0;
+        ok.disabled = true;
+        saveRule(r).then(function (saved) { ui.close(); toast(t('smartSaved')); if (done) done(saved); }, function () { ok.disabled = false; toast(t('smartSaveFail')); });
+      });
+      add(row, no, ok);
+      ui.sheet.appendChild(row);
+      setTimeout(function () { try { name.focus({ preventScroll: true }); } catch (e) { name.focus(); } }, 150);
+    }
+    function confirmRemove(rule, done) {
+      confirmSheet(t('smartDelete'), t('smartDeleteText', rule.name), t('smartDelete'), true).then(function (yes) {
+        if (!yes) return;
+        remove(rule.id).then(function () { toast(t('smartDeleted')); if (done) done(); }, function () { toast(t('smartSaveFail')); });
+      });
+    }
+    function tile(r) {
+      var h = hueOf(r.name);
+      var c = el('div', 'ml-cover ml-tile-cover ml-smart-cover');
+      c.style.background = 'linear-gradient(135deg, hsl(' + h + ',50%,36%), hsl(' + ((h + 60) % 360) + ',55%,22%))';
+      c.appendChild(icon('tune', 'ml-smart-ic'));
+      var key = mixKey('smart', r.id);
+      mixTitles[key] = r.name;
+      return tile_({ ctx: key, title: r.name, sub: summary(r), coverEl: c, onClick: function () { openMix('smart', r.id, 0, r.name); },
+        play: function () { pressCtx(key, function () { return playMix('smart', r.id, 'smartEmpty'); }); } });
+    }
+    function newTile() {
+      var c = el('div', 'ml-cover ml-tile-cover ml-new-cover'); c.appendChild(icon('add'));
+      return tile_({ title: t('smartNew'), coverEl: c, onClick: function () { edit(null, function (r) { openMix('smart', r.id, 0, r.name); }); } });
+    }
+    return { list: list, byId: byId, tracks: tracks, edit: edit, confirmRemove: confirmRemove, tile: tile, newTile: newTile, summary: summary, remove: remove, clean: clean };
+  })();
+  function tile_(opts) { return tile(opts); }   // 'tile' wird im Modul von der lokalen Funktion verdeckt
+
+  /* ---------- Startseite: Reihen "Genres" und "Intelligente Playlists" ---------- */
+  function fillDiscover(slot, seq) {
+    var live = function () { return seq === state.view && slot.isConnected; };
+    Smart.list().then(function (arr) {
+      if (!live()) return;
+      var box = el('div'); slot.appendChild(box);
+      var sh = shelf(box, t('homeSmart'), [Smart.newTile()].concat(arr.slice(0, 12).map(Smart.tile)));
+      if (sh) {
+        sh.classList.add('ml-smart-shelf');
+        var all = btn('ml-shelf-more', t('seeAll'));
+        all.addEventListener('click', function () { openAux('smarts'); });
+        sh.querySelector('.ml-shelf-title').appendChild(all);
+      }
+    }, function () { /* Reihe entfaellt */ });
+    Genres.list().then(function (gl) {
+      if (!live() || !gl.length) return;
+      var box = el('div'); slot.appendChild(box);
+      var sh = shelf(box, t('homeGenres'), gl.slice(0, 14).map(function (g) { var c = Genres.card(g); c.classList.add('ml-genre-tile'); return c; }));
+      if (sh) {
+        sh.classList.add('ml-genre-shelf');
+        var all = btn('ml-shelf-more', t('homeGenresAll'));
+        all.addEventListener('click', function () { openAux('genres'); });
+        sh.querySelector('.ml-shelf-title').appendChild(all);
+      }
+    }, function () { /* Reihe entfaellt */ });
+  }
+
+  /* ---------- Eigene Seiten: Genres, Intelligente Playlists, Statistik ---------- */
+  function auxShell(host, title, sub) {
+    host.textContent = '';
+    var bar = el('div', 'ml-hero-bar');
+    bar.appendChild(iconBtn('back', t('back'), 'ml-hero-back', leaveDetail));
+    host.appendChild(bar);
+    host.appendChild(el('h1', 'ml-aux-title', title));
+    if (sub) host.appendChild(el('p', 'ml-aux-sub ml-muted', sub));
+    var body = el('div', 'ml-aux-body');
+    host.appendChild(body);
+    return body;
+  }
+  function showGenresView(host, seq) {
+    var body = auxShell(host, t('genresTitle'), t('genresSub'));
+    body.appendChild(loaderEl());
+    Genres.list().then(function (gl) {
+      if (seq !== state.view) return;
+      body.textContent = '';
+      if (!gl.length) { body.appendChild(el('p', 'ml-muted ml-pad', t('genresNone'))); return; }
+      var grid = el('div', 'ml-genre-grid');
+      gl.forEach(function (g) { grid.appendChild(Genres.card(g)); });
+      body.appendChild(grid);
+    }, function () { if (seq === state.view) { body.textContent = ''; failNote(body, function () { showGenresView(host, seq); }); } });
+  }
+  function showSmartsView(host, seq) {
+    var body = auxShell(host, t('smartTitle'), t('smartIntro'));
+    function render() {
+      Smart.list(true).then(function (arr) {
+        if (seq !== state.view) return;
+        body.textContent = '';
+        var add1 = btn('ml-pill ml-primary ml-aux-add', t('smartNew'));
+        add1.addEventListener('click', function () { Smart.edit(null, function (r) { openMix('smart', r.id, 0, r.name); }); });
+        body.appendChild(add1);
+        if (!arr.length) { body.appendChild(el('p', 'ml-muted ml-pad', t('smartNone'))); return; }
+        var grid = el('div', 'ml-aux-tiles');
+        arr.forEach(function (r) { grid.appendChild(Smart.tile(r)); });
+        body.appendChild(grid);
+      }, function () { if (seq === state.view) { body.textContent = ''; failNote(body, render); } });
+    }
+    body.appendChild(loaderEl());
+    render();
+  }
+
+  /* ---------- Statistik ---------- */
+  var Stats = (function () {
+    function fmtHours(sec) {
+      var h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+      if (m === 60) { h++; m = 0; }
+      if (h >= 100) return t('statDays', h);
+      return h > 0 ? t('statHM', h, m) : t('statMin', m);
+    }
+    function compute(items) {
+      var plays = 0, secs = 0, artists = {}, genres = {}, decades = {};
+      items.forEach(function (x) {
+        var pc = (x.UserData && x.UserData.PlayCount) || 1;
+        plays += pc; secs += pc * ((x.RunTimeTicks || 0) / 1e7);
+        var a = x.AlbumArtist || (x.Artists && x.Artists[0]) || '';
+        if (a) { var ar = artists[a] || (artists[a] = { name: a, v: 0, id: '' }); ar.v += pc; if (!ar.id && x.ArtistItems && x.ArtistItems[0]) ar.id = x.ArtistItems[0].Id; }
+        (x.Genres || []).forEach(function (g) { genres[g] = (genres[g] || 0) + pc; });
+        if (x.ProductionYear) { var d = Math.floor(x.ProductionYear / 10) * 10; decades[d] = (decades[d] || 0) + pc; }
+      });
+      function top(map, n, keyFn) {
+        return Object.keys(map).map(function (k) { var v = map[k]; return typeof v === 'object' ? v : { name: keyFn ? keyFn(k) : k, v: v }; })
+          .sort(function (a, b) { return b.v - a.v; }).slice(0, n);
+      }
+      var tracks = items.slice().sort(function (a, b) { return ((b.UserData && b.UserData.PlayCount) || 0) - ((a.UserData && a.UserData.PlayCount) || 0); }).slice(0, 10);
+      var recent = items.filter(function (x) { return x.UserData && x.UserData.LastPlayedDate; })
+        .sort(function (a, b) { return a.UserData.LastPlayedDate < b.UserData.LastPlayedDate ? 1 : -1; }).slice(0, 10);
+      return {
+        plays: plays, secs: secs, count: items.length, tracks: tracks, recent: recent,
+        artists: top(artists, 10), genres: top(genres, 10), decades: top(decades, 8, function (k) { return k + 'er'; }).sort(function (a, b) { return parseInt(a.name, 10) - parseInt(b.name, 10); })
+      };
+    }
+    var CAP = 5000, PAGE = 1000;
+    function load() {
+      return musicLibsOnly().then(function (ids) {
+        function pageAll(lib) {
+          var acc = [];
+          function step(start) {
+            var q = { IncludeItemTypes: 'Audio', Recursive: true, Filters: 'IsPlayed', SortBy: 'PlayCount,SortName', SortOrder: 'Descending,Ascending', Limit: PAGE, StartIndex: start, Fields: 'Genres,ParentId' };
+            if (lib) q.ParentId = lib;
+            return getItems(q).then(function (r) {
+              acc = acc.concat(r.items);
+              if (r.items.length >= PAGE && acc.length < CAP) return step(start + PAGE);
+              return { items: acc, capped: r.items.length >= PAGE && acc.length >= CAP };
+            });
+          }
+          return step(0);
+        }
+        var libs = ids.length ? ids : [null];
+        return Promise.all(libs.map(pageAll)).then(function (res) {
+          var items = [].concat.apply([], res.map(function (r) { return r.items; }));
+          var base = { IncludeItemTypes: 'Audio', Recursive: true, Limit: 1, Fields: '' };
+          var totals = libs.map(function (lib) {
+            var q1 = Object.assign({}, base), q2 = Object.assign({}, base, { IsFavorite: true });
+            if (lib) { q1.ParentId = lib; q2.ParentId = lib; }
+            return Promise.all([getItems(q1).then(function (r) { return r.total; }, function () { return 0; }), getItems(q2).then(function (r) { return r.total; }, function () { return 0; })]);
+          });
+          return Promise.all(totals).then(function (tt) {
+            var lib = 0, fav = 0;
+            tt.forEach(function (x) { lib += x[0]; fav += x[1]; });
+            var data = compute(items);
+            data.lib = lib; data.fav = fav; data.capped = res.some(function (r) { return r.capped; });
+            return data;
+          });
+        });
+      });
+    }
+    function barList(parent, title, rows, fmt, onClick) {
+      if (!rows.length) return;
+      var sec = el('section', 'ml-stat-sec');
+      sec.appendChild(el('h2', 'ml-shelf-title', title));
+      var max = Math.max.apply(null, rows.map(function (r) { return r.v; })) || 1;
+      rows.forEach(function (r, i) {
+        var row = el(onClick ? 'button' : 'div', 'ml-stat-row');
+        if (onClick) { row.type = 'button'; row.addEventListener('click', function () { onClick(r); }); }
+        row.appendChild(el('span', 'ml-stat-rank', String(i + 1)));
+        var mid = el('span', 'ml-stat-mid');
+        mid.appendChild(el('span', 'ml-stat-name', r.name));
+        if (r.sub) mid.appendChild(el('span', 'ml-stat-sub', r.sub));
+        var bar = el('span', 'ml-stat-bar'), fill = el('span');
+        fill.style.width = Math.max(3, Math.round((r.v / max) * 100)) + '%';
+        bar.appendChild(fill); mid.appendChild(bar);
+        row.appendChild(mid);
+        row.appendChild(el('span', 'ml-stat-val', fmt(r.v)));
+        sec.appendChild(row);
+      });
+      parent.appendChild(sec);
+    }
+    function show(host, seq) {
+      var body = auxShell(host, t('statsTitle'), t('statsSub'));
+      body.appendChild(loaderEl());
+      load().then(function (d) {
+        if (seq !== state.view) return;
+        body.textContent = '';
+        if (!d.count) { body.appendChild(el('p', 'ml-muted ml-pad', t('statEmpty'))); return; }
+        var cards = el('div', 'ml-stat-cards');
+        [[String(d.plays), t('statPlays')], [fmtHours(d.secs), t('statTime')], [String(d.count), t('statTracks')], [String(d.fav), t('statLiked')], [String(d.lib), t('statLib')]].forEach(function (c) {
+          var card = el('div', 'ml-stat-card');
+          card.appendChild(el('div', 'ml-stat-num', c[0]));
+          card.appendChild(el('div', 'ml-stat-lbl', c[1]));
+          cards.appendChild(card);
+        });
+        body.appendChild(cards);
+        if (d.tracks.length) {
+          var ids = d.tracks.map(function (x) { return x.Id; });
+          var play = btn('ml-pill ml-primary ml-aux-add', t('statPlayTop'));
+          play.addEventListener('click', function () { playIds(ids, 0); });
+          body.appendChild(play);
+        }
+        barList(body, t('statTopTracks'), d.tracks.map(function (x) {
+          return { name: x.Name, sub: firstArtist(x), v: (x.UserData && x.UserData.PlayCount) || 1, id: x.Id };
+        }), function (v) { return t('statTimes', v); }, function (r) { playIds(d.tracks.map(function (x) { return x.Id; }), d.tracks.map(function (x) { return x.Id; }).indexOf(r.id)); });
+        barList(body, t('statTopArtists'), d.artists, function (v) { return t('statTimes', v); }, function (r) { if (r.id) go('#/details?id=' + r.id + (serverId() ? '&serverId=' + serverId() : '')); });
+        barList(body, t('statTopGenres'), d.genres, function (v) { return t('statTimes', v); });
+        barList(body, t('statDecades'), d.decades, function (v) { return t('statTimes', v); });
+        if (d.recent.length) {
+          var rec = el('section', 'ml-stat-sec');
+          rec.appendChild(el('h2', 'ml-shelf-title', t('statRecent')));
+          var rids = d.recent.map(function (x) { return x.Id; });
+          d.recent.forEach(function (x, i) {
+            var row = el('button', 'ml-stat-row'); row.type = 'button';
+            row.appendChild(cover(itemImg(x, 80), 'ml-stat-cover'));
+            var mid = el('span', 'ml-stat-mid');
+            mid.appendChild(el('span', 'ml-stat-name', x.Name));
+            mid.appendChild(el('span', 'ml-stat-sub', firstArtist(x)));
+            row.appendChild(mid);
+            row.addEventListener('click', function () { playIds(rids, i); });
+            rec.appendChild(row);
+          });
+          body.appendChild(rec);
+        }
+        body.appendChild(el('p', 'ml-muted ml-pad ml-stat-note', t('statNote', d.count) + (d.capped ? t('statCapped', CAP) : '')));
+      }, function () { if (seq === state.view) { body.textContent = ''; failNote(body, function () { show(host, seq); }); } });
+    }
+    return { show: show, compute: compute, load: load };
+  })();
+
+  // Ruft die zusaetzlichen Seiten auf (Aufruf aus der Routenverwaltung)
+  function showAuxView(host, seq, kind) {
+    if (Net.offline()) { OFFV.unavailable(host); return; }
+    if (kind === 'genres') showGenresView(host, seq);
+    else if (kind === 'smarts') showSmartsView(host, seq);
+    else Stats.show(host, seq);
+  }
+
+  /* ---------- Aehnliche Kuenstler (Jellyfin: Artists/{id}/Similar) ---------- */
+  function similarArtistsShelf(host, artistId) {
+    var slot = el('div'); host.appendChild(slot);
+    call('GET', 'Artists/' + artistId + '/Similar', { userId: uid(), limit: 14 }).then(function (r) {
+      var items = ((r && r.Items) || []).filter(function (i) { return i && ID_RE.test(nid(i.Id)) && nid(i.Id) !== nid(artistId); });
+      if (!items.length || !slot.isConnected) return;
+      shelf(slot, t('similarArtists'), items.map(itemTile));
+    }, function () { /* Reihe entfaellt */ });
+    return slot;
+  }
+
+  /* ---------- Einschlaf-Timer ---------- */
+  var Sleep = (function () {
+    var st = null, timer = null, chipEl = null, FADE_MS = 12000;
+    function left() {
+      if (!st) return 0;
+      if (st.mode === 'time') return Math.max(0, st.until - Date.now());
+      var r = Player.remaining();
+      return r == null ? 0 : Math.max(0, r * 1000);
+    }
+    function fmt(ms) { return fmtClock(Math.ceil(ms / 1000)); }
+    function ensureChip() {
+      if (chipEl && chipEl.isConnected) return chipEl;
+      chipEl = btn('ml-sleep-chip');
+      chipEl.appendChild(icon('moon'));
+      chipEl.appendChild(el('span', 'ml-sleep-time'));
+      chipEl.addEventListener('click', openSheet);
+      document.body.appendChild(chipEl);
+      return chipEl;
+    }
+    function paint() {
+      if (!st) { if (chipEl && chipEl.parentNode) chipEl.parentNode.removeChild(chipEl); chipEl = null; return; }
+      var c = ensureChip();
+      c.querySelector('.ml-sleep-time').textContent = st.mode === 'track' ? t('sleepEnd').replace(/^Am /, '') : fmt(left());
+      c.setAttribute('aria-label', t('sleepTitle') + ': ' + (st.mode === 'track' ? t('sleepActiveEnd') : t('sleepActive', fmt(left()))));
+    }
+    function tick() {
+      if (!st) return;
+      if (st.mode === 'time') {
+        var l = left();
+        if (l <= FADE_MS) Player.fade(Math.max(0, l / FADE_MS));
+        if (l <= 0) { fire(); return; }
+      } else {
+        // Ende des Titels: Titelwechsel oder nur noch Sekundenbruchteile Rest
+        if (Player.currentId() && st.id && nid(Player.currentId()) !== nid(st.id)) { fire(); return; }
+        var rem = Player.remaining();
+        if (rem != null && rem <= 12) Player.fade(Math.max(0, rem / 12));
+        if (rem != null && rem <= 0.7) { fire(); return; }
+      }
+      paint();
+    }
+    function fire() {
+      cancel(true);
+      Player.pauseNow();
+      setTimeout(function () { Player.fade(1); }, 600);
+      toast(t('sleepDone'));
+    }
+    function cancel(silent) {
+      clearInterval(timer); timer = null;
+      var was = !!st; st = null;
+      Player.fade(1);
+      paint();
+      if (was && !silent) toast(t('sleepCancelled'));
+    }
+    function start(min) {
+      cancel(true);
+      st = { mode: 'time', until: Date.now() + min * 60000 };
+      timer = setInterval(tick, 500); paint();
+      toast(t('sleepSet', min));
+    }
+    function startTrack() {
+      cancel(true);
+      st = { mode: 'track', id: Player.currentId() || '' };
+      timer = setInterval(tick, 500); paint();
+      toast(t('sleepSetEnd'));
+    }
+    function openSheet() {
+      var ui = makeSheet({ title: t('sleepTitle') });
+      sheetTitle(ui, t('sleepTitle'), st ? (st.mode === 'track' ? t('sleepActiveEnd') : t('sleepActive', fmt(left()))) : t('sleepIntro'));
+      function item(ic, label, run, on) {
+        var b = btn('ml-menu-item' + (on ? ' ml-on' : ''));
+        b.appendChild(icon(ic)); b.appendChild(el('span', 'ml-menu-label', label));
+        b.addEventListener('click', function () { ui.close(); run(); });
+        ui.sheet.appendChild(b);
+      }
+      [5, 10, 15, 30, 45, 60].forEach(function (m) { item('moon', t('sleepMin', m), function () { start(m); }); });
+      item('moon', t('sleepEnd'), startTrack, st && st.mode === 'track');
+      if (st) item('close', t('sleepOff'), function () { cancel(false); });
+    }
+    return { open: openSheet, start: start, startTrack: startTrack, cancel: cancel, active: function () { return !!st; } };
+  })();
 
   /* ---------- Downloads: Oberfläche (Knöpfe, Seite "Downloads" mit Speicheranzeige) ---------- */
   (function () {
@@ -7496,6 +8767,17 @@
       }
       remoteSetPaused(!isPaused());
     }
+    // Fuer den Einschlaf-Timer: Restzeit des Titels, Ausblenden der Lautstaerke und Pause (nie Wiedergabe starten)
+    function remaining() { var d = duration(); return d > 0 ? Math.max(0, d - position()) : null; }
+    var fadeBase = null;
+    function fade(f) {
+      var a = audioEl();
+      if (f >= 0.999) { if (fadeBase != null && a) { try { a.volume = fadeBase; } catch (e) { /* ignorieren */ } } fadeBase = null; return; }
+      if (!a) return;
+      if (fadeBase == null) fadeBase = a.volume;
+      try { a.volume = Math.max(0, Math.min(1, fadeBase * f)); } catch (e) { /* ignorieren */ }
+    }
+    function pauseNow() { if (P.item && !isPaused()) toggle(); }
     function cycleRepeat() {
       var next = P.repeat === 'RepeatNone' ? 'RepeatAll' : P.repeat === 'RepeatAll' ? 'RepeatOne' : 'RepeatNone';
       P.repeat = next; paint();
@@ -8015,8 +9297,8 @@
         rest = k.slice(6); label = t('fromAlbumCtx');
         if (it && it.AlbumId && nid(it.AlbumId) === rest) name = it.Album || '';
         if (!name) { var ac = OFF.coll('al:' + rest); name = ac ? ac.name : ''; }
-      } else if (/^(mix|radio|mixtape):/.test(k)) {
-        label = t(k.indexOf('radio:') === 0 ? 'fromRadioCtx' : k.indexOf('mixtape:') === 0 ? 'fromMixtapeCtx' : 'fromMixCtx');
+      } else if (/^(mix|radio|mixtape|smart|genre):/.test(k)) {
+        label = t(k.indexOf('radio:') === 0 ? 'fromRadioCtx' : k.indexOf('mixtape:') === 0 ? 'fromMixtapeCtx' : k.indexOf('smart:') === 0 ? 'fromSmartCtx' : k.indexOf('genre:') === 0 ? 'fromGenreCtx' : 'fromMixCtx');
         name = mixTitles[k] || '';
         if (!name) { var mc = OFF.coll(k); name = mc ? mc.name : ''; }
       } else {
@@ -8366,7 +9648,24 @@
       renderNpCards();
       resolveContext();
       markContext();
-      if (!isLocal) maybeAutoplay(s);
+      if (!isLocal) { maybeAutoplay(s); try { Resume.note(resumeSnap()); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ } }
+    }
+    // Stand fuer "Weiter hoeren": Warteschlange, Titel, Position, Herkunft (siehe resume.js)
+    function resumeSnap() {
+      var it = P.item;
+      if (!it || !ID_RE.test(nid(it.Id)) || (P.session && P.session.Id === 'local')) return null;
+      var ids = (P.queue || []).map(function (x) { return nid(x.Id); }).filter(function (x) { return ID_RE.test(x); });
+      var idx = queueIndex();
+      if (idx < 0 || idx >= ids.length || !ids.length) { ids = [nid(it.Id)]; idx = 0; }
+      var cat = catMemo[nid(it.Id)] || '';
+      if (!cat) itemCat(it.Id);   // fuer den naechsten Stand merken
+      var d = null;
+      try { d = ctxDisplay(it); } catch (e) { d = null; }
+      var dev = P.session ? (P.session.DeviceName || P.session.Client || '') : '';
+      return {
+        ids: ids, i: idx, pos: position(), dur: duration(), ctx: P.ctxId || '', name: d ? d.name : '', title: it.Name || '',
+        artist: (it.Artists && it.Artists[0]) || it.AlbumArtist || '', album: it.Album || '', cid: it.AlbumId || it.Id, cat: cat, paused: isPaused(), dev: dev
+      };
     }
 
     function poll() {
@@ -8480,6 +9779,7 @@
       contextId: function () { return P.ctxId; }, isPlayingNow: function () { return !!P.item && !isPaused(); }, isRunning: function () { return running; }, hasUi: function () { return !!(mini && !mini.hidden) || !!P.item; }, currentId: currentId, refreshFavorite: refreshFavorite,
       open: openFull, close: closeFull, isOpen: function () { return fullOpen; },
       targetId: function () { return P.targetId; }, sessionNow: fetchState, openDevices: openDevices,
+      remaining: remaining, fade: fade, pauseNow: pauseNow,
       mount: function () {
         ensureMini();
         if (bottomBar && mini.parentNode !== bottomBar) bottomBar.insertBefore(mini, bottomBar.firstChild);
@@ -8517,7 +9817,7 @@
     bottomBar.appendChild(nav);
     root.appendChild(bottomBar);
     document.body.appendChild(root);
-    if (isWide()) { ensureSide(); root.insertBefore(side, scroller); }
+    if (isWide()) { ensureSide(); root.insertBefore(side, scroller); mountDtop(); }
     Player.mount();
     OFFV.paintPill();
     window.addEventListener('resize', layout);
@@ -8556,11 +9856,25 @@
     var head = el('div', 'ml-side-libhead');
     head.appendChild(icon('library'));
     head.appendChild(el('span', 'ml-side-libtitle', t('yourLib')));
-    head.appendChild(iconBtn('add', t('mNewPlaylist'), 'ml-side-add', openCreatePlaylist));
+    var mk = btn('ml-side-create ml-side-add');
+    mk.title = t('mNewPlaylist');
+    mk.setAttribute('aria-label', t('mNewPlaylist'));
+    mk.appendChild(icon('add'));
+    mk.appendChild(el('span', null, t('createPlaylist')));
+    mk.addEventListener('click', openCreatePlaylist);
+    head.appendChild(mk);
     libBox.appendChild(head);
     libBox.appendChild(chipRow([
       { key: 'playlists', label: t('libPlaylists') }, { key: 'albums', label: t('libAlbums') }, { key: 'artists', label: t('libArtists') }
     ], state.libSeg, function (k) { state.libSeg = k; fillSide(); }, 'ml-side-chips'));
+    var sortRow = el('div', 'ml-side-sortrow');
+    var sortBtn = btn('ml-side-sort');
+    function paintSort() { sortBtn.textContent = (state.libSort === 'alpha' ? t('libSortAlpha') : t('libSortRecent')) + ' ▾'; }
+    sortBtn.title = t('libSortHint');
+    sortBtn.addEventListener('click', function () { state.libSort = state.libSort === 'alpha' ? 'recent' : 'alpha'; try { window.localStorage.setItem('ml.libsort', state.libSort); } catch (e) { /* nur diese Sitzung */ } paintSort(); fillSide(); });
+    paintSort();
+    sortRow.appendChild(sortBtn);
+    libBox.appendChild(sortRow);
     sideList = el('div', 'ml-side-list');
     libBox.appendChild(sideList);
     var foot = el('div', 'ml-side-foot');
@@ -8570,6 +9884,48 @@
     foot.appendChild(more);
     add(side, navBox, libBox, foot);
     return side;
+  }
+  /* Kopfleiste wie bei Spotify am Computer: Home-Knopf und mittiges Suchfeld ueber der ganzen Breite */
+  var dtop = null, dtopInput = null;
+  function ensureDtop() {
+    if (dtop) return dtop;
+    dtop = el('div', 'ml-dtop');
+    var home = btn('ml-dtop-home');
+    home.setAttribute('aria-label', t('tabHome')); home.title = t('tabHome');
+    home.appendChild(icon('home'));
+    home.addEventListener('click', function () { selectTab('home'); });
+    var box = el('div', 'ml-dtop-search');
+    box.appendChild(icon('search'));
+    dtopInput = el('input', 'ml-dtop-input');
+    dtopInput.type = 'search'; dtopInput.placeholder = t('searchPh'); dtopInput.setAttribute('autocomplete', 'off');
+    dtopInput.setAttribute('aria-label', t('tabSearch'));
+    function toSearch() {
+      searchTerm = dtopInput.value;
+      var r = latestRoute || {};
+      var onSearch = r.kind === 'library' && !(r.params && r.params.mlview) && state.tab === 'search';
+      if (!onSearch) { selectTab('search'); return; }
+      var big = content && content.querySelector('.ml-search-big');
+      if (big && big.value !== dtopInput.value) { big.value = dtopInput.value; big.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    dtopInput.addEventListener('focus', function () { var r = latestRoute || {}; if (!(r.kind === 'library' && !(r.params && r.params.mlview) && state.tab === 'search')) toSearch(); });
+    dtopInput.addEventListener('input', toSearch);
+    dtopInput.addEventListener('keydown', function (e) { if (e.key === 'Escape') { dtopInput.value = ''; toSearch(); dtopInput.blur(); } });
+    box.appendChild(dtopInput);
+    add(dtop, home, box);
+    return dtop;
+  }
+  function mountDtop() {
+    if (!isWide() || !root) return;
+    ensureDtop();
+    if (dtop.parentNode !== root) root.insertBefore(dtop, root.firstChild);
+  }
+  function syncDtop() {
+    if (!dtopInput) return;
+    var r = latestRoute || {};
+    var onSearch = r.kind === 'library' && !(r.params && r.params.mlview) && state.tab === 'search';
+    if (!onSearch && dtopInput.value && document.activeElement !== dtopInput) dtopInput.value = '';
+    else if (onSearch && document.activeElement !== dtopInput && dtopInput.value !== searchTerm) dtopInput.value = searchTerm;
+    if (dtop) ML.qsa('.ml-dtop-home', dtop).forEach(function (b) { b.classList.toggle('ml-on', r.kind === 'library' && !(r.params && r.params.mlview) && state.tab === 'home'); });
   }
   var sideTimer = null;
   // Nach Aenderungen (Playlist angelegt, Titel hinzugefuegt ...) die Seitenleiste kurz darauf auffrischen.
@@ -8581,6 +9937,7 @@
     if (!side) return;
     var tok = ++sideTok;
     sideDirty = false;
+    var sr = side.querySelector('.ml-side-sortrow'); if (sr) sr.hidden = state.libSeg !== 'playlists';
     buildLibList(sideList, function () { return tok === sideTok && root && !root.hidden; }, fillSide);
   }
   // Markiert in der Seitenleiste, was gerade geoeffnet ist.
@@ -8591,6 +9948,7 @@
     else if (r.kind === 'library' && r.params && r.params.mlview === 'liked') cur = 'liked';
     ML.qsa('.ml-list-row', sideList).forEach(function (row) { row.classList.toggle('ml-active', !!cur && row.dataset.id === cur); });
     markContext();
+    syncDtop();
     ML.qsa('.ml-side-navbtn', side).forEach(function (b) {
       var on = r.kind === 'library' && !(r.params && r.params.mlview) && b.dataset.tab === state.tab;
       b.classList.toggle('ml-on', on);
@@ -8599,7 +9957,7 @@
   // Wechsel zwischen Handy- und Computer-Ansicht (Fenstergroesse).
   function modeChanged() {
     if (!root) return;
-    if (isWide()) { ensureSide(); if (side.parentNode !== root) root.insertBefore(side, scroller); sideDirty = true; if (state.tab === 'library') state.tab = 'home'; }
+    if (isWide()) { ensureSide(); if (side.parentNode !== root) root.insertBefore(side, scroller); mountDtop(); sideDirty = true; if (state.tab === 'library') state.tab = 'home'; }
     layout();
     Player.mount();
     Player.repaint();
@@ -8667,7 +10025,7 @@
     ML.uncloak();
     bodyCls('ml-app-on', true);
     layout();
-    if (isWide()) { ensureSide(); if (side.parentNode !== root) root.insertBefore(side, scroller); Player.mount(); if (sideDirty) fillSide(); Player.repaint(); }
+    if (isWide()) { ensureSide(); if (side.parentNode !== root) root.insertBefore(side, scroller); mountDtop(); Player.mount(); if (sideDirty) fillSide(); Player.repaint(); }
     Player.start();
     toggleClassicFab(false);
   }
@@ -8779,10 +10137,11 @@
 
       var folderId = isLib && route.params && route.params.mlview === 'folder' && ID_RE.test(route.params.mlid || '') ? route.params.mlid : null;
       var dlView = isLib && route.params && route.params.mlview === 'downloads';
-      var mixKind = isLib && route.params && route.params.mlview === 'mix' && /^(mix|radio|mixtape)$/.test(route.params.mlkind || '') && ID_RE.test(route.params.mlid || '') ? route.params.mlkind : null;
+      var mixKind = isLib && route.params && route.params.mlview === 'mix' && /^(mix|radio|mixtape|smart|genre)$/.test(route.params.mlkind || '') && ID_RE.test(route.params.mlid || '') ? route.params.mlkind : null;
+      var auxView = isLib && route.params && /^(genres|smarts|stats)$/.test(route.params.mlview || '') ? route.params.mlview : null;
       if (isLib && route.id && !isMediaLib(route.id)) state.libraryId = route.id;
       var key;
-      if (isLib) key = folderId ? 'folder|' + folderId : dlView ? 'downloads' : mixKind ? 'mix|' + mixKind + '|' + nid(route.params.mlid) : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
+      if (isLib) key = folderId ? 'folder|' + folderId : dlView ? 'downloads' : auxView ? 'aux|' + auxView : mixKind ? 'mix|' + mixKind + '|' + nid(route.params.mlid) : route.params && route.params.mlview === 'liked' ? 'liked' : 'tab|' + state.tab;
       else key = 'detail|' + route.id;
       if (isWide() && state.tab === 'library') state.tab = 'home';
       var mcat = isLib && route.id && !folderId && !mixKind && !dlView && !(route.params && route.params.mlview) ? mediaCategoryOf(route.id) : '';
@@ -8799,6 +10158,7 @@
       var seq = state.view;
       if (folderId) showFolderDetail(content, seq, folderId, route.id);
       else if (dlView) showDownloadsPage(content, seq);
+      else if (auxView) showAuxView(content, seq, auxView);
       else if (mixKind) showMixDetail(content, seq, mixKind, route.params.mlid, parseInt(route.params.mln, 10) || 0, route.params.mlt || '');
       else if (key === 'liked') showLikedDetail(content, seq);
       else if (isDetail) {
@@ -8854,7 +10214,7 @@
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
-    eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
+    store: Store, resume: Resume, sleep: Sleep, smart: Smart, genres: Genres, stats: Stats, resumeSave: function () { try { Resume.flush(); } catch (e) { /* ignorieren */ } }, eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
     addToPlaylist: function (ids) { addToPlaylist(ids); },
     cats: { itemCat: function (id) { return itemCat(id); }, onlyMusic: function (items) { return onlyMusic(items); }, loadSongMix: function (id, n) { return loadSongMix(id, n); }, songRadio: function (tr) { return songRadio(tr); } },
     spAuto: function () { spAutoStarted = false; spAutoRun(); }

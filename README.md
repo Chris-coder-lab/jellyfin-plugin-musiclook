@@ -1,6 +1,29 @@
-# Music Look (Jellyfin 12.x)
+# Music Look – Spotify-Look für Jellyfin 12 (Plugin)
 
-Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnliche App-Ansicht (Startseite mit Playlists, Playlist-Seiten, Player) und ergänzt Playlist-Teilen, Cover, Beschreibungen, ZIP-Download und Jam. Alle anderen Bereiche von Jellyfin (Filme, Serien, Dashboard …) bleiben unverändert.
+**Music Look** ist ein Jellyfin-Plugin (nur Jellyfin 12.x), das die Musik-Bibliothek deines Servers wie **Spotify** aussehen und sich so bedienen lässt – in der Web-Oberfläche, in der offiziellen Android-App und am Computer mit Seitenleiste, Kopfleiste mit Suche und Player-Leiste. Dazu: **Spotify-Playlists nach Jellyfin importieren**, Mixe, smarte Playlists, Genres, Statistik, Songtexte, Equalizer, Offline-Downloads, Teilen, Jam und **„Weiter hören“ auf jedem Gerät**.
+
+*English:* Music Look is a Jellyfin 12 plugin that turns your Jellyfin music library into a Spotify-style app (web, Android app, desktop layout). It imports Spotify playlists, builds mixes and smart playlists, shows lyrics, has an equalizer, offline downloads, playlist sharing, "Jam" sessions and a server-side "continue listening" that works across devices. Alles Weitere unten auf Deutsch.
+
+Stichwörter: Jellyfin Plugin · Jellyfin Spotify · Jellyfin Spotify Look · Jellyfin Spotify Theme · Jellyfin Musik Oberfläche · Spotify Playlist Import Jellyfin · Jellyfin Playlists teilen · Jellyfin Equalizer · Jellyfin Songtext · Jellyfin Hörbuch Weiterhören · Jellyfin 12.
+
+Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
+
+## Neu in 2.0
+- **Weiter hören (serverseitig):** Was gerade läuft (Titel, Playlist, Album, Mix, Hörbuch, Podcast-Folge – samt Position) wird in den Anzeige-Einstellungen deines Jellyfin-Kontos gespeichert. Schließt du die App oder wechselst das Gerät, zeigt die Startseite die Karte **Weiter hören**; ein Tipp setzt genau dort fort. Beim Schließen der Seite wird zusätzlich ein letzter Stand per `sendBeacon` gesendet (Best Effort, der Normalfall ist das Speichern alle 20 s und bei jedem Titel-/Pausenwechsel).
+- **Computer-Ansicht wie Spotify:** Kopfleiste mit Home-Knopf und zentrierter Suche, in der Bibliothek der Knopf **Erstellen** und die Sortierung **Zuletzt / A–Z**, Chips Playlists · Alben · Künstler.
+- **Alle Bibliotheken:** Der Knopf in der Seitenleiste führt jetzt zuverlässig zur normalen Jellyfin-Startseite (Verlassen mit Fallback; reicht der normale Seitenwechsel nicht, wird die Seite einmal neu geladen).
+- **Genres:** Ansicht „Genres“ mit allen Musikrichtungen deiner Bibliothek, je Genre Titel abspielen/mischen.
+- **Smarte Playlists:** Regeln (Genres, Erscheinungsjahre, Status: ungehört · Lieblingssongs · schon gehört) speichern; die Liste füllt sich beim Öffnen automatisch neu. Pro Konto gespeichert, auf jedem Gerät verfügbar.
+- **Statistik:** Meistgespielte Titel, Hörzeit, Wiedergaben – aus den Wiedergabezählern von Jellyfin für dein Konto.
+- **Ähnliche Künstler** auf der Künstlerseite (über Jellyfins `Artists/{id}/Similar`).
+- **Einschlaf-Timer** im Player.
+- **M3U-Export/-Import** für Playlists.
+- **Jellyfin-12-Fix:** Anfragen mit `api_key` im Link (Cover, Download, sendBeacon) laufen nur noch mit dem Parameter `ApiKey`, den Jellyfin 12 noch akzeptiert (die alten Zugriffswege sind dort abgeschaltet).
+- Verbesserter Spotify-Abgleich (Titel-Normalisierung, Duplikate), manuelle Zuordnungen gelten für alle Playlists, entfernte Titel und Reihenfolge werden bei Aktualisierungen beachtet.
+
+## Wie findet man das Plugin?
+- Dashboard → Plugins → Repositories → Repository-Link (siehe „Installieren“) → im Katalog **Music Look**.
+- Auf GitHub: `Chris-coder-lab/jellyfin-plugin-musiclook`.
 
 ## Voraussetzungen
 - Jellyfin 12.0 oder neuer (getestet gegen den Quellcode von 12.0 und 12.2)
@@ -9,12 +32,12 @@ Verwandelt **nur Musik-Bibliotheken** der Web-Oberfläche in eine Spotify-ähnli
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v1.5.0.0 && git push origin v1.5.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.0.0.0 && git push origin v2.0.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
 Jellyfin → Dashboard → Plugins → Repositories → neues Repository:
-`https://raw.githubusercontent.com/DEIN-GITHUB-NAME/jellyfin-plugin-musiclook/main/manifest.json`
+`https://raw.githubusercontent.com/Chris-coder-lab/jellyfin-plugin-musiclook/main/manifest.json`
 
 Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfläche mit Strg+F5 neu laden (in der Android-App: App-Daten/Cache leeren).
 
