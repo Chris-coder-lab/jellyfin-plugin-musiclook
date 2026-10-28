@@ -457,6 +457,8 @@
         if (step <= 2 && !moved && location.hash === from) {
           try { location.assign(location.href.split('#')[0] + target); } catch (e) { location.hash = target; }
         }
+        // Jellyfin hat die Adresse selbst weitergeleitet (z. B. mit Zusatz wie "?tab=0"), die Ansicht steht aber noch: ebenfalls beenden
+        if (step >= 3 && appShown() && !/^#\/music/i.test(location.hash || '')) { leave(); reloadOnce(true); }
         return;
       }
       if (appShown()) {
@@ -4514,29 +4516,7 @@
     host.appendChild(box);
   }
 
-  function fillMedia(body, seq, libs, cat) {
-    body.appendChild(loaderEl());
-    var shelves = libs.length ? loadMediaShelves(libs) : Promise.resolve([]);
-    var genre = cat === 'audiobooks' && !libs.length ? loadGenreAudiobooks() : Promise.resolve([]);
-    Promise.all([shelves, genre]).then(function (res) {
-      if (seq !== state.view) return;
-      body.textContent = '';
-      var any = false;
-      res[0].forEach(function (g) { if (shelf(body, g.title, g.tiles)) any = true; });
-      if (res[1].length) {
-        any = true;
-        shelf(body, t('genreShelf'), res[1].map(itemTile));
-      }
-      if (!any) {
-        if (!libs.length) mediaDiagnosis(body, cat);
-        else emptyNote(body, t('nothingYet'));
-      }
-    }, function () {
-      if (seq !== state.view) return;
-      body.textContent = '';
-      failNote(body, function () { body.textContent = ''; fillMedia(body, seq, libs, cat); });
-    });
-  }
+  function fillMedia(body, seq, libs, cat) { MediaHome.fill(body, seq, libs, cat); }
 
   /* ---------- Suche ---------- */
   var searchTerm = '';
@@ -4795,7 +4775,7 @@
       var params = seg === 'albums'
         ? { IncludeItemTypes: 'MusicAlbum', Recursive: true, SortBy: 'SortName', Fields: 'ChildCount' }
         : {};
-      params.StartIndex = start; params.Limit = 60;
+      params.StartIndex = start; params.Limit = 100;
       if (state.libraryId) params.ParentId = state.libraryId;
       var req = seg === 'albums'
         ? getItems(params)
@@ -4814,8 +4794,15 @@
         if (!r.items.length && start === 0) list.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
         if (r.items.length && start < total) {
           var m = btn('ml-pill ml-more', t('loadMore'));
-          m.addEventListener('click', function () { m.disabled = true; page(); });
+          m.addEventListener('click', function () { if (m.disabled) return; m.disabled = true; page(); });
           list.appendChild(m);
+          // Die Liste laedt von selbst weiter, sobald man ans Ende scrollt (der Knopf bleibt als Rueckfall)
+          if (window.IntersectionObserver) {
+            var io = new IntersectionObserver(function (es) {
+              es.forEach(function (e) { if (e.isIntersecting && m.isConnected && !m.disabled && alive()) { io.disconnect(); m.click(); } });
+            }, { root: (/auto|scroll/.test(window.getComputedStyle(list).overflowY) ? list : (scroller || null)), rootMargin: '0px 0px 400px 0px' });
+            io.observe(m);
+          }
         }
         markSide();
       }, function () { if (alive()) failNote(list, retry); });
@@ -6417,11 +6404,21 @@
         cat: s.cat || '', paused: !!s.paused, ts: Date.now(), dev: s.dev || ''
       };
     }
+    // Kennt die Sitzung die Warteschlange nicht (z. B. gerade neu geoeffnete App), steht im Stand nur der laufende Titel. Dann bleibt die
+    // gemerkte vollstaendige Warteschlange erhalten, wenn dieser Titel darin vorkommt.
+    function keepQueue(rec, s) {
+      if (!s || !s.single || !cur || !valid(cur)) return rec;
+      var old = idList(cur), at = old.indexOf(s.ids[0]);
+      if (at < 0 || old.length < 2) return rec;
+      rec.ids = old.join(','); rec.i = at;
+      if (!rec.ctx && cur.ctx) { rec.ctx = cur.ctx; rec.name = rec.name || cur.name; }
+      return rec;
+    }
     function save(force) {
       clearTimeout(timer); timer = null;
       var s = want;
       if (!s || (Net && Net.offline())) return Promise.resolve();
-      var rec = pack(s);
+      var rec = keepQueue(pack(s), s);
       var text = JSON.stringify(rec);
       lastSaveAt = Date.now();
       if (text === lastSaved && !force) return Promise.resolve();
@@ -6444,7 +6441,7 @@
     function flush() {
       var s = want;
       if (!s || (Net && Net.offline())) return;
-      var rec = pack(s);
+      var rec = keepQueue(pack(s), s);
       cur = rec;
       Store.beacon(KEY, rec);
     }
@@ -6468,14 +6465,30 @@
     }
 
     // Stand wieder abspielen: Warteschlange ab dem gemerkten Titel, der erste Titel startet an der gemerkten Position.
+    // Steht nur ein Titel im Stand (aeltere Staende, unbekannte Warteschlange), aber die Herkunft ist eine Playlist oder ein Album,
+    // wird deren Titelliste neu geladen, damit nach dem Titel weitergespielt wird.
+    function fullQueue(v, ids) {
+      var cur0 = ids[clamp(v.i, 0, ids.length - 1)];
+      if (ids.length > 1 || !v.ctx || !cur0) return Promise.resolve({ ids: ids, i: clamp(v.i, 0, ids.length - 1) });
+      var ctx = String(v.ctx), req = null;
+      if (/^album:/.test(ctx) && ID_RE.test(ctx.slice(6))) req = call('GET', 'Items', { ParentId: ctx.slice(6), IncludeItemTypes: 'Audio', SortBy: 'ParentIndexNumber,IndexNumber,SortName', UserId: uid(), Fields: '', EnableImages: false, EnableUserData: false, Limit: 1500 });
+      else if (ID_RE.test(ctx)) req = call('GET', 'Playlists/' + ctx + '/Items', { UserId: uid(), Fields: '', EnableImages: false, EnableUserData: false, Limit: 3000 });
+      if (!req) return Promise.resolve({ ids: ids, i: 0 });
+      return req.then(function (r) {
+        var list = ((r && r.Items) || []).map(function (x) { return nid(x.Id); }).filter(function (x) { return ID_RE.test(x); });
+        var at = list.indexOf(cur0);
+        return at >= 0 ? { ids: list, i: at } : { ids: ids, i: 0 };
+      }, function () { return { ids: ids, i: 0 }; });
+    }
     function play(v) {
       var ids = idList(v);
       if (!ids.length) return Promise.resolve(false);
-      var i = clamp(v.i, 0, ids.length - 1);
       var pos = v.pos || 0;
       if (v.dur && pos > v.dur - 5) pos = 0;   // am Ende des Titels beginnt er wieder von vorn
       toast(t('resumeStarted'));
-      return playIds(ids, i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '' });
+      return fullQueue(v, ids).then(function (q) {
+        return playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '' });
+      });
     }
 
     function cardEl(v) {
@@ -7148,6 +7161,158 @@
       if (st) item('close', t('sleepOff'), function () { cancel(false); });
     }
     return { open: openSheet, start: start, startTrack: startTrack, cancel: cancel, active: function () { return !!st; } };
+  })();
+  /* ---------- Version 2.0.1: Startseite fuer Podcasts und Hoerbuecher mit Abschnitten ----------
+     Statt einer einzigen langen Reihe: Zuletzt gehoert (mit Fortschritt, ein Tipp setzt fort), Neu hinzugefuegt, Autoren und Sprecher
+     und zum Schluss alles als Raster. Hoerbuecher/Folgen werden ab dem zuletzt gehoerten Kapitel weitergespielt. */
+  (function () {
+    var extra = {
+      de: {
+        mediaRecent: 'Zuletzt gehört', mediaNew: 'Neu hinzugefügt', mediaAuthors: 'Autoren und Sprecher',
+        mediaAllBooks: 'Alle Hörbücher', mediaAllPods: 'Alle Podcasts', mediaPct: '{0} % gehört', mediaDone: 'Gehört', mediaNextUp: 'Als Nächstes'
+      },
+      en: {
+        mediaRecent: 'Recently played', mediaNew: 'Recently added', mediaAuthors: 'Authors and narrators',
+        mediaAllBooks: 'All audiobooks', mediaAllPods: 'All podcasts', mediaPct: '{0}% played', mediaDone: 'Played', mediaNextUp: 'Up next'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var MediaHome = (function () {
+    var AUDIO = 'Audio,AudioBook';
+
+    function ud(it) { return (it && it.UserData) || {}; }
+    function progressOf(it) {
+      var u = ud(it), dur = it.RunTimeTicks || 0, pos = u.PlaybackPositionTicks || 0;
+      if (dur > 0 && pos > 0) return clamp(Math.round(pos / dur * 100), 0, 99);
+      return 0;
+    }
+    function bookKey(it) { return nid(it.AlbumId || it.ParentId || it.Id); }
+
+    // Kapitelliste des Buchs bzw. der Sendung, in Reihenfolge
+    function siblingsOf(it) {
+      var pid = it.ParentId || it.AlbumId;
+      if (!pid || !ID_RE.test(nid(pid))) return Promise.resolve([it]);
+      return itemsOf({ ParentId: pid, IncludeItemTypes: AUDIO, SortBy: 'ParentIndexNumber,IndexNumber,SortName', Limit: 1000, Fields: '', EnableImages: false }).then(function (list) {
+        return list.length ? list : [it];
+      }, function () { return [it]; });
+    }
+    // Setzt beim zuletzt gehoerten Titel fort (an der gemerkten Position); war er zu Ende gehoert, beginnt das naechste Kapitel.
+    function continueItem(it) {
+      return siblingsOf(it).then(function (list) {
+        var ids = list.map(function (x) { return nid(x.Id); });
+        var at = ids.indexOf(nid(it.Id));
+        if (at < 0) { ids = [nid(it.Id)]; at = 0; }
+        var pos = ud(it).PlaybackPositionTicks || 0;
+        var finished = ud(it).Played && !pos;
+        if (finished && at + 1 < ids.length) { at++; pos = 0; }
+        else if (finished) pos = 0;
+        if (it.RunTimeTicks && pos > it.RunTimeTicks - 50000000) pos = 0;
+        return playIds(ids, at, { positionTicks: pos });
+      });
+    }
+
+    function recentTile(it) {
+      var p = progressOf(it);
+      var sub = [it.Name, p ? t('mediaPct', p) : (ud(it).Played ? t('mediaDone') : '')].filter(Boolean).join(' · ');
+      var tl = tile({
+        title: it.Album || it.Name, sub: sub, img: itemImg(it, 300),
+        onClick: function () { continueItem(it); }, play: function () { continueItem(it); }
+      });
+      if (p) {
+        var bar = el('div', 'ml-tile-bar'), fill = el('span');
+        fill.style.width = p + '%';
+        bar.appendChild(fill);
+        tl.insertBefore(bar, tl.querySelector('.ml-tile-title'));
+      }
+      return tl;
+    }
+    function bookTile(lib, it) {
+      return tile({
+        title: it.Album || it.Name, sub: it.AlbumArtist || firstArtist(it) || '', img: itemImg(it, 300),
+        onClick: function () { var b = it.AlbumId || it.ParentId; if (b) go(folderHash(lib.id, b)); else playIds([it.Id], 0); }
+      });
+    }
+    function uniqueBooks(items) {
+      var seen = {}, out = [];
+      items.forEach(function (it) { var k = bookKey(it); if (!seen[k]) { seen[k] = 1; out.push(it); } });
+      return out;
+    }
+
+    function loadLib(lib, cat) {
+      var base = { ParentId: lib.id, Recursive: true, IncludeItemTypes: AUDIO, Fields: '' };
+      var recentP = itemsOf(Object.assign({}, base, { SortBy: 'DatePlayed', SortOrder: 'Descending', Limit: 80 })).then(function (l) {
+        return uniqueBooks(l.filter(function (x) { return ud(x).LastPlayedDate; })).slice(0, 24);
+      }, function () { return []; });
+      var newP = itemsOf(Object.assign({}, base, { SortBy: 'DateCreated', SortOrder: 'Descending', Limit: 120 })).then(function (l) {
+        return cat === 'podcasts' ? l.slice(0, 20) : uniqueBooks(l).slice(0, 20);
+      }, function () { return []; });
+      var authorsP = cat === 'audiobooks'
+        ? call('GET', 'Artists/AlbumArtists', { UserId: uid(), ParentId: lib.id, SortBy: 'SortName', Limit: 60 }).then(function (r) { return (r && r.Items) || []; }, function () { return []; })
+        : Promise.resolve([]);
+      var allP = (lib.cat === 'podcasts' && lib.type === 'music')
+        ? itemsOf({ ParentId: lib.id, IncludeItemTypes: 'MusicAlbum', Recursive: true, SortBy: 'SortName', Limit: 300 }).catch(function () { return []; })
+        : itemsOf({ ParentId: lib.id, Limit: 300, SortBy: 'SortName', Fields: 'ChildCount' }).then(function (items) { return items.filter(function (it) { return !isBookFile(it); }); }, function () { return []; });
+      return Promise.all([recentP, newP, authorsP, allP]).then(function (r) { return { lib: lib, recent: r[0], news: r[1], authors: r[2], all: r[3] }; });
+    }
+
+    function grid(host, title, tiles) {
+      if (!tiles.length) return null;
+      var box = el('section', 'ml-shelf ml-media-all');
+      box.appendChild(el('h2', 'ml-shelf-title', title));
+      var g = el('div', 'ml-media-grid');
+      tiles.forEach(function (x) { g.appendChild(x); });
+      box.appendChild(g);
+      host.appendChild(box);
+      return box;
+    }
+
+    function fill(body, seq, libs, cat) {
+      body.appendChild(loaderEl());
+      var many = libs.length > 1;
+      var genre = cat === 'audiobooks' && !libs.length ? loadGenreAudiobooks() : Promise.resolve([]);
+      Promise.all([Promise.all(libs.map(function (l) { return loadLib(l, cat); })), genre]).then(function (res) {
+        if (seq !== state.view) return;
+        var parts = res[0];
+        // Resume.card steht schon im Rahmen; hier nur die Abschnitte neu aufbauen
+        var keep = body.querySelector('.ml-resume-slot');
+        body.textContent = '';
+        if (keep) body.appendChild(keep);
+        var any = false;
+        function add(b) { if (b) any = true; }
+        var recent = [].concat.apply([], parts.map(function (p) { return p.recent; }));
+        add(shelf(body, t('mediaRecent'), recent.map(recentTile), 'ml-media-recent'));
+        var news = [];
+        parts.forEach(function (p) {
+          p.news.forEach(function (it) {
+            news.push(cat === 'podcasts'
+              ? tile({ title: it.Name, sub: it.Album || firstArtist(it), img: itemImg(it, 300), onClick: function () { playIds([it.Id], 0); }, play: function () { playIds([it.Id], 0); } })
+              : bookTile(p.lib, it));
+          });
+        });
+        add(shelf(body, cat === 'podcasts' ? t('latestEpisodes') : t('mediaNew'), news));
+        var authors = [].concat.apply([], parts.map(function (p) { return p.authors; }));
+        add(shelf(body, t('mediaAuthors'), authors.map(itemTile)));
+        parts.forEach(function (p) {
+          var tiles = p.all.map(function (it) {
+            return (p.lib.cat === 'podcasts' && p.lib.type === 'music') ? itemTile(it) : mediaTile(p.lib, it, p.lib.cat);
+          });
+          var title = cat === 'podcasts' ? (many ? p.lib.name : t('mediaAllPods')) : (many ? p.lib.name : t('mediaAllBooks'));
+          add(grid(body, title, tiles));
+        });
+        if (res[1].length) { any = true; shelf(body, t('genreShelf'), res[1].map(itemTile)); }
+        if (!any) {
+          if (!libs.length) mediaDiagnosis(body, cat);
+          else emptyNote(body, t('nothingYet'));
+        }
+      }, function () {
+        if (seq !== state.view) return;
+        body.textContent = '';
+        failNote(body, function () { body.textContent = ''; fill(body, seq, libs, cat); });
+      });
+    }
+    return { fill: fill, continueItem: continueItem };
   })();
 
   /* ---------- Downloads: Oberfläche (Knöpfe, Seite "Downloads" mit Speicheranzeige) ---------- */
@@ -9656,14 +9821,15 @@
       if (!it || !ID_RE.test(nid(it.Id)) || (P.session && P.session.Id === 'local')) return null;
       var ids = (P.queue || []).map(function (x) { return nid(x.Id); }).filter(function (x) { return ID_RE.test(x); });
       var idx = queueIndex();
-      if (idx < 0 || idx >= ids.length || !ids.length) { ids = [nid(it.Id)]; idx = 0; }
+      var single = false;
+      if (idx < 0 || idx >= ids.length || !ids.length) { ids = [nid(it.Id)]; idx = 0; single = true; }
       var cat = catMemo[nid(it.Id)] || '';
       if (!cat) itemCat(it.Id);   // fuer den naechsten Stand merken
       var d = null;
       try { d = ctxDisplay(it); } catch (e) { d = null; }
       var dev = P.session ? (P.session.DeviceName || P.session.Client || '') : '';
       return {
-        ids: ids, i: idx, pos: position(), dur: duration(), ctx: P.ctxId || '', name: d ? d.name : '', title: it.Name || '',
+        single: single, ids: ids, i: idx, pos: position(), dur: duration(), ctx: P.ctxId || '', name: d ? d.name : '', title: it.Name || '',
         artist: (it.Artists && it.Artists[0]) || it.AlbumArtist || '', album: it.Album || '', cid: it.AlbumId || it.Id, cat: cat, paused: isPaused(), dev: dev
       };
     }

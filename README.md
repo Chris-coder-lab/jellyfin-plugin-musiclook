@@ -8,6 +8,12 @@ Stichwörter: Jellyfin Plugin · Jellyfin Spotify · Jellyfin Spotify Look · Je
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.0.1
+- **Alle Bibliotheken (Computer):** Die versteckte Spotify-Ansicht blieb am Computer sichtbar stehen, weil eine Anzeige-Regel das „versteckt" überstimmte. Jetzt verschwindet sie wirklich.
+- **Bibliothek links:** Alben und Künstler laden beim Scrollen automatisch nach (100 pro Seite), nicht mehr nur die ersten 60.
+- **Weiter hören:** Ist im gespeicherten Stand nur der laufende Titel bekannt, bleibt die gemerkte Warteschlange erhalten bzw. wird die Playlist/das Album neu geladen – danach läuft es mit dem nächsten Titel weiter.
+- **Podcasts und Hörbücher:** Startseite mit Abschnitten (Zuletzt gehört mit Fortschritt, Neueste Folgen / Neu hinzugefügt, Autoren und Sprecher, Alle als Raster). Ein Tipp setzt beim zuletzt gehörten Kapitel an der gemerkten Position fort.
+
 ## Neu in 2.0
 - **Weiter hören (serverseitig):** Was gerade läuft (Titel, Playlist, Album, Mix, Hörbuch, Podcast-Folge – samt Position) wird in den Anzeige-Einstellungen deines Jellyfin-Kontos gespeichert. Schließt du die App oder wechselst das Gerät, zeigt die Startseite die Karte **Weiter hören**; ein Tipp setzt genau dort fort. Beim Schließen der Seite wird zusätzlich ein letzter Stand per `sendBeacon` gesendet (Best Effort, der Normalfall ist das Speichern alle 20 s und bei jedem Titel-/Pausenwechsel).
 - **Computer-Ansicht wie Spotify:** Kopfleiste mit Home-Knopf und zentrierter Suche, in der Bibliothek der Knopf **Erstellen** und die Sortierung **Zuletzt / A–Z**, Chips Playlists · Alben · Künstler.
@@ -32,7 +38,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.0.0.0 && git push origin v2.0.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.0.1.0 && git push origin v2.0.1.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

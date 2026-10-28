@@ -1576,3 +1576,20 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
   .ml-side-libtitle { font-size: 0.95rem; }
   .ml-side-create { padding: 5px 12px 5px 6px; font-size: 0.8rem; }
 }
+
+/* Version 2.0.1: Ist die Ansicht versteckt, muss sie auch am Computer wirklich weg sein
+   (".ml-app.ml-wide { display: grid }" ueberstimmte sonst das hidden-Attribut: "Alle Bibliotheken" schien nichts zu tun). */
+.ml-app[hidden], .ml-app.ml-wide[hidden] { display: none !important; }
+
+/* =====================================================================
+   Version 2.0.1: Podcasts und Hoerbuecher - Abschnitte und Raster
+   ===================================================================== */
+.ml-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--ml-tile, 150px), 1fr)); gap: 16px 14px; padding: 0 16px 16px; }
+.ml-media-grid .ml-tile { flex: none; width: auto; min-width: 0; }
+.ml-tile-bar { height: 3px; margin-top: 6px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.ml-tile-bar span { display: block; height: 100%; background: var(--ml-accent, #1ed760); }
+.ml-media-recent .ml-tile-bar { margin-top: 8px; }
+@media (min-width: 900px) {
+  .ml-wide .ml-media-grid { padding: 0 24px 24px; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(calc(var(--ml-tile) + 24px), 1fr)); }
+  .ml-wide .ml-media-grid .ml-tile { width: auto; }
+}

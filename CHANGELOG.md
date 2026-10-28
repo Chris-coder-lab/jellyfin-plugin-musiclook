@@ -1,5 +1,11 @@
 # Änderungen
 
+## 2.0.1.0
+- **Alle Bibliotheken am Computer:** Die versteckte Spotify-Ansicht blieb sichtbar, weil `.ml-app.ml-wide { display: grid }` das `hidden`-Attribut überstimmte. Jetzt gilt `display: none !important` für die versteckte Ansicht; zusätzlich wird auch beendet, wenn Jellyfin die Adresse selbst ändert (z. B. mit Zusatz)
+- **Bibliothek links (Alben, Künstler):** automatisches Nachladen beim Scrollen, 100 Einträge pro Seite (vorher nur 60 plus „Mehr laden"-Knopf); gilt auch für die Bibliothek in der Handy-Ansicht
+- **Weiter hören:** Ein Stand mit nur einem Titel (Sitzung kennt die Warteschlange nicht) überschreibt keine gemerkte vollständige Warteschlange mehr; fehlt sie trotzdem, wird sie aus der Herkunft (Playlist, Album) neu geladen, damit nach dem Titel weitergespielt wird
+- **Podcasts und Hörbücher:** Startseite mit Abschnitten statt einer langen Reihe: Zuletzt gehört (mit Fortschrittsbalken, Fortsetzen ab Kapitel und Position), Neueste Folgen bzw. Neu hinzugefügt, Autoren und Sprecher, Alle Podcasts bzw. Hörbücher als Raster
+
 ## 2.0.0.0
 - **Weiter hören, serverseitig:** Der aktuelle Stand (Warteschlange, Titel, Position, Herkunft wie Playlist/Album/Mix/Hörbuch/Podcast) wird in den Anzeige-Einstellungen des Jellyfin-Kontos gespeichert (alle 20 s, bei Titel- und Pausenwechsel, beim Verlassen der Seite zusätzlich per sendBeacon). Auf der Startseite erscheint die Karte **Weiter hören** (respektiert die Chips Musik/Podcasts/Hörbücher); ein Tipp setzt genau dort fort, wo es endete
 - **Computer-Ansicht näher an Spotify:** Kopfleiste mit Home-Knopf und zentriertem Suchfeld über der ganzen Breite, Bibliothek mit Knopf **Erstellen** und Sortierung **Zuletzt / A–Z** (wird gemerkt)
