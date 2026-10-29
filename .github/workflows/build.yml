@@ -62,9 +62,10 @@ jobs:
       - name: Manifest automatisch aktualisieren
         if: github.ref_type == 'tag'
         run: |
+          cp CHANGELOG.md "${RUNNER_TEMP}/CHANGELOG.md"
           git fetch origin main
           git checkout -B main origin/main
-          python3 scripts/update_manifest.py "musiclook_${VERSION}.zip" "${GITHUB_REPOSITORY_OWNER}" "${VERSION}"
+          CHANGELOG_FILE="${RUNNER_TEMP}/CHANGELOG.md" python3 scripts/update_manifest.py "musiclook_${VERSION}.zip" "${GITHUB_REPOSITORY_OWNER}" "${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json

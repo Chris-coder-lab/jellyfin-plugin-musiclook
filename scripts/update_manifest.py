@@ -13,7 +13,8 @@ from pathlib import Path
 zip_path, user, version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 md5 = hashlib.md5(zip_path.read_bytes()).hexdigest().upper()  # Jellyfin erwartet MD5
 manifest_path = Path(__file__).resolve().parent.parent / "manifest.json"
-changelog_path = manifest_path.parent / "CHANGELOG.md"
+# Der Workflow gibt die CHANGELOG.md des getaggten Standes mit (main kann den neuen Abschnitt noch nicht enthalten)
+changelog_path = Path(os.environ["CHANGELOG_FILE"]) if os.environ.get("CHANGELOG_FILE") else manifest_path.parent / "CHANGELOG.md"
 
 
 def changelog_for(ver):
