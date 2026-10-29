@@ -1,0 +1,17 @@
+name: Frage / Question
+description: Du kommst bei der Einrichtung oder Bedienung nicht weiter.
+title: "[Frage] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Deine Frage
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versionen
+      description: Music Look, Jellyfin, Browser/App
+      placeholder: "z. B. Music Look 2.0.2.0, Jellyfin 12.2, Firefox"

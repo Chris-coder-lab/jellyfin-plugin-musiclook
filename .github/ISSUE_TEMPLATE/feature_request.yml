@@ -1,0 +1,26 @@
+name: Wunsch / Feature request
+description: Eine Idee oder Verbesserung.
+title: "[Wunsch] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Was soll Music Look können?
+      description: Beschreibe, was du erreichen möchtest – nicht nur die Lösung, auch das Problem dahinter.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Beispiel (optional)
+      description: Wie macht es eine andere App? Ein Screenshot oder eine kurze Beschreibung hilft.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Wo würdest du es brauchen?
+      multiple: true
+      options:
+        - Computer
+        - Handy/Tablet
+        - Beides

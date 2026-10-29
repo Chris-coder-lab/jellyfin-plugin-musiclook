@@ -1,0 +1,67 @@
+name: Fehler melden / Bug report
+description: Etwas funktioniert nicht wie erwartet.
+title: "[Fehler] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für die Meldung! Je genauer die Angaben, desto schneller lässt sich der Fehler finden.
+        Bitte keine Passwörter, API-Schlüssel oder private Adressen in Texte oder Bilder schreiben.
+  - type: input
+    id: plugin
+    attributes:
+      label: Music-Look-Version
+      description: Dashboard → Plugins → Music Look
+      placeholder: "z. B. 2.0.2.0"
+    validations:
+      required: true
+  - type: input
+    id: jellyfin
+    attributes:
+      label: Jellyfin-Version
+      placeholder: "z. B. 12.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Wo tritt es auf?
+      multiple: true
+      options:
+        - Browser am Computer
+        - Browser am Handy/Tablet
+        - Offizielle Jellyfin-Android-App
+        - Anderes
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser bzw. App und Version
+      placeholder: "z. B. Firefox 130 unter Windows 11"
+  - type: textarea
+    id: what
+    attributes:
+      label: Was ist passiert?
+      description: Was hast du getan, was hast du erwartet, was ist stattdessen passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: |
+        1. …
+        2. …
+  - type: textarea
+    id: console
+    attributes:
+      label: Fehlermeldungen (optional)
+      description: Im Browser F12 → Konsole. Nur Zeilen, die "MusicLook" oder rote Fehler enthalten.
+      render: text
+  - type: textarea
+    id: shots
+    attributes:
+      label: Bilder (optional)
+      description: Bitte vorher persönliche Daten unkenntlich machen.

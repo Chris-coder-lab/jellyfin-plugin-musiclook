@@ -1479,21 +1479,29 @@ body.ml-music .MuiCircularProgress-circle { stroke-width: 2.2 !important; stroke
 .ml-sp-miss-row > .ml-sp-miss-art { flex: 1 1 100%; order: 3; }
 .ml-sp-opts { margin: 12px 0 4px; padding: 10px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
 
-/* ---------- Version 2.0: Weiter hoeren ---------- */
-.ml-resume-slot:empty { display: none; }
-.ml-resume { position: relative; margin: 8px 16px 4px; }
-.ml-resume-main { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 14px 10px 10px; border: 0; border-radius: 10px; background: linear-gradient(90deg, rgba(30, 215, 96, 0.16), #232323 70%); color: inherit; text-align: left; cursor: pointer; font: inherit; }
-@media (hover: hover) { .ml-resume-main:hover { background: linear-gradient(90deg, rgba(30, 215, 96, 0.26), #2c2c2c 70%); } }
-.ml-resume-cover { flex: 0 0 auto; width: 72px; height: 72px; border-radius: 6px; }
-.ml-resume-txt { flex: 1 1 auto; min-width: 0; padding-right: 36px; }
-.ml-resume-kicker { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ml-accent, #1ed760); }
-.ml-resume-title { font-size: 1.02rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ml-resume-sub { font-size: 0.82rem; color: #b3b3b3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ml-resume-bar { margin-top: 6px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
-.ml-resume-bar span { display: block; height: 100%; background: var(--ml-accent, #1ed760); }
-.ml-resume-play { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--ml-accent, #1ed760); color: #000; }
-.ml-resume-x { position: absolute; top: 2px; right: 2px; width: 32px; height: 32px; opacity: 0.7; }
-.ml-wide .ml-resume { margin-left: 24px; margin-right: 24px; max-width: 560px; }
+/* ---------- Version 2.0.2: Leiste "Weiter hoeren" (Seitenleiste bzw. ueber der unteren Leiste) ---------- */
+.ml-rbar { position: relative; flex: 0 0 auto; margin: 0 8px 6px; border-radius: 8px; overflow: hidden; background: linear-gradient(90deg, rgba(30, 215, 96, 0.20), #262626 75%); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.ml-rbar[hidden] { display: none !important; }
+.ml-rbar-main { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 7px 10px 10px 7px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; -webkit-tap-highlight-color: transparent; }
+.ml-rbar-main:disabled { cursor: progress; opacity: 0.92; }
+@media (hover: hover) { .ml-rbar-main:not(:disabled):hover { background: rgba(255, 255, 255, 0.07); } }
+.ml-rbar-cover { flex: 0 0 auto; display: block; width: 44px; height: 44px; border-radius: 4px; overflow: hidden; }
+.ml-rbar-cover .ml-cover, .ml-rbar-cv { width: 100%; height: 100%; border-radius: 4px; }
+.ml-rbar-txt { flex: 1 1 auto; min-width: 0; display: block; padding-right: 20px; }
+.ml-rbar-kicker, .ml-rbar-title, .ml-rbar-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ml-rbar-kicker { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ml-accent, #1ed760); }
+.ml-rbar-title { font-size: 0.9rem; font-weight: 700; }
+.ml-rbar-sub { font-size: 0.76rem; color: var(--ml-muted, #b3b3b3); }
+.ml-rbar-play { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ml-accent, #1ed760); color: #000; }
+.ml-rbar-play svg { width: 20px; height: 20px; }
+.ml-rbar-play .ml-spin { width: 18px; height: 18px; border-width: 2.5px; border-color: rgba(0, 0, 0, 0.25); border-top-color: #000; }
+.ml-rbar-prog { position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; pointer-events: none; }
+.ml-rbar-prog[hidden] { display: none !important; }
+.ml-rbar-prog span { display: block; height: 100%; background: var(--ml-accent, #1ed760); }
+.ml-rbar-x { position: absolute; top: 0; right: 0; width: 26px; height: 26px; opacity: 0.65; }
+.ml-rbar-x svg { width: 14px; height: 14px; }
+.ml-rbar.ml-busy .ml-rbar-x { display: none; }
+.ml-wide .ml-side > .ml-rbar { margin: 8px 8px 0; }
 
 /* ---------- Version 2.0: Genres, intelligente Playlists, Statistik, Einschlaf-Timer ---------- */
 .ml-shelf-more { margin-left: 12px; vertical-align: middle; padding: 4px 12px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: inherit; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }

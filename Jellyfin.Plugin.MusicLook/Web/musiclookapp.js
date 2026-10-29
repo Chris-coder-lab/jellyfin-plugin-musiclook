@@ -4059,7 +4059,6 @@
     var pre = peekLists();
     function paint(libs, pls) {
       body.textContent = '';
-      if (!Net.offline()) Resume.card(body, chip);
       if (chip === 'podcasts') return fillMedia(body, seq, libs.filter(function (l) { return l.cat === 'podcasts'; }), 'podcasts');
       if (chip === 'audiobooks') return fillMedia(body, seq, libs.filter(function (l) { return l.cat === 'audiobooks'; }), 'audiobooks');
       var r = fillMusic(body, seq, libs, pls, chip === 'all');
@@ -6361,18 +6360,18 @@
   }
   /* ---------- Version 2.0: Weiterhören (serverseitig pro Benutzer) ----------
      Was gerade läuft (Warteschlange, aktueller Titel, Position, Herkunft) wird in den Anzeige-Einstellungen des Benutzers auf dem
-     Jellyfin-Server gemerkt (Store, Schlüssel "resume"). Auf jedem Gerät steht dann oben auf der Startseite die Karte "Weiter hören":
+     Jellyfin-Server gemerkt (Store, Schlüssel "resume"). Auf jedem Gerät steht dann ganz oben in der Seitenleiste (am Handy über der unteren Leiste) die Leiste "Weiter hören":
      ein Tipp startet genau dort, wo man aufgehört hat - Playlist, Album, Mix, einzelner Titel oder Hörbuch. */
   (function () {
     var extra = {
       de: {
         resumeLabel: 'Weiter hören', resumeBook: 'Hörbuch fortsetzen', resumePod: 'Folge fortsetzen',
-        resumeAt: 'bei {0} von {1}', resumeFromCtx: 'aus {0}', resumeHide: 'Ausblenden', resumeStarted: 'Wiedergabe wird fortgesetzt …',
+        resumeAt: 'bei {0} von {1}', resumeFromCtx: 'aus {0}', resumeHide: 'Ausblenden', resumeStarted: 'Wiedergabe wird fortgesetzt …', resumeStarting: 'wird gestartet …', resumeFailed: 'Fortsetzen hat nicht geklappt. Tippe noch einmal.',
         resumeOn: 'zuletzt auf {0}', resumeItems: '{0} Titel in der Warteschlange'
       },
       en: {
         resumeLabel: 'Continue listening', resumeBook: 'Continue audiobook', resumePod: 'Continue episode',
-        resumeAt: 'at {0} of {1}', resumeFromCtx: 'from {0}', resumeHide: 'Hide', resumeStarted: 'Resuming playback …',
+        resumeAt: 'at {0} of {1}', resumeFromCtx: 'from {0}', resumeHide: 'Hide', resumeStarted: 'Resuming playback …', resumeStarting: 'starting …', resumeFailed: 'Could not resume. Tap to try again.',
         resumeOn: 'last on {0}', resumeItems: '{0} tracks in the queue'
       }
     };
@@ -6480,61 +6479,139 @@
         return at >= 0 ? { ids: list, i: at } : { ids: ids, i: 0 };
       }, function () { return { ids: ids, i: 0 }; });
     }
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    // Die Sitzung dieses Geraets: direkt nach dem Oeffnen der App meldet der Web-Client seine Faehigkeiten (und oeffnet die Verbindung zum Server)
+    // etwas spaeter. Vorher an die Sitzung geschickte Abspielbefehle gehen ins Leere - deshalb hier kurz warten, bis sie fernsteuerbar ist.
+    function readySession(tries) {
+      return getSession(true).then(function (s) { return s; }, function () { return null; }).then(function (s) {
+        if (s && s.SupportsRemoteControl !== false) return s;
+        if (tries <= 0) return s;
+        return wait(800).then(function () { return readySession(tries - 1); });
+      });
+    }
+    // Falls der Client die Startposition ignoriert hat: nach kurzer Zeit nachspulen.
+    function fixPosition(pos) {
+      if (!(pos >= 10)) return Promise.resolve();
+      return wait(2000).then(function () { return Player.sessionNow(); }).then(function (s) {
+        var ticks = s && s.PlayState && s.PlayState.PositionTicks;
+        if (typeof ticks !== 'number' || ticks / 1e7 >= pos - 5) return null;
+        return withSession(function (se) { return sessionCall(se, 'Playing/Seek', { seekPositionTicks: Math.round(pos * 1e7) }); });
+      }).then(null, function () { /* Position ist nur eine Zugabe */ });
+    }
+    // Ein Versuch: Sitzung abwarten, Warteschlange starten, pruefen, dass der Titel wirklich laeuft. Bis zu drei Versuche.
+    function attempt(v, q, pos, n) {
+      return readySession(n === 0 ? 8 : 4).then(function () {
+        return playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '', quiet: true });
+      }).then(function (ok) {
+        if (ok === false) return false;
+        return waitForPlaying(q.ids[q.i], 10);
+      }).then(function (playing) {
+        if (playing) return fixPosition(pos).then(function () { return true; });
+        if (n >= 2) return false;
+        return wait(1200).then(function () { return attempt(v, q, pos, n + 1); });
+      });
+    }
+    var running = null, holdUntil = 0;
     function play(v) {
+      if (running) return running;   // ein zweiter Tipp waehrend des Startens tut nichts
       var ids = idList(v);
       if (!ids.length) return Promise.resolve(false);
       var pos = v.pos || 0;
       if (v.dur && pos > v.dur - 5) pos = 0;   // am Ende des Titels beginnt er wieder von vorn
-      toast(t('resumeStarted'));
-      return fullQueue(v, ids).then(function (q) {
-        return playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '' });
+      setBusy(true);
+      running = fullQueue(v, ids).then(function (q) { return attempt(v, q, pos, 0); }).then(null, function () { return false; }).then(function (ok) {
+        running = null; setBusy(false);
+        if (ok) holdUntil = Date.now() + 20000;
+        else toast(t('resumeFailed'));
+        paint();
+        return ok;
       });
+      return running;
     }
 
-    function cardEl(v) {
-      var box = el('div', 'ml-resume');
-      var b = btn('ml-resume-main');
-      var url = v.cid ? imgUrl(v.cid, null, 160) : null;
-      b.appendChild(cover(url, 'ml-resume-cover'));
-      var txt = el('div', 'ml-resume-txt');
-      txt.appendChild(el('div', 'ml-resume-kicker', catLabel(v)));
-      txt.appendChild(el('div', 'ml-resume-title', v.title || ''));
-      var sub = [v.artist, v.name ? t('resumeFromCtx', v.name) : ''].filter(Boolean).join(' · ');
-      if (sub) txt.appendChild(el('div', 'ml-resume-sub', sub));
-      if (v.dur > 0) {
-        var meta = el('div', 'ml-resume-sub', t('resumeAt', fmtClock(v.pos || 0), fmtClock(v.dur)));
-        txt.appendChild(meta);
-        var bar = el('div', 'ml-resume-bar'), fill = el('span');
-        fill.style.width = clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%';
-        bar.appendChild(fill);
-        txt.appendChild(bar);
-      }
-      b.appendChild(txt);
-      var pb = el('span', 'ml-resume-play'); pb.appendChild(icon('play'));
-      b.appendChild(pb);
-      b.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || ''));
-      b.addEventListener('click', function () { play(v).then(function () { if (box.parentNode) box.parentNode.removeChild(box); }); });
-      box.appendChild(b);
-      var x = iconBtn('close', t('resumeHide'), 'ml-resume-x', function () { clear(); if (box.parentNode) box.parentNode.removeChild(box); });
-      box.appendChild(x);
-      return box;
-    }
-    // Karte oben auf der Startseite (nur, wenn gerade nichts läuft). Der Platz wird sofort reserviert, der Inhalt kommt, sobald der Stand gelesen ist.
-    function card(host, chip) {
-      var slot = el('div', 'ml-resume-slot');
-      host.appendChild(slot);
-      hook();
-      if (Net && Net.offline()) return slot;
-      load().then(function (v) {
-        if (!v || !slot.isConnected || !matchesChip(v, chip)) return;
-        if (Player.isPlayingNow() || Player.hasUi()) return;
-        if (Date.now() - (v.ts || 0) > 90 * 86400000) return;
-        if (!idList(v).length) return;
-        slot.appendChild(cardEl(v));
+    /* ---------- Leiste "Weiter hören" ---------- */
+    // Sitzt dort, wo sonst der Player ist: am Computer ganz oben in der Seitenleiste (ueber Start und Suche), am Handy ueber der unteren Leiste.
+    // Eine einzige Flaeche zum Tippen; verschwindet erst, wenn die Wiedergabe wirklich laeuft (oder der Stand ausgeblendet wird).
+    var barEl = null, ui = {}, barFor = null, lastRefresh = 0, painter = null;
+    function ensureBar() {
+      if (barEl) return barEl;
+      barEl = el('div', 'ml-rbar');
+      barEl.hidden = true;
+      ui.main = btn('ml-rbar-main');
+      ui.cover = el('span', 'ml-rbar-cover');
+      var txt = el('span', 'ml-rbar-txt');
+      ui.kicker = el('span', 'ml-rbar-kicker');
+      ui.title = el('span', 'ml-rbar-title');
+      ui.sub = el('span', 'ml-rbar-sub');
+      add(txt, ui.kicker, ui.title, ui.sub);
+      ui.play = el('span', 'ml-rbar-play');
+      ui.play.appendChild(icon('play'));
+      add(ui.main, ui.cover, txt, ui.play);
+      ui.main.addEventListener('click', function () { if (cur && !running) play(cur); });
+      ui.prog = el('span', 'ml-rbar-prog');
+      ui.fill = el('span');
+      ui.prog.appendChild(ui.fill);
+      ui.x = iconBtn('close', t('resumeHide'), 'ml-rbar-x', function () {
+        if (running) return;
+        clear(); barFor = null; paint();
       });
-      return slot;
+      add(barEl, ui.main, ui.prog, ui.x);
+      return barEl;
     }
-    return { load: load, note: note, flush: flush, save: save, card: card, play: play, clear: clear, get: function () { return cur; }, hook: hook };
+    function subLine(v) { return v.artist || (v.name ? t('resumeFromCtx', v.name) : ''); }
+    function kickerLine(v) { return catLabel(v) + (v.pos >= 1 ? ' · ' + fmtClock(v.pos) : ''); }
+    function setBusy(on) {
+      if (!barEl) return;
+      barEl.classList.toggle('ml-busy', !!on);
+      ui.main.disabled = !!on;
+      ui.main.setAttribute('aria-busy', on ? 'true' : 'false');
+      ui.play.textContent = '';
+      if (on) ui.play.appendChild(el('span', 'ml-spin')); else ui.play.appendChild(icon('play'));
+      if (cur) ui.sub.textContent = on ? t('resumeStarting') : subLine(cur);
+    }
+    function paint() {
+      if (!barEl) return;
+      var v = cur;
+      var show = !!v && !!idList(v).length && !(Net && Net.offline()) && Date.now() - (v.ts || 0) < 90 * 86400000 &&
+        (!!running || (!Player.isPlayingNow() && !Player.hasUi() && Date.now() >= holdUntil));
+      if (show && barFor !== v) {
+        barFor = v;
+        ui.cover.textContent = '';
+        ui.cover.appendChild(cover(v.cid ? imgUrl(v.cid, null, 120) : null, 'ml-rbar-cv'));
+        ui.kicker.textContent = kickerLine(v);
+        ui.main.title = (v.dur > 0 ? t('resumeAt', fmtClock(v.pos || 0), fmtClock(v.dur)) : '') + (v.name ? (v.dur > 0 ? ' · ' : '') + t('resumeFromCtx', v.name) : '');
+        ui.title.textContent = v.title || '';
+        ui.sub.textContent = running ? t('resumeStarting') : subLine(v);
+        ui.fill.style.width = v.dur > 0 ? clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%' : '0%';
+        ui.main.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || '') + (v.artist ? ' – ' + v.artist : ''));
+        ui.prog.hidden = !(v.dur > 0);
+      }
+      if (barEl.hidden === show) barEl.hidden = !show;
+    }
+    // Stand vom Server neu lesen (z. B. nach dem Wechsel zurueck in die App), ohne einen neueren lokalen Stand zu ueberschreiben.
+    function refresh() {
+      if (Net && Net.offline()) return Promise.resolve();
+      lastRefresh = Date.now();
+      return Store.get(KEY, null, true).then(function (v) {
+        if (valid(v)) { if (!cur || (v.ts || 0) >= (cur.ts || 0)) { cur = v; loadP = Promise.resolve(v); } }
+        else if (!v && cur && !want) { cur = null; loadP = Promise.resolve(null); }
+        paint();
+      }, function () { /* naechster Versuch */ });
+    }
+    // Die Leiste in den gegebenen Rahmen setzen (Seitenleiste oder untere Leiste).
+    function mount(host) {
+      ensureBar();
+      hook();
+      if (host && barEl.parentNode !== host) host.insertBefore(barEl, host.firstChild);
+      if (!painter) painter = setInterval(function () { if (barEl && barEl.isConnected) paint(); }, 2000);
+      load().then(function () { paint(); });
+      return barEl;
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && barEl && barEl.isConnected && !running && Date.now() - lastRefresh > 15000) refresh();
+    });
+    window.addEventListener('online', function () { if (barEl && barEl.isConnected && !running) refresh(); });
+    return { load: load, refresh: refresh, note: function (s) { note(s); paint(); }, flush: flush, save: save, mount: mount, paint: paint, play: play, clear: clear, get: function () { return cur; }, hook: hook };
   })();
   /* ---------- Version 2.0: Intelligente Playlists, Genres, Statistik, ähnliche Künstler, Einschlaf-Timer ----------
      Alles läuft im Browser über Jellyfins offizielle Schnittstellen (Items, Genres, Artists/{id}/Similar); die Regeln der intelligenten
@@ -7275,10 +7352,7 @@
       Promise.all([Promise.all(libs.map(function (l) { return loadLib(l, cat); })), genre]).then(function (res) {
         if (seq !== state.view) return;
         var parts = res[0];
-        // Resume.card steht schon im Rahmen; hier nur die Abschnitte neu aufbauen
-        var keep = body.querySelector('.ml-resume-slot');
         body.textContent = '';
-        if (keep) body.appendChild(keep);
         var any = false;
         function add(b) { if (b) any = true; }
         var recent = [].concat.apply([], parts.map(function (p) { return p.recent; }));
@@ -9982,6 +10056,7 @@
     });
     bottomBar.appendChild(nav);
     root.appendChild(bottomBar);
+    if (!isWide()) Resume.mount(bottomBar);
     document.body.appendChild(root);
     if (isWide()) { ensureSide(); root.insertBefore(side, scroller); mountDtop(); }
     Player.mount();
@@ -10049,6 +10124,7 @@
     more.addEventListener('click', openAppMenu);
     foot.appendChild(more);
     add(side, navBox, libBox, foot);
+    Resume.mount(side);
     return side;
   }
   /* Kopfleiste wie bei Spotify am Computer: Home-Knopf und mittiges Suchfeld ueber der ganzen Breite */
@@ -10127,6 +10203,7 @@
     layout();
     Player.mount();
     Player.repaint();
+    Resume.mount(isWide() ? side : bottomBar);
     if (!root.hidden) {
       if (isWide() && !side.parentNode) root.insertBefore(side, scroller);
       if (isWide()) fillSide();

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 2.0.2.0
+- **Weiter hören: neuer Platz.** Die Karte oben auf der Startseite entfällt. Die Leiste sitzt dort, wo sonst der Player ist: am Computer ganz oben in der Seitenleiste (über Start und Suche), am Handy direkt über der unteren Leiste. Sie zeigt Cover, Titel, Künstler, die gemerkte Position („Weiter hören · 12:30“), einen dünnen Fortschrittsbalken und den Play-Knopf. Bei Hörbüchern und Podcasts steht „Hörbuch fortsetzen“ bzw. „Folge fortsetzen“. Sie verschwindet, sobald etwas läuft, und erscheint wieder, wenn nichts mehr läuft; mit dem kleinen Kreuz wird der Stand gelöscht.
+- **Weiter hören: zuverlässiger.** Leiste und Play-Knopf sind eine einzige Tippfläche (vorher lag ein Knopf im Knopf). Beim Starten ist die Leiste gesperrt und zeigt „wird gestartet …“, schnelles Mehrfachtippen startet nur einmal. Vor dem Befehl wartet das Plugin (bis ca. 6 s), bis die Sitzung dieses Geräts fernsteuerbar ist (direkt nach dem Öffnen der App meldet der Web-Client das erst etwas später). Danach wird geprüft, dass der Titel wirklich läuft; sonst bis zu zwei Wiederholungen. Ignoriert der Client die Startposition, wird nachgespult. Klappt es nicht, bleibt die Leiste stehen und meldet „Fortsetzen hat nicht geklappt“ (vorher verschwand die Karte trotzdem).
+- **Weiter hören: aktuell bleiben.** Beim Zurückkehren in die App und bei wiederhergestellter Verbindung wird der Stand neu vom Server gelesen, ohne einen neueren lokalen Stand zu überschreiben.
+- **GitHub-Seite:** README mit Bildern (Beispieldaten), Badges, „Auf einen Blick“ und Fragen und Antworten; Vorlagen für Fehler, Wünsche und Fragen; `CONTRIBUTING.md`, `SECURITY.md`; Vorschaubild unter `docs/social-preview.png`.
+
 ## 2.0.1.0
 - **Alle Bibliotheken am Computer:** Die versteckte Spotify-Ansicht blieb sichtbar, weil `.ml-app.ml-wide { display: grid }` das `hidden`-Attribut überstimmte. Jetzt gilt `display: none !important` für die versteckte Ansicht; zusätzlich wird auch beendet, wenn Jellyfin die Adresse selbst ändert (z. B. mit Zusatz)
 - **Bibliothek links (Alben, Künstler):** automatisches Nachladen beim Scrollen, 100 Einträge pro Seite (vorher nur 60 plus „Mehr laden"-Knopf); gilt auch für die Bibliothek in der Handy-Ansicht
