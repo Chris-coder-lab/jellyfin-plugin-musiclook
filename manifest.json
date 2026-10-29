@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "2.1.0.0",
+        "changelog": "Music Look 2.1.0.0",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v2.1.0.0/musiclook_2.1.0.0.zip",
+        "checksum": "081940E2ACBE2D42415453EF9DE811FB",
+        "timestamp": "2026-10-29T13:47:22Z"
+      },
+      {
         "version": "2.0.2.0",
         "changelog": "- **Weiter hören: neuer Platz.** Die Karte oben auf der Startseite entfällt. Die Leiste sitzt dort, wo sonst der Player ist: am Computer ganz oben in der Seitenleiste (über Start und Suche), am Handy direkt über der unteren Leiste. Sie zeigt Cover, Titel, Künstler, die gemerkte Position („Weiter hören · 12:30“), einen dünnen Fortschrittsbalken und den Play-Knopf. Bei Hörbüchern und Podcasts steht „Hörbuch fortsetzen“ bzw. „Folge fortsetzen“. Sie verschwindet, sobald etwas läuft, und erscheint wieder, wenn nichts mehr läuft; mit dem kleinen Kreuz wird der Stand gelöscht.\n- **Weiter hören: zuverlässiger.** Leiste und Play-Knopf sind eine einzige Tippfläche (vorher lag ein Knopf im Knopf). Beim Starten ist die Leiste gesperrt und zeigt „wird gestartet …“, schnelles Mehrfachtippen startet nur einmal. Vor dem Befehl wartet das Plugin (bis ca. 6 s), bis die Sitzung dieses Geräts fernsteuerbar ist (direkt nach dem Öffnen der App meldet der Web-Client das erst etwas später). Danach wird geprüft, dass der Titel wirklich läuft; sonst bis zu zwei Wiederholungen. Ignoriert der Client die Startposition, wird nachgespult. Klappt es nicht, bleibt die Leiste stehen und meldet „Fortsetzen hat nicht geklappt“ (vorher verschwand die Karte trotzdem).\n- **Weiter hören: aktuell bleiben.** Beim Zurückkehren in die App und bei wiederhergestellter Verbindung wird der Stand neu vom Server gelesen, ohne einen neueren lokalen Stand zu überschreiben.\n- **GitHub-Seite:** README mit Bildern (Beispieldaten), Badges, „Auf einen Blick“ und Fragen und Antworten; Vorlagen für Fehler, Wünsche und Fragen; `CONTRIBUTING.md`, `SECURITY.md`; Vorschaubild unter `docs/social-preview.png`.",
         "targetAbi": "12.0.0.0",
