@@ -6,6 +6,28 @@
   if (window.__musicLookLoaded) return;
   window.__musicLookLoaded = true;
 
+  /* ---------- Aeltere Browser-Engines (z. B. Jellyfin Media Player mit QtWebEngine 5) ----------
+     Fehlt Flex-"gap" (Chromium < 84) oder "aspect-ratio" (< 88), setzt das Script Klassen am <html>-Element; musiclook.css bringt dazu Ersatzregeln mit. */
+  (function () {
+    function run() {
+      try {
+        var root = document.documentElement, body = document.body;
+        if (!root || !body) return;
+        var probe = document.createElement('div');
+        probe.style.cssText = 'display:flex;flex-direction:column;row-gap:1px;position:absolute;left:-99px;top:0;visibility:hidden;';
+        probe.appendChild(document.createElement('div'));
+        probe.appendChild(document.createElement('div'));
+        body.appendChild(probe);
+        var gapOk = probe.scrollHeight === 1;
+        body.removeChild(probe);
+        var arOk = !!(window.CSS && CSS.supports && CSS.supports('aspect-ratio', '1 / 1'));
+        if (!gapOk) root.classList.add('ml-nogap');
+        if (!arOk) root.classList.add('ml-noar');
+      } catch (e) { /* ohne Erkennung gilt die normale Darstellung */ }
+    }
+    if (document.body) run(); else document.addEventListener('DOMContentLoaded', run);
+  })();
+
   var ID_RE = /^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var CODE_RE = /^[A-HJKMNP-Z2-9]{6}$/;
   var MUSIC_TYPES = ['MusicAlbum', 'MusicArtist', 'Audio', 'MusicGenre'];

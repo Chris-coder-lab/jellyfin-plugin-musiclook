@@ -20,7 +20,7 @@
 
 | Start (Computer) | Weiter hören (Computer) |
 | --- | --- |
-| <img src="docs/screenshots/desktop-start.png" alt="Startseite am Computer"> | <img src="docs/screenshots/desktop-resume.png" alt="Leiste „Weiter hören“ ganz oben in der Seitenleiste"> |
+| <img src="docs/screenshots/desktop-start.png" alt="Startseite am Computer"> | <img src="docs/screenshots/desktop-resume.png" alt="Leiste „Weiter hören“ unten in der Wiedergabeleiste"> |
 
 | Handy: Start | Handy: Weiter hören | Handy: Player |
 | --- | --- | --- |
@@ -28,7 +28,7 @@
 
 ## Auf einen Blick
 - **Spotify-Look** für Handy, Tablet und Computer (ab 900 px Breite mit Seitenleiste, Kopfleiste und Player-Leiste), Start · Suche · Bibliothek, Chips Alle · Musik · Podcasts · Hörbücher.
-- **Weiter hören:** Was läuft (samt Playlist, Position, Hörbuch-Kapitel), merkt sich dein Jellyfin-Konto auf dem Server. App geschlossen, anderes Gerät – die Leiste ganz oben bringt dich mit einem Tipp zurück an die Stelle.
+- **Weiter hören:** Was läuft (samt Playlist, Position, Hörbuch-Kapitel), merkt sich dein Jellyfin-Konto auf dem Server. App geschlossen, anderes Gerät – die Leiste unten (dort, wo sonst der Player ist) bringt dich mit einem Tipp zurück an die Stelle.
 - **Spotify-Playlists importieren** (Link, Titel-Links, Spotify-Datenexport, CSV oder Liste), danach aktualisierbar.
 - **Mixe, smarte Playlists, Genres, Statistik, Ähnliche Künstler, Einschlaf-Timer, M3U-Export/-Import.**
 - **Player** mit Songtext (LRC/TXT), Warteschlange, Geräte-Wechsel, Geschwindigkeit, **10-Band-Equalizer**.
@@ -37,6 +37,12 @@
 - **Podcasts und Hörbücher** getrennt von der Musik, mit eigenen Abschnitten und Fortschritt.
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
+
+## Neu in 2.1
+- **Weiter hören unten im Player:** Läuft nichts, zeigt die untere Wiedergabeleiste (am Handy die Leiste über der unteren Navigation) den zuletzt gehörten Titel mit Cover, Position und Abspielknopf. Ein Tipp macht genau dort weiter. Sobald etwas läuft, übernimmt die normale Leiste. Oben links über den Playlists steht nichts mehr.
+- **Konto oben rechts:** Auf dem Computer gibt es nur noch das **Benutzerbild** (ohne Namen) – es öffnet die Jellyfin-Kontoeinstellungen – und daneben ein **Zahnrad** für das Menü mit den Plugin-Einstellungen. Die Leiste „Menü“ unten links entfällt. Am Handy bleibt das Benutzerbild in der Kopfzeile.
+- **Bibliothek sortieren und anzeigen wie bei Spotify:** Ein Klick auf **Zuletzt** öffnet ein Menü: *Sortieren nach* **Zuletzt** (zuletzt geöffnet oder abgespielt), **Kürzlich hinzugefügt**, **Alphabetisch**, **Ersteller\*in** und *Ansicht* mit vier Darstellungen (Liste, kompakte Liste, kleines und großes Raster). Auswahl wird pro Konto gemerkt.
+- **Jellyfin Media Player (Windows) und ältere Browser-Engines:** Die Oberfläche greift auf Ausweichregeln zurück, wenn `gap` bei Flexbox oder `aspect-ratio` fehlen (Abstände, quadratische Cover, Chips). Im Test nur mit Chromium nachgestellt, nicht in der echten App geprüft.
 
 ## Neu in 2.0.2
 - **Weiter hören überarbeitet:** Die Karte oben auf der Startseite ist weg. Die Leiste sitzt jetzt dort, wo sonst der Player ist – am Computer ganz oben in der Seitenleiste (über Start und Suche), am Handy direkt über der unteren Leiste –, als hättest du die App nur kurz geschlossen.
@@ -73,7 +79,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.0.2.0 && git push origin v2.0.2.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.1.0.0 && git push origin v2.1.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
@@ -121,7 +127,7 @@ Dann im Katalog Music Look installieren, Jellyfin neu starten und die Web-Oberfl
 
 **Hintergrund:** Im Musik-Bereich wird das Hintergrundbild des Jellyfin-Themes („purple haze“) vollständig entfernt, damit nichts mehr durchscheint.
 
-**Computer-Ansicht (ab 900 px Fensterbreite):** links die Bibliothek mit Chips (Playlists · Alben · Künstler) und „+“ für neue Playlists, in der Mitte der Inhalt mit Farbverlauf und Titeltabelle (Nummer/Abspielen, Titel, Album, Dauer, Herz, Menü), rechts die Ansicht des laufenden Titels (Cover, Künstlerkarte), unten die Player-Leiste (Titel, Zufall, Zurück, Pause, Weiter, Wiederholen, Fortschritt, Lautstärke, Geräte, Warteschlange, Vollbild). Unter 900 px bleibt es die Handy-Ansicht. Das Profilmenü (unten links „Menü“) enthält zusätzlich Dashboard und Einstellungen.
+**Computer-Ansicht (ab 900 px Fensterbreite):** links die Bibliothek mit Chips (Playlists · Alben · Künstler) und „+“ für neue Playlists, in der Mitte der Inhalt mit Farbverlauf und Titeltabelle (Nummer/Abspielen, Titel, Album, Dauer, Herz, Menü), rechts die Ansicht des laufenden Titels (Cover, Künstlerkarte), unten die Player-Leiste (Titel, Zufall, Zurück, Pause, Weiter, Wiederholen, Fortschritt, Lautstärke, Geräte, Warteschlange, Vollbild). Unter 900 px bleibt es die Handy-Ansicht. Oben rechts sitzen das **Benutzerbild** (Jellyfin-Kontoeinstellungen, Startseite, Dashboard, Abmelden) und daneben das **Zahnrad** (Menü mit Einstellungen, Equalizer, Downloads, Dashboard und mehr); die Bibliothek links lässt sich über **Zuletzt** sortieren und als Liste, kompakte Liste oder Raster anzeigen.
 
 **Zurück-Taste:** Titelansicht, Warteschlange, Menüs und Dialoge sind eigene Schritte im Browserverlauf. „Zurück“ (auch die Zurück-Geste auf dem Handy) schließt zuerst sie und führt nie ungewollt zur Jellyfin-Startseite; der Pfeil in Playlists führt zur vorherigen Seite der App.
 

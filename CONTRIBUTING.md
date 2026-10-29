@@ -10,7 +10,7 @@ Danke, dass du helfen möchtest! Music Look ist ein Plugin für Jellyfin 12.x.
 - Eine Änderung sollte klein und nachvollziehbar sein, ein Pull Request möglichst nur ein Thema behandeln.
 - Das Projekt ist nur für **Jellyfin 12.x** gedacht; Rücksicht auf ältere Versionen ist nicht nötig.
 - Der Sortierer für den Eingangsordner (`tools/sort_inbox.py`) hat Tests: `cd tools && python3 -m unittest test_sort_inbox` (braucht `ffmpeg`).
-- Releases entstehen durch einen Tag mit **vier** Zahlen (z. B. `v2.0.2.0`); der Workflow `.github/workflows/build.yml` baut, veröffentlicht und trägt die Version in `manifest.json` ein.
+- Releases entstehen durch einen Tag mit **vier** Zahlen (z. B. `v2.1.0.0`); der Workflow `.github/workflows/build.yml` baut, veröffentlicht und trägt die Version in `manifest.json` ein.
 
 ## Ton
 Freundlich bleiben. Das Plugin ist nicht von Spotify; bitte keine Spotify-Inhalte (Cover, Logos, Texte) in Pull Requests übernehmen.

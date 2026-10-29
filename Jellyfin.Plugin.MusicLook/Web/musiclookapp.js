@@ -144,7 +144,7 @@
       queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
       searchPh: 'Was möchtest du hören?', searchHint: 'Suche nach Titeln, Alben, Künstlern und Playlists.', noResults: 'Keine Treffer für „{0}“.',
-      loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung wechseln', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
+      loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung und Ansicht', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
       nowPlaying: 'Wiedergabe', queue: 'Warteschlange', queueEmpty: 'Die Warteschlange ist leer.', speedTitle: 'Geschwindigkeit', speedNormal: 'Normal',
       volume: 'Lautstärke', repeat: 'Wiederholen', repeatOne: 'Titel wiederholen', repeatOff: 'Wiederholen aus', noPlayer: 'Es läuft gerade nichts.',
       infoTitle: 'Songinfos', iTitle: 'Titel', iArtist: 'Künstler', iAlbum: 'Album', iYear: 'Jahr', iLength: 'Länge', iFormat: 'Format', iBitrate: 'Bitrate',
@@ -188,7 +188,7 @@
       queued: 'Added to queue', playFailed: 'Playback could not be started', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
       searchPh: 'What do you want to listen to?', searchHint: 'Search for tracks, albums, artists and playlists.', noResults: 'No results for "{0}".',
-      loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Change sort order', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
+      loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Sort order and view', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
       nowPlaying: 'Now playing', queue: 'Queue', queueEmpty: 'The queue is empty.', speedTitle: 'Speed', speedNormal: 'Normal',
       volume: 'Volume', repeat: 'Repeat', repeatOne: 'Repeat track', repeatOff: 'Repeat off', noPlayer: 'Nothing is playing.',
       infoTitle: 'Song info', iTitle: 'Title', iArtist: 'Artist', iAlbum: 'Album', iYear: 'Year', iLength: 'Length', iFormat: 'Format', iBitrate: 'Bitrate',
@@ -234,6 +234,7 @@
     edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     del: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
     album: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z',
+    settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
     person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
     speed: 'M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44zm-9.79 6.84a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z',
     info: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z',
@@ -1821,6 +1822,7 @@
     }
     // Merkt, aus welcher Playlist (oder Lieblingssongs) hier gestartet wird; so ist die gruene Markierung auf diesem Geraet eindeutig.
     playIntent = opts.ctx ? { key: String(opts.ctx), ids: (ids.length <= PLAY_CHUNK ? ids : ids.slice(start)).slice() } : null;
+    if (opts.ctx && typeof Recent !== 'undefined') Recent.note(opts.ctx);
     if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto();
     var head, startIndex, rest = [];
     if (ids.length <= PLAY_CHUNK) { head = ids; startIndex = start; }
@@ -3707,7 +3709,7 @@
         emptyLiked: 'Tippe bei einem Titel auf das Herz, dann erscheint er hier.',
         likedHint: 'Playlist • {0}',
         colNum: '#', colTitle: 'Titel', colAlbum: 'Album', colDuration: 'Dauer', colAdded: 'Hinzugefügt am',
-        yourLib: 'Deine Bibliothek', dashboardLbl: 'Dashboard', settingsLbl: 'Einstellungen', nextTrack: 'Nächster Titel', fromQueue: 'Aus der Warteschlange', nothingPlaying: 'Es läuft gerade nichts.',
+        yourLib: 'Deine Bibliothek', dashboardLbl: 'Dashboard', settingsLbl: 'Einstellungen', accountLbl: 'Konto', accountSettings: 'Jellyfin-Kontoeinstellungen', signOut: 'Abmelden', nextTrack: 'Nächster Titel', fromQueue: 'Aus der Warteschlange', nothingPlaying: 'Es läuft gerade nichts.',
         openFullView: 'Vollbild-Ansicht', hideRight: 'Ansicht ausblenden', showRight: 'Wiedergabe-Ansicht einblenden',
         bookLabel: 'Hörbuch', chapters: 'Kapitel', chapter1: '1 Kapitel', chaptersN: '{0} Kapitel', openFolder: 'Ordner öffnen',
         audiobookDiag: 'Gefundene Bibliotheken auf deinem Server:', diagNone: 'Keine Bibliothek gefunden.',
@@ -3722,7 +3724,7 @@
         emptyLiked: 'Tap the heart on a track and it will show up here.',
         likedHint: 'Playlist • {0}',
         colNum: '#', colTitle: 'Title', colAlbum: 'Album', colDuration: 'Length', colAdded: 'Date added',
-        yourLib: 'Your library', dashboardLbl: 'Dashboard', settingsLbl: 'Settings', nextTrack: 'Next track', fromQueue: 'From the queue', nothingPlaying: 'Nothing is playing.',
+        yourLib: 'Your library', dashboardLbl: 'Dashboard', settingsLbl: 'Settings', accountLbl: 'Account', accountSettings: 'Jellyfin account settings', signOut: 'Sign out', nextTrack: 'Next track', fromQueue: 'From the queue', nothingPlaying: 'Nothing is playing.',
         openFullView: 'Full screen view', hideRight: 'Hide view', showRight: 'Show now playing view',
         bookLabel: 'Audiobook', chapters: 'Chapters', chapter1: '1 chapter', chaptersN: '{0} chapters', openFolder: 'Open folder',
         audiobookDiag: 'Libraries found on your server:', diagNone: 'No library found.',
@@ -3735,7 +3737,7 @@
   })();
 
   /* ---------- Zustand ---------- */
-  var state = { libraryId: null, tab: 'home', chip: 'all', libSeg: 'playlists', libSort: (function () { try { return window.localStorage.getItem('ml.libsort') === 'alpha' ? 'alpha' : 'recent'; } catch (e) { return 'recent'; } })(), classic: false, key: '', view: 0, trail: [] };
+  var state = { libraryId: null, tab: 'home', chip: 'all', libSeg: 'playlists', libSort: 'recent', libView: 'list', classic: false, key: '', view: 0, trail: [] };
   // Die klassische Ansicht gilt nur bis zum Neustart der App/des Tabs (sessionStorage); ein alter, dauerhaft gespeicherter Wert wird entfernt.
   ML.safeStore('ml.classic', null);
   try { if (window.sessionStorage.getItem('ml.classic') === '1') state.classic = true; } catch (e) { /* ohne Speicher: Spotify-Ansicht */ }
@@ -3994,15 +3996,30 @@
     });
   }
 
-  function profileButton() {
+  /* Konto-Menue (Benutzerbild oben rechts auf dem Computer): fuehrt zu den Jellyfin-Kontoeinstellungen */
+  function openAccountMenu() {
+    loadMe().then(function (me) {
+      var av = avatar(me.id, me.name);
+      av.classList.add('ml-big');
+      var canOut = !!(window.Dashboard && typeof window.Dashboard.logout === 'function');
+      openMenu({ title: me.name || t('accountLbl'), subtitle: t('accountLbl'), coverEl: av }, [
+        { icon: 'person', label: t('accountSettings'), run: function () { go('#/mypreferencesmenu'); } },
+        { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
+        { hidden: !me.admin, icon: 'info', label: t('dashboardLbl'), run: function () { go('#/dashboard'); } },
+        { hidden: !canOut, icon: 'close', label: t('signOut'), run: function () { try { window.Dashboard.logout(); } catch (e) { /* Abmelden nicht moeglich */ } } }
+      ]);
+    });
+  }
+
+  function profileButton(onClick, label) {
     var b = btn('ml-profile-btn');
-    b.setAttribute('aria-label', t('appMenu'));
+    b.setAttribute('aria-label', label || t('appMenu'));
     b.appendChild(avatar(uid(), ''));
     loadMe().then(function (me) {
       b.textContent = '';
       b.appendChild(avatar(me.id || uid(), me.name));
     });
-    b.addEventListener('click', openAppMenu);
+    b.addEventListener('click', onClick || openAppMenu);
     return b;
   }
 
@@ -4726,6 +4743,7 @@
   /* ---------- Bibliothek ---------- */
   function libRow(opts) {
     var b = btn('ml-list-row' + (opts.cls ? ' ' + opts.cls : ''));
+    if (opts.title) b.title = opts.title;
     if (opts.id) b.dataset.id = nid(opts.id);
     if (opts.id && opts.coverEl) b.dataset.ctx = nid(opts.id);   // nur Playlists (mit eigenem Cover) und Lieblingssongs
     b.appendChild(opts.coverEl || cover(opts.img, 'ml-row-cover' + (opts.round ? ' ml-round' : '')));
@@ -4742,12 +4760,20 @@
   function buildLibList(list, alive, retry) {
     if (Net.offline()) { OFFV.libList(list, alive); return; }
     list.textContent = '';
-    var seg = state.libSeg;
+    LibCtl.applyView(list);
+    var seg = state.libSeg, sortKey = LibCtl.sortFor(seg), token = (list.__mlTok = (list.__mlTok || 0) + 1);
+    var inner = alive;
+    alive = function () { return inner() && list.__mlTok === token; };
+    if (sortKey === 'recent' && !Recent.order().length) { Recent.load().then(function () { if (alive()) buildLibBody(list, alive, retry, seg, sortKey); }); list.appendChild(loaderEl()); return; }
+    buildLibBody(list, alive, retry, seg, sortKey);
+  }
+  function buildLibBody(list, alive, retry, seg, sortKey) {
+    list.textContent = '';
     if (seg === 'playlists') {
       var pre = peekLists(), psig = null;
       function paintPls(pls) {
         list.textContent = '';
-        if (state.libSort === 'alpha') pls = pls.slice().sort(function (x, y) { return String(x.item.Name || '').localeCompare(String(y.item.Name || ''), undefined, { sensitivity: 'base', numeric: true }); });
+        pls = LibCtl.sortPlaylists(pls, sortKey);
         list.appendChild(libRow({ id: 'liked', coverEl: likedCoverEl('ml-row-cover'), title: t('liked'), sub: t('playlist'), onClick: function () { ensureLibrary().then(function () { go(likedHash()); }); } }));
         pls.forEach(function (p) {
           var sub = t('playlist') + ' • ' + (p.info.isOwner ? (p.info.isPublic ? t('publicBadge') : t('privateBadge')) : (p.info.ownerName || t('sharedBadge')));
@@ -4767,30 +4793,53 @@
       }, function () { if (alive() && psig === null) { list.textContent = ''; failNote(list, retry); } });
       return;
     }
-    var start = 0, total = null;
+    var start = 0, total = null, shown = {}, ss = LibCtl.serverSort(seg, sortKey);
+    // "Zuletzt": zuerst, was du zuletzt geoeffnet oder abgespielt hast (aus deinem Konto), danach der Rest nach Hinzufuegedatum
+    function recentFirst() {
+      if (sortKey !== 'recent') return Promise.resolve([]);
+      var want = seg === 'albums' ? 'MusicAlbum' : 'MusicArtist', wantIds = Recent.order().slice(0, 120), parts = [];
+      for (var i = 0; i < wantIds.length; i += 40) parts.push(wantIds.slice(i, i + 40));
+      return Promise.all(parts.map(function (ids) {
+        var q = { Ids: ids.join(','), IncludeItemTypes: want, Fields: 'ChildCount' };
+        if (state.libraryId) q.ParentId = state.libraryId;
+        return itemsOf(q).then(null, function () { return []; });
+      })).then(function (res) {
+        var byId = {};
+        res.forEach(function (items) { items.forEach(function (it) { if (it && it.Type === want) byId[nid(it.Id)] = it; }); });
+        return wantIds.map(function (id) { return byId[id]; }).filter(Boolean);
+      });
+    }
+    function addRow(it) {
+      var key = nid(it.Id);
+      if (shown[key]) return;
+      shown[key] = 1;
+      list.appendChild(libRow({
+        id: it.Id, img: itemImg(it, 120), round: seg === 'artists', title: it.Name,
+        sub: seg === 'albums' ? t('album') + ' • ' + albumArtistLine(it) : t('artist'),
+        onClick: function () { go(hrefFor(it)); }
+      }));
+    }
     function page() {
       var more = list.querySelector('.ml-more');
       if (more) more.remove();
       var params = seg === 'albums'
-        ? { IncludeItemTypes: 'MusicAlbum', Recursive: true, SortBy: 'SortName', Fields: 'ChildCount' }
+        ? { IncludeItemTypes: 'MusicAlbum', Recursive: true, Fields: 'ChildCount' }
         : {};
+      params.SortBy = ss.SortBy; params.SortOrder = ss.SortOrder;
       params.StartIndex = start; params.Limit = 100;
       if (state.libraryId) params.ParentId = state.libraryId;
       var req = seg === 'albums'
         ? getItems(params)
-        : call('GET', 'Artists/AlbumArtists', Object.assign({ UserId: uid(), SortBy: 'SortName' }, params)).then(function (r) { return { items: (r && r.Items) || [], total: (r && r.TotalRecordCount) || 0 }; });
-      req.then(function (r) {
+        : call('GET', 'Artists/AlbumArtists', Object.assign({ UserId: uid() }, params)).then(function (r) { return { items: (r && r.Items) || [], total: (r && r.TotalRecordCount) || 0 }; });
+      var head = start === 0 ? recentFirst() : Promise.resolve([]);
+      Promise.all([req, head]).then(function (both) {
+        var r = both[0];
         if (!alive() || state.libSeg !== seg) return;
         total = r.total;
-        r.items.forEach(function (it) {
-          list.appendChild(libRow({
-            id: it.Id, img: itemImg(it, 120), round: seg === 'artists', title: it.Name,
-            sub: seg === 'albums' ? t('album') + ' • ' + albumArtistLine(it) : t('artist'),
-            onClick: function () { go(hrefFor(it)); }
-          }));
-        });
+        both[1].forEach(addRow);
+        r.items.forEach(addRow);
         start += r.items.length;
-        if (!r.items.length && start === 0) list.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
+        if (!r.items.length && start === 0 && !both[1].length) list.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
         if (r.items.length && start < total) {
           var m = btn('ml-pill ml-more', t('loadMore'));
           m.addEventListener('click', function () { if (m.disabled) return; m.disabled = true; page(); });
@@ -4819,9 +4868,11 @@
     host.appendChild(head);
     var list = el('div', 'ml-lib-list');
     function fill() { buildLibList(list, function () { return seq === state.view; }, fill); }
+    var ctl = LibCtl.controls(function () { return state.libSeg; }, fill);
     host.appendChild(chipRow([
       { key: 'playlists', label: t('libPlaylists') }, { key: 'albums', label: t('libAlbums') }, { key: 'artists', label: t('libArtists') }
-    ], state.libSeg, function (k) { state.libSeg = k; fill(); }, 'ml-lib-chips'));
+    ], state.libSeg, function (k) { state.libSeg = k; ctl.refresh(); fill(); }, 'ml-lib-chips'));
+    host.appendChild(ctl);
     host.appendChild(list);
     fill();
   }
@@ -5330,6 +5381,190 @@
     }
     if (!ctx.tracks.length && !ctx.albums.length && !bio) host.appendChild(el('p', 'ml-muted ml-pad', t('nothingYet')));
   }
+  /* ---------- Bibliothek: Sortierung und Ansicht (wie Spotify) ----------
+     Ein Tipp auf "Zuletzt" oeffnet ein Menue: Sortieren nach (Zuletzt, Kuerzlich hinzugefuegt, Alphabetisch, Ersteller*in/Kuenstler*in)
+     und Ansicht (kompakte Liste, Liste, Raster klein, Raster gross). "Zuletzt" heisst: was du zuletzt geoeffnet oder abgespielt hast
+     (wird in deinem Konto auf dem Server gemerkt, damit es auf jedem Geraet gleich ist). */
+  (function () {
+    var extra = {
+      de: {
+        libSortAlpha: 'Alphabetisch', libSortAdded: 'Kürzlich hinzugefügt', libSortCreator: 'Ersteller*in', libSortArtist: 'Künstler*in', libSortBy: 'Sortieren nach',
+        libViewLbl: 'Ansicht', libViewCompact: 'Kompakte Liste', libViewList: 'Liste', libViewGridS: 'Raster (klein)', libViewGridL: 'Raster (groß)'
+      },
+      en: {
+        libSortAlpha: 'Alphabetical', libSortAdded: 'Recently added', libSortCreator: 'Creator', libSortArtist: 'Artist', libSortBy: 'Sort by',
+        libViewLbl: 'View', libViewCompact: 'Compact list', libViewList: 'List', libViewGridS: 'Grid (small)', libViewGridL: 'Grid (large)'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+    ICONS.view_compact = 'M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z';
+    ICONS.view_list = 'M4 14h4v-4H4v4zm0 5h4v-4H4v4zM4 9h4V5H4v4zm5 5h12v-4H9v4zm0 5h12v-4H9v4zM9 5v4h12V5H9z';
+    ICONS.view_grid_s = 'M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z';
+    ICONS.view_grid_l = 'M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z';
+  })();
+
+  var Recent = (function () {
+    var KEY = 'recent', MAX = 200;
+    var ids = [], loadP = null, timer = null, dirty = false;
+    function norm(id) {
+      var s = String(id || '');
+      if (/^album:/.test(s)) s = s.slice(6);
+      s = nid(s);
+      return ID_RE.test(s) ? s : '';
+    }
+    function load() {
+      if (!loadP) loadP = Store.get(KEY, null).then(function (v) {
+        var old = v && Array.isArray(v.ids) ? v.ids.filter(function (x) { return ID_RE.test(x); }) : [];
+        var seen = {};
+        ids = ids.concat(old).filter(function (x) { if (seen[x]) return false; seen[x] = 1; return true; }).slice(0, MAX);
+        return ids;
+      }, function () { return ids; });
+      return loadP;
+    }
+    function save() {
+      timer = null;
+      if (!dirty || (Net && Net.offline())) return;
+      dirty = false;
+      Store.set(KEY, { v: 1, ids: ids.slice() }).then(null, function () { dirty = true; });
+    }
+    function note(id) {
+      id = norm(id);
+      if (!id || ids[0] === id) return;
+      ids = [id].concat(ids.filter(function (x) { return x !== id; })).slice(0, MAX);
+      dirty = true;
+      clearTimeout(timer); timer = setTimeout(save, 2500);
+      if (api.onChange) { try { api.onChange(); } catch (e) { /* nur Anzeige */ } }
+    }
+    window.addEventListener('pagehide', function () { if (dirty) { try { Store.beacon(KEY, { v: 1, ids: ids.slice() }); } catch (e) { /* Best Effort */ } } });
+    var api = { load: load, note: note, onChange: null, order: function () { return ids.slice(); }, rank: function (id) { var i = ids.indexOf(nid(id)); return i < 0 ? 1e9 : i; } };
+    return api;
+  })();
+
+  var LibCtl = (function () {
+    var SORTS = { playlists: ['recent', 'added', 'alpha', 'creator'], albums: ['recent', 'added', 'alpha', 'creator'], artists: ['recent', 'added', 'alpha'] };
+    var VIEWS = [['compact', 'view_compact', 'libViewCompact'], ['list', 'view_list', 'libViewList'], ['grid-s', 'view_grid_s', 'libViewGridS'], ['grid-l', 'view_grid_l', 'libViewGridL']];
+    function ls(k, v) { try { if (v == null) return window.localStorage.getItem(k); window.localStorage.setItem(k, v); } catch (e) { /* nur diese Sitzung */ } return null; }
+    state.libSort = (function () { var v = ls('ml.libsort'); return /^(recent|added|alpha|creator)$/.test(v || '') ? v : 'recent'; })();
+    state.libView = (function () { var v = ls('ml.libview'); return VIEWS.some(function (x) { return x[0] === v; }) ? v : 'list'; })();
+
+    function sortFor(seg) { var ok = SORTS[seg] || SORTS.playlists; return ok.indexOf(state.libSort) >= 0 ? state.libSort : 'recent'; }
+    function labelOf(seg, key) {
+      if (key === 'alpha') return t('libSortAlpha');
+      if (key === 'added') return t('libSortAdded');
+      if (key === 'creator') return seg === 'playlists' ? t('libSortCreator') : t('libSortArtist');
+      return t('libSortRecent');
+    }
+    function viewIcon() { return (VIEWS.filter(function (v) { return v[0] === state.libView; })[0] || VIEWS[1])[1]; }
+    function applyView(list) {
+      VIEWS.forEach(function (v) { list.classList.remove('ml-lv-' + v[0]); });
+      list.classList.add('ml-lv-' + state.libView);
+    }
+    function cmpName(a, b) { return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base', numeric: true }); }
+    // Playlists liegen komplett vor und werden hier sortiert.
+    function sortPlaylists(pls, key) {
+      var out = pls.slice();
+      function nameOf(p) { return p.item.Name; }
+      function added(p) { return String(p.item.DateCreated || ''); }
+      if (key === 'alpha') out.sort(function (x, y) { return cmpName(nameOf(x), nameOf(y)); });
+      else if (key === 'added') out.sort(function (x, y) { return added(x) < added(y) ? 1 : added(x) > added(y) ? -1 : cmpName(nameOf(x), nameOf(y)); });
+      else if (key === 'creator') out.sort(function (x, y) { return cmpName(x.info.ownerName, y.info.ownerName) || cmpName(nameOf(x), nameOf(y)); });
+      else out.sort(function (x, y) {
+        var rx = Recent.rank(x.id), ry = Recent.rank(y.id);
+        if (rx !== ry) return rx - ry;
+        return added(x) < added(y) ? 1 : added(x) > added(y) ? -1 : cmpName(nameOf(x), nameOf(y));
+      });
+      return out;
+    }
+    // Parameter fuer Alben und Kuenstler (der Server sortiert und liefert seitenweise)
+    function serverSort(seg, key) {
+      if (key === 'alpha') return { SortBy: 'SortName', SortOrder: 'Ascending' };
+      if (key === 'creator' && seg === 'albums') return { SortBy: 'AlbumArtist,SortName', SortOrder: 'Ascending' };
+      return { SortBy: 'DateCreated', SortOrder: 'Descending' };   // "added" und der Rest hinter den zuletzt geoeffneten
+    }
+
+    var pop = null;
+    function closePop() {
+      if (!pop) return;
+      document.removeEventListener('pointerdown', pop.out, true);
+      document.removeEventListener('keydown', pop.key, true);
+      window.removeEventListener('resize', closePop);
+      if (pop.el.parentNode) pop.el.parentNode.removeChild(pop.el);
+      pop.anchor.setAttribute('aria-expanded', 'false');
+      pop = null;
+    }
+    function openPop(anchor, seg, changed) {
+      closePop();
+      var box = el('div', 'ml-pop');
+      box.setAttribute('role', 'menu');
+      function build() {
+        box.textContent = '';
+        box.appendChild(el('div', 'ml-pop-h', t('libSortBy')));
+        (SORTS[seg] || SORTS.playlists).forEach(function (k) {
+          var b = btn('ml-pop-item' + (sortFor(seg) === k ? ' ml-on' : ''));
+          b.setAttribute('role', 'menuitemradio');
+          b.setAttribute('aria-checked', sortFor(seg) === k ? 'true' : 'false');
+          b.dataset.sort = k;
+          b.appendChild(el('span', 'ml-pop-lbl', labelOf(seg, k)));
+          if (sortFor(seg) === k) b.appendChild(icon('check'));
+          b.addEventListener('click', function () { state.libSort = k; ls('ml.libsort', k); closePop(); changed(); });
+          box.appendChild(b);
+        });
+        box.appendChild(el('div', 'ml-pop-sep'));
+        box.appendChild(el('div', 'ml-pop-h', t('libViewLbl')));
+        var views = el('div', 'ml-pop-views');
+        VIEWS.forEach(function (v) {
+          var b = btn('ml-pop-vbtn' + (state.libView === v[0] ? ' ml-on' : ''));
+          b.setAttribute('aria-label', t(v[2])); b.title = t(v[2]);
+          b.setAttribute('aria-pressed', state.libView === v[0] ? 'true' : 'false');
+          b.dataset.view = v[0];
+          b.appendChild(icon(v[1]));
+          b.addEventListener('click', function () { state.libView = v[0]; ls('ml.libview', v[0]); build(); changed(true); });
+          views.appendChild(b);
+        });
+        box.appendChild(views);
+      }
+      build();
+      document.body.appendChild(box);
+      var r = anchor.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+      var left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w));
+      var top = r.bottom + 6;
+      if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+      box.style.left = left + 'px'; box.style.top = top + 'px';
+      anchor.setAttribute('aria-expanded', 'true');
+      pop = {
+        el: box, anchor: anchor,
+        out: function (e) { if (!box.contains(e.target) && !anchor.contains(e.target)) closePop(); },
+        key: function (e) { if (e.key === 'Escape') { e.stopPropagation(); closePop(); anchor.focus(); } }
+      };
+      document.addEventListener('pointerdown', pop.out, true);
+      document.addEventListener('keydown', pop.key, true);
+      window.addEventListener('resize', closePop);
+      var first = box.querySelector('.ml-pop-item'); if (first) first.focus();
+    }
+
+    // Zeile mit dem Knopf "Zuletzt ≡". getSeg(): aktueller Reiter (playlists, albums, artists); onChange(viewOnly): Liste neu aufbauen.
+    function controls(getSeg, onChange) {
+      var row = el('div', 'ml-libctl');
+      var b = btn('ml-libctl-btn');
+      b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false');
+      b.title = t('libSortHint');
+      function refresh() {
+        var seg = getSeg();
+        b.textContent = '';
+        b.appendChild(el('span', 'ml-libctl-lbl', labelOf(seg, sortFor(seg))));
+        b.appendChild(icon(viewIcon()));
+      }
+      b.addEventListener('click', function () {
+        if (pop && pop.anchor === b) { closePop(); return; }
+        openPop(b, getSeg(), function () { refresh(); onChange(); });
+      });
+      row.appendChild(b);
+      refresh();
+      row.refresh = refresh;
+      return row;
+    }
+    return { sortFor: sortFor, applyView: applyView, sortPlaylists: sortPlaylists, serverSort: serverSort, controls: controls, close: closePop };
+  })();
   /* ---------- Spotify-Import: Oberflaeche ---------- */
   (function () {
     var extra = {
@@ -6360,7 +6595,7 @@
   }
   /* ---------- Version 2.0: Weiterhören (serverseitig pro Benutzer) ----------
      Was gerade läuft (Warteschlange, aktueller Titel, Position, Herkunft) wird in den Anzeige-Einstellungen des Benutzers auf dem
-     Jellyfin-Server gemerkt (Store, Schlüssel "resume"). Auf jedem Gerät steht dann ganz oben in der Seitenleiste (am Handy über der unteren Leiste) die Leiste "Weiter hören":
+     Jellyfin-Server gemerkt (Store, Schlüssel "resume"). Auf jedem Gerät steht dann in der unteren Wiedergabeleiste (am Handy über der unteren Leiste) die Leiste "Weiter hören":
      ein Tipp startet genau dort, wo man aufgehört hat - Playlist, Album, Mix, einzelner Titel oder Hörbuch. */
   (function () {
     var extra = {
@@ -6530,7 +6765,7 @@
     }
 
     /* ---------- Leiste "Weiter hören" ---------- */
-    // Sitzt dort, wo sonst der Player ist: am Computer ganz oben in der Seitenleiste (ueber Start und Suche), am Handy ueber der unteren Leiste.
+    // Sitzt dort, wo sonst der Player ist: am Computer in der unteren Wiedergabeleiste (solange nichts laeuft), am Handy ueber der unteren Leiste.
     // Eine einzige Flaeche zum Tippen; verschwindet erst, wenn die Wiedergabe wirklich laeuft (oder der Stand ausgeblendet wird).
     var barEl = null, ui = {}, barFor = null, lastRefresh = 0, painter = null;
     function ensureBar() {
@@ -6555,7 +6790,18 @@
         if (running) return;
         clear(); barFor = null; paint();
       });
-      add(barEl, ui.main, ui.prog, ui.x);
+      // Am Computer sieht die Leiste aus wie die Wiedergabeleiste: links Titel, in der Mitte Abspielknopf mit Fortschritt (bei Handys ausgeblendet)
+      ui.mid = el('span', 'ml-rbar-mid');
+      ui.play2 = iconBtn('play', t('resumeLabel'), 'ml-rbar-play2', function () { if (cur && !running) play(cur); });
+      ui.seek = el('span', 'ml-rbar-seek');
+      ui.tpos = el('span', 'ml-bar-time', '0:00');
+      ui.track = el('span', 'ml-rbar-track');
+      ui.fill2 = el('span');
+      ui.track.appendChild(ui.fill2);
+      ui.tdur = el('span', 'ml-bar-time', '0:00');
+      add(ui.seek, ui.tpos, ui.track, ui.tdur);
+      add(ui.mid, ui.play2, ui.seek);
+      add(barEl, ui.main, ui.prog, ui.mid, ui.x);
       return barEl;
     }
     function subLine(v) { return v.artist || (v.name ? t('resumeFromCtx', v.name) : ''); }
@@ -6567,6 +6813,9 @@
       ui.main.setAttribute('aria-busy', on ? 'true' : 'false');
       ui.play.textContent = '';
       if (on) ui.play.appendChild(el('span', 'ml-spin')); else ui.play.appendChild(icon('play'));
+      ui.play2.disabled = !!on;
+      ui.play2.textContent = '';
+      if (on) ui.play2.appendChild(el('span', 'ml-spin')); else ui.play2.appendChild(icon('play'));
       if (cur) ui.sub.textContent = on ? t('resumeStarting') : subLine(cur);
     }
     function paint() {
@@ -6585,6 +6834,10 @@
         ui.fill.style.width = v.dur > 0 ? clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%' : '0%';
         ui.main.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || '') + (v.artist ? ' – ' + v.artist : ''));
         ui.prog.hidden = !(v.dur > 0);
+        ui.fill2.style.width = v.dur > 0 ? clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%' : '0%';
+        ui.tpos.textContent = fmtClock(v.pos || 0);
+        ui.tdur.textContent = fmtClock(v.dur || 0);
+        ui.play2.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || ''));
       }
       if (barEl.hidden === show) barEl.hidden = !show;
     }
@@ -6598,11 +6851,12 @@
         paint();
       }, function () { /* naechster Versuch */ });
     }
-    // Die Leiste in den gegebenen Rahmen setzen (Seitenleiste oder untere Leiste).
-    function mount(host) {
+    // Die Leiste in den gegebenen Rahmen setzen (Computer: Hauptrahmen unten, Handy: ueber der unteren Leiste).
+    function mount(host, last) {
       ensureBar();
       hook();
-      if (host && barEl.parentNode !== host) host.insertBefore(barEl, host.firstChild);
+      if (host && barEl.parentNode !== host) { if (last) host.appendChild(barEl); else host.insertBefore(barEl, host.firstChild); }
+      barEl.classList.toggle('ml-rbar-desk', !!last);
       if (!painter) painter = setInterval(function () { if (barEl && barEl.isConnected) paint(); }, 2000);
       load().then(function () { paint(); });
       return barEl;
@@ -10056,7 +10310,7 @@
     });
     bottomBar.appendChild(nav);
     root.appendChild(bottomBar);
-    if (!isWide()) Resume.mount(bottomBar);
+    Resume.mount(isWide() ? root : bottomBar, isWide());
     document.body.appendChild(root);
     if (isWide()) { ensureSide(); root.insertBefore(side, scroller); mountDtop(); }
     Player.mount();
@@ -10070,7 +10324,7 @@
   }
 
   /* ---------- Computer-Ansicht: Seitenleiste mit Bibliothek ---------- */
-  var side = null, sideList = null, sideTok = 0;
+  var side = null, sideList = null, sideTok = 0, sideCtl = null;
   function ensureSide() {
     if (side) return side;
     side = el('aside', 'ml-side');
@@ -10107,24 +10361,12 @@
     libBox.appendChild(head);
     libBox.appendChild(chipRow([
       { key: 'playlists', label: t('libPlaylists') }, { key: 'albums', label: t('libAlbums') }, { key: 'artists', label: t('libArtists') }
-    ], state.libSeg, function (k) { state.libSeg = k; fillSide(); }, 'ml-side-chips'));
-    var sortRow = el('div', 'ml-side-sortrow');
-    var sortBtn = btn('ml-side-sort');
-    function paintSort() { sortBtn.textContent = (state.libSort === 'alpha' ? t('libSortAlpha') : t('libSortRecent')) + ' ▾'; }
-    sortBtn.title = t('libSortHint');
-    sortBtn.addEventListener('click', function () { state.libSort = state.libSort === 'alpha' ? 'recent' : 'alpha'; try { window.localStorage.setItem('ml.libsort', state.libSort); } catch (e) { /* nur diese Sitzung */ } paintSort(); fillSide(); });
-    paintSort();
-    sortRow.appendChild(sortBtn);
-    libBox.appendChild(sortRow);
+    ], state.libSeg, function (k) { state.libSeg = k; sideCtl.refresh(); fillSide(); }, 'ml-side-chips'));
+    sideCtl = LibCtl.controls(function () { return state.libSeg; }, function () { fillSide(); });
+    libBox.appendChild(sideCtl);
     sideList = el('div', 'ml-side-list');
     libBox.appendChild(sideList);
-    var foot = el('div', 'ml-side-foot');
-    foot.appendChild(profileButton());
-    var more = btn('ml-side-more', t('appMenu'));
-    more.addEventListener('click', openAppMenu);
-    foot.appendChild(more);
-    add(side, navBox, libBox, foot);
-    Resume.mount(side);
+    add(side, navBox, libBox);
     return side;
   }
   /* Kopfleiste wie bei Spotify am Computer: Home-Knopf und mittiges Suchfeld ueber der ganzen Breite */
@@ -10153,7 +10395,16 @@
     dtopInput.addEventListener('input', toSearch);
     dtopInput.addEventListener('keydown', function (e) { if (e.key === 'Escape') { dtopInput.value = ''; toSearch(); dtopInput.blur(); } });
     box.appendChild(dtopInput);
-    add(dtop, home, box);
+    // rechts oben: Zahnrad (Einstellungen und Menue) und nur das Benutzerbild (Jellyfin-Konto), ohne Namen
+    var right = el('div', 'ml-dtop-right');
+    var gear = btn('ml-gear');
+    gear.setAttribute('aria-label', t('settingsLbl')); gear.title = t('settingsLbl');
+    gear.appendChild(icon('settings'));
+    gear.addEventListener('click', openAppMenu);
+    var me = profileButton(openAccountMenu, t('accountLbl'));
+    me.classList.add('ml-dtop-me'); me.title = t('accountLbl');
+    add(right, gear, me);
+    add(dtop, home, box, right);
     return dtop;
   }
   function mountDtop() {
@@ -10170,6 +10421,8 @@
     if (dtop) ML.qsa('.ml-dtop-home', dtop).forEach(function (b) { b.classList.toggle('ml-on', r.kind === 'library' && !(r.params && r.params.mlview) && state.tab === 'home'); });
   }
   var sideTimer = null;
+  // Aendert sich die Reihenfolge "Zuletzt" (etwas geoeffnet oder abgespielt), wird die Bibliothek links kurz darauf neu aufgebaut.
+  Recent.onChange = function () { if (state.libSort === 'recent') { sideDirty = true; scheduleSide(); } };
   // Nach Aenderungen (Playlist angelegt, Titel hinzugefuegt ...) die Seitenleiste kurz darauf auffrischen.
   function scheduleSide() {
     clearTimeout(sideTimer);
@@ -10179,7 +10432,6 @@
     if (!side) return;
     var tok = ++sideTok;
     sideDirty = false;
-    var sr = side.querySelector('.ml-side-sortrow'); if (sr) sr.hidden = state.libSeg !== 'playlists';
     buildLibList(sideList, function () { return tok === sideTok && root && !root.hidden; }, fillSide);
   }
   // Markiert in der Seitenleiste, was gerade geoeffnet ist.
@@ -10203,7 +10455,7 @@
     layout();
     Player.mount();
     Player.repaint();
-    Resume.mount(isWide() ? side : bottomBar);
+    Resume.mount(isWide() ? root : bottomBar, isWide());
     if (!root.hidden) {
       if (isWide() && !side.parentNode) root.insertBefore(side, scroller);
       if (isWide()) fillSide();
@@ -10375,6 +10627,7 @@
       var spotify = cfg.spotifyHome !== false;
       var isLib = route.kind === 'library';
       var isDetail = route.kind === 'details' && route.item && (route.item.Type === 'Playlist' || route.item.Type === 'MusicAlbum' || route.item.Type === 'MusicArtist');
+      if (isDetail) Recent.note(route.item.Id);   // Grundlage fuer die Sortierung "Zuletzt" in der Bibliothek
       if (!spotify || (!isLib && !isDetail)) { hideApp(); toggleClassicFab(false); return; }
       if (state.classic) { hideApp(); toggleClassicFab(true); return; }
 

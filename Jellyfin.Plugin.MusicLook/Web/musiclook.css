@@ -956,7 +956,7 @@ body.ml-full-on { overflow: hidden; }
   .ml-wide .ml-bar:not([hidden]) { display: grid; }
 
   /* Seitenleiste */
-  .ml-side-nav, .ml-side-lib, .ml-side-foot { background: #121212; border-radius: 8px; }
+  .ml-side-nav, .ml-side-lib { background: #121212; border-radius: 8px; }
   .ml-side-nav { padding: 8px 8px; flex: 0 0 auto; }
   .ml-side-navbtn { display: flex; align-items: center; gap: 16px; width: 100%; padding: 10px 14px; border: 0; border-radius: 6px; background: transparent; color: #b3b3b3; font: 700 1rem var(--ml-font, system-ui); cursor: pointer; text-align: left; }
   @media (hover: hover) { .ml-side-navbtn:hover{ color: #fff; } }
@@ -978,10 +978,6 @@ body.ml-full-on { overflow: hidden; }
   .ml-side-list .ml-list-row.ml-active { background: #2a2a2a; }
   .ml-side-list .ml-row-title { font-weight: 600; font-size: 0.95rem; }
   .ml-side-list .ml-list-row.ml-active .ml-row-title { color: var(--ml-accent, #1ed760); }
-  .ml-side-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
-  .ml-side-more { border: 0; background: none; color: #b3b3b3; font: 700 0.9rem var(--ml-font, system-ui); cursor: pointer; }
-  @media (hover: hover) { .ml-side-more:hover{ color: #fff; } }
-.ml-side-more:active{ color: #fff; }
   .ml-wide .ml-topbar .ml-profile-btn { display: none; }
 
   /* Inhalt */
@@ -1501,7 +1497,24 @@ body.ml-music .MuiCircularProgress-circle { stroke-width: 2.2 !important; stroke
 .ml-rbar-x { position: absolute; top: 0; right: 0; width: 26px; height: 26px; opacity: 0.65; }
 .ml-rbar-x svg { width: 14px; height: 14px; }
 .ml-rbar.ml-busy .ml-rbar-x { display: none; }
-.ml-wide .ml-side > .ml-rbar { margin: 8px 8px 0; }
+/* Computer: dieselbe Flaeche und Aufteilung wie die Wiedergabeleiste, solange nichts spielt */
+.ml-rbar-mid { display: none; }
+.ml-rbar.ml-rbar-desk { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: minmax(200px, 1fr) minmax(340px, 2fr) minmax(220px, 1fr); align-items: center; gap: 16px; height: 76px; margin: 0; padding: 0 8px; box-sizing: border-box; border-radius: 0; overflow: visible; background: #000; box-shadow: none; }
+.ml-rbar.ml-rbar-desk[hidden] { display: none !important; }
+.ml-rbar-desk .ml-rbar-main { min-height: 0; padding: 0; gap: 12px; background: none; }
+.ml-rbar-desk .ml-rbar-cover { width: 56px; height: 56px; }
+.ml-rbar-desk .ml-rbar-txt { padding-right: 0; }
+.ml-rbar-desk .ml-rbar-kicker { font-size: 0.62rem; }
+.ml-rbar-desk .ml-rbar-main > .ml-rbar-play, .ml-rbar-desk .ml-rbar-prog { display: none; }
+.ml-rbar-desk .ml-rbar-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.ml-rbar-desk .ml-rbar-play2 { width: 38px; height: 38px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; border: 0; padding: 0; cursor: pointer; }
+.ml-rbar-desk .ml-rbar-play2 .ml-spin { width: 18px; height: 18px; border-width: 2.5px; border-color: rgba(0, 0, 0, 0.25); border-top-color: #000; }
+@media (hover: hover) { .ml-rbar-desk .ml-rbar-play2:not(:disabled):hover { transform: scale(1.06); } }
+.ml-rbar-desk .ml-rbar-seek { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 640px; }
+.ml-rbar-desk .ml-rbar-track { flex: 1 1 auto; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); overflow: hidden; }
+.ml-rbar-desk .ml-rbar-track span { display: block; height: 100%; background: #fff; }
+.ml-rbar-desk .ml-rbar-x { position: static; justify-self: end; width: 32px; height: 32px; margin-right: 8px; opacity: 0.7; }
+.ml-rbar-desk.ml-busy .ml-rbar-x { display: block; visibility: hidden; }
 
 /* ---------- Version 2.0: Genres, intelligente Playlists, Statistik, Einschlaf-Timer ---------- */
 .ml-shelf-more { margin-left: 12px; vertical-align: middle; padding: 4px 12px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: inherit; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
@@ -1562,6 +1575,13 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
   .ml-dtop-search { display: flex; align-items: center; gap: 10px; width: min(600px, 60vw); height: 48px; padding: 0 16px; box-sizing: border-box; border-radius: 500px; background: #1f1f1f; color: #b3b3b3; border: 2px solid transparent; }
   .ml-dtop-search:focus-within { border-color: #fff; background: #242424; color: #fff; }
   @media (hover: hover) { .ml-dtop-search:hover { background: #2a2a2a; } }
+  .ml-dtop-right { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+  .ml-gear { width: 40px; height: 40px; border-radius: 50%; border: 0; background: transparent; color: #b3b3b3; display: grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
+  .ml-gear:active, .ml-gear:focus-visible { color: #fff; background: #2a2a2a; }
+  @media (hover: hover) { .ml-gear:hover { color: #fff; background: #1f1f1f; transform: scale(1.06); } }
+  .ml-dtop-me { padding: 4px; background: #1f1f1f; }
+  .ml-dtop-me .ml-avatar { width: 32px; height: 32px; }
+  @media (hover: hover) { .ml-dtop-me:hover { background: #2a2a2a; transform: scale(1.06); } }
   .ml-dtop-input { flex: 1 1 auto; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: #fff; font: 500 0.95rem var(--ml-font, system-ui); }
   .ml-dtop-input::placeholder { color: #b3b3b3; }
   .ml-wide .ml-search-big { display: none; }
@@ -1601,3 +1621,158 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
   .ml-wide .ml-media-grid { padding: 0 24px 24px; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(calc(var(--ml-tile) + 24px), 1fr)); }
   .ml-wide .ml-media-grid .ml-tile { width: auto; }
 }
+
+/* ---------- Version 2.1: Bibliothek sortieren und Ansicht waehlen ---------- */
+.ml-libctl { display: flex; justify-content: flex-end; padding: 0 12px 4px; }
+.ml-libctl-btn { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; border: 0; border-radius: 6px; background: none; color: #b3b3b3; font: 600 0.85rem var(--ml-font, system-ui); padding: 4px 6px; cursor: pointer; }
+.ml-libctl-lbl { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ml-libctl-btn .ml-ic svg { width: 18px; height: 18px; }
+@media (hover: hover) { .ml-libctl-btn:hover { color: #fff; } }
+.ml-pop { position: fixed; z-index: 99800; box-sizing: border-box; min-width: 236px; max-width: calc(100vw - 16px); padding: 4px; border-radius: 8px; background: #282828; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); color: #fff; font-family: var(--ml-font, system-ui); }
+.ml-pop-h { padding: 8px 12px 4px; font-size: 0.78rem; font-weight: 800; color: #fff; }
+.ml-pop-item { display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; min-height: 38px; padding: 6px 12px; border: 0; border-radius: 4px; background: none; color: #e8e8e8; font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
+.ml-pop-item .ml-ic svg { width: 18px; height: 18px; }
+@media (hover: hover) { .ml-pop-item:hover { background: rgba(255, 255, 255, 0.1); } }
+.ml-pop-item.ml-on { color: var(--ml-accent, #1ed760); }
+.ml-pop-sep { height: 1px; margin: 4px 8px; background: rgba(255, 255, 255, 0.12); }
+.ml-pop-views { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; }
+.ml-pop-vbtn { display: grid; place-items: center; width: 40px; height: 36px; border: 0; border-radius: 6px; background: none; color: #b3b3b3; cursor: pointer; }
+@media (hover: hover) { .ml-pop-vbtn:hover { color: #fff; } }
+.ml-pop-vbtn.ml-on { background: rgba(255, 255, 255, 0.12); color: var(--ml-accent, #1ed760); }
+/* Ansichten der Bibliotheksliste */
+.ml-lv-compact .ml-list-row { padding-top: 4px; padding-bottom: 4px; }
+.ml-lv-compact .ml-row-cover, .ml-lv-compact .ml-row-sub { display: none; }
+.ml-lv-compact .ml-row-title { font-weight: 600; font-size: 0.92rem; }
+.ml-lv-grid-s, .ml-lv-grid-l { display: grid; align-content: start; }
+.ml-lv-grid-s { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.ml-lv-grid-l { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.ml-lv-grid-s > :not(.ml-list-row), .ml-lv-grid-l > :not(.ml-list-row) { grid-column: 1 / -1; }
+.ml-lv-grid-s .ml-list-row, .ml-lv-grid-l .ml-list-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; border-radius: 8px; }
+.ml-lv-grid-s .ml-list-row .ml-row-cover, .ml-lv-grid-l .ml-list-row .ml-row-cover { width: 100% !important; height: auto !important; }
+.ml-lv-grid-s .ml-row-text { display: none; }
+.ml-lv-grid-l .ml-row-text { width: 100%; }
+.ml-lv-grid-l .ml-row-title { font-size: 0.85rem; }
+.ml-lv-grid-l .ml-row-sub { font-size: 0.75rem; }
+.ml-lv-grid-s .ml-list-row[data-ctx].ml-ctx-on::after, .ml-lv-grid-l .ml-list-row[data-ctx].ml-ctx-on::after { display: none; }
+.ml-app .ml-lib-list.ml-lv-grid-s, .ml-app .ml-lib-list.ml-lv-grid-l { padding-left: 12px; padding-right: 12px; }
+/* Der alte Umschalter der Seitenleiste entfaellt */
+.ml-side-sortrow, .ml-side-sort { display: none; }
+
+/* ---------- Kompatibilitaet: aeltere Engines (Jellyfin Media Player, QtWebEngine 5.15 = Chromium 87) ---------- */
+/* inset (ab Chromium 87) zusaetzlich als Einzelwerte */
+.ml-cover img, .ml-cover .ml-mosaic, .ml-artist-banner .ml-artist-banner-img, .ml-top-exp, .ml-top-cmp, .ml-panel, .ml-ghost-layer, .ml-lyfull { top: 0; right: 0; bottom: 0; left: 0; }
+.ml-np .ml-panel.ml-panel-np { top: 0; right: 0; bottom: 0; left: 0; }
+/* :where() (ab Chromium 88): gleiche Schrift ueber eine gewoehnliche Auswahlliste */
+@supports not selector(:where(a)) {
+  body.ml-music button:not(.material-icons), body.ml-music input:not(.material-icons), body.ml-music select:not(.material-icons), body.ml-music textarea:not(.material-icons),
+  body.ml-music a:not(.material-icons), body.ml-music p:not(.material-icons), body.ml-music li:not(.material-icons), body.ml-music label:not(.material-icons),
+  body.ml-music div:not(.material-icons), body.ml-music span:not(.material-icons), body.ml-music td:not(.material-icons), body.ml-music th:not(.material-icons) { font-family: var(--ml-font); }
+}
+/* aspect-ratio (ab Chromium 88): Hoehe ueber ein Platzhalterelement */
+.ml-noar .ml-cover::before { content: ""; display: block; width: 0; padding-top: 100%; flex: 0 0 auto; }
+.ml-noar .ml-artist-banner::before { content: ""; display: block; padding-top: 62.5%; }
+.ml-noar .ml-cover .ml-mosaic { position: absolute; }
+/* Spalte der Bibliothek links: Kopf, Chips und Sortierzeile bleiben, nur die Liste gibt nach (sonst werden sie bei langen Listen zusammengedrueckt) */
+@media (min-width: 900px) {
+  .ml-side-libhead, .ml-side .ml-side-chips, .ml-side .ml-libctl { flex: 0 0 auto; }
+  .ml-side-list { flex: 1 1 0; }
+}
+
+/* ===== BEGIN nogap (erzeugt von tools/gen_nogap.py, nicht von Hand aendern) ===== */
+/* Engines ohne Flex-Gap (Chromium < 84): Abstaende als Aussenabstand der Kinder; .ml-nogap setzt das Script beim Start. */
+.ml-nogap body.ml-chips-on .ml-chips > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-row-item > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-topbar > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-app .ml-chips > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-quick > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-shelf-row > *:not(:last-child) { margin-right: 14px; }
+.ml-nogap .ml-empty > *:not(:last-child) { margin-bottom: 12px; }
+.ml-nogap .ml-list-row > *:not(:last-child) { margin-bottom: 12px; }
+.ml-nogap .ml-hero-bar > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-hero-owner > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-hero-owner > * { margin-bottom: 8px; }
+.ml-nogap .ml-actions-left > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-actions-right > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-track > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-menu-head > *:not(:last-child) { margin-right: 14px; }
+.ml-nogap .ml-menu-item > *:not(:last-child) { margin-right: 18px; }
+.ml-nogap .ml-sheet-actions > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-newplaylist > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-info-row > *:not(:last-child) { margin-right: 16px; }
+.ml-nogap .ml-nav-btn > *:not(:last-child) { margin-bottom: 2px; }
+.ml-nogap .ml-mini > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-mini-main > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-top-exp > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-top-cmp > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-full-meta > *:not(:last-child) { margin-right: 2px; }
+.ml-nogap .ml-foot-mid > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-dev-btn > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-cards > *:not(:last-child) { margin-bottom: 14px; }
+.ml-nogap .ml-card-head > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-panel-head > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-devices .ml-menu-head > *:not(:last-child) { margin-right: 14px; }
+.ml-nogap .ml-dev-volume > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-allbar > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-allbar-title > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-allbar-actions > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-eq-chips > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-eq-chips > * { margin-bottom: 8px; }
+.ml-nogap .ml-eq-switch > *:not(:last-child) { margin-right: 16px; }
+.ml-nogap .ml-eq-actions > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-dl-card > *:not(:last-child) { margin-bottom: 10px; }
+.ml-nogap .ml-dl-legend > *:not(:last-child) { margin-right: 14px; } .ml-nogap .ml-dl-legend > * { margin-bottom: 6px; }
+.ml-nogap .ml-dl-q > *:not(:last-child) { margin-bottom: 3px; }
+.ml-nogap .ml-dl-row > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-dl-job > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-dl-main > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-dl-playrow > *:not(:last-child) { margin-right: 10px; } .ml-nogap .ml-dl-playrow > * { margin-bottom: 10px; }
+.ml-nogap .ml-lyf-top > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-lyf-ctl > *:not(:last-child) { margin-right: 26px; }
+.ml-nogap .ml-sp-top > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-sp-fields > *:not(:last-child) { margin-bottom: 8px; }
+.ml-nogap .ml-sp-check > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-sp-row > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-sp-cut > *:not(:last-child) { margin-bottom: 10px; }
+.ml-nogap .ml-sp-miss-head > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-sp-sec-actions > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-sp-sec-actions > * { margin-bottom: 8px; }
+.ml-nogap .ml-sp-miss-row > *:not(:last-child) { margin-right: 10px; } .ml-nogap .ml-sp-miss-row > * { margin-bottom: 10px; }
+.ml-nogap .ml-rbar-main > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-rbar-desk .ml-rbar-main > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-rbar-desk .ml-rbar-mid > *:not(:last-child) { margin-bottom: 4px; }
+.ml-nogap .ml-rbar-desk .ml-rbar-seek > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-aux-tiles > *:not(:last-child) { margin-right: 14px; } .ml-nogap .ml-aux-tiles > * { margin-bottom: 14px; }
+.ml-nogap .ml-smart-chips > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-smart-chips > * { margin-bottom: 8px; }
+.ml-nogap .ml-smart-years > *:not(:last-child) { margin-right: 10px; }
+.ml-nogap .ml-stat-row > *:not(:last-child) { margin-right: 12px; }
+.ml-nogap .ml-stat-mid > *:not(:last-child) { margin-bottom: 2px; }
+.ml-nogap .ml-sleep-chip > *:not(:last-child) { margin-right: 6px; }
+.ml-nogap .ml-libctl-btn > *:not(:last-child) { margin-right: 8px; }
+.ml-nogap .ml-pop-views > *:not(:last-child) { margin-right: 4px; }
+.ml-nogap .ml-lv-grid-s .ml-list-row > *:not(:last-child) { margin-bottom: 6px; }
+.ml-nogap .ml-lv-grid-l .ml-list-row > *:not(:last-child) { margin-bottom: 6px; }
+@media (min-width: 900px) {
+  .ml-nogap .ml-wide .ml-side > *:not(:last-child) { margin-bottom: 8px; }
+  .ml-nogap .ml-side-navbtn > *:not(:last-child) { margin-right: 16px; }
+  .ml-nogap .ml-side-libhead > *:not(:last-child) { margin-right: 12px; }
+  .ml-nogap .ml-side .ml-side-chips > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-trow-main > *:not(:last-child) { margin-right: 14px; }
+  .ml-nogap .ml-np-head > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-np-meta > *:not(:last-child) { margin-right: 2px; }
+  .ml-nogap .ml-bar-left > *:not(:last-child) { margin-right: 12px; }
+  .ml-nogap .ml-bar-mid > *:not(:last-child) { margin-bottom: 4px; }
+  .ml-nogap .ml-bar-ctl > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-bar-seek > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-bar-right > *:not(:last-child) { margin-right: 2px; }
+  .ml-nogap .ml-wide .ml-shelf-row > *:not(:last-child) { margin-right: 4px; }
+  .ml-nogap .ml-wide .ml-actions > *:not(:last-child) { margin-right: 16px; }
+  .ml-nogap .ml-wide .ml-actions-right > *:not(:last-child) { margin-right: 12px; }
+  .ml-nogap .ml-cards > *:not(:last-child) { margin-bottom: 16px; }
+  .ml-nogap .ml-wide .ml-dtop > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-dtop-search > *:not(:last-child) { margin-right: 10px; }
+  .ml-nogap .ml-dtop-right > *:not(:last-child) { margin-right: 8px; }
+  .ml-nogap .ml-side-create > *:not(:last-child) { margin-right: 6px; }
+  .ml-nogap .ml-side-libhead > *:not(:last-child) { margin-right: 10px; }
+  .ml-nogap .ml-side-libhead > *:not(:last-child) { margin-right: 8px; }
+}
+@media (max-width: 420px) {
+  .ml-nogap .ml-eq-actions > *:not(:last-child) { margin-right: 6px; }
+}
+/* ===== END nogap ===== */
