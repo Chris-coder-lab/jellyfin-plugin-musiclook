@@ -10,11 +10,11 @@
     "versions": [
       {
         "version": "2.1.0.0",
-        "changelog": "Music Look 2.1.0.0",
+        "changelog": "- **Weiter hören in der Wiedergabeleiste:** Am Computer steht „Weiter hören“ jetzt in der unteren Leiste (gleiche Fläche und Aufteilung wie die Wiedergabeleiste: Cover, Titel, Abspielknopf, Zeit und Fortschritt), solange nichts spielt; die Leiste oben links in der Seitenleiste entfällt. Am Handy bleibt sie über der unteren Navigation. Verhalten beim Starten unverändert (gesperrt während des Startens, bis zu drei Versuche, Nachspulen).\n- **Konto oben rechts (Computer):** Benutzerbild ohne Namen (Menü: Jellyfin-Kontoeinstellungen, Jellyfin-Startseite, Dashboard für Administratoren, Abmelden falls `Dashboard.logout` vorhanden) und Zahnrad (bisheriges Menü: Playlist anlegen, Spotify-Import, Downloads, Equalizer, Einstellungen usw.). Die Fußleiste mit „Menü“ links unten entfällt.\n- **Bibliothek: Sortieren und Ansicht:** Menü mit *Zuletzt*, *Kürzlich hinzugefügt*, *Alphabetisch*, *Ersteller\\*in* und vier Ansichten (Liste, kompakte Liste, kleines und großes Raster) in der Seitenleiste und in der Handy-Bibliothek. „Zuletzt“ merkt sich pro Konto, was zuletzt geöffnet oder abgespielt wurde (Anzeige-Einstellungen, Schlüssel `ml_recent`); Alben und Künstler werden serverseitig sortiert (`DateCreated`, `SortName`, bei Alben `AlbumArtist,SortName`), Playlists im Browser. Vorher wechselte der Knopf nur die Beschriftung zwischen „Zuletzt“ und „A–Z“, ohne die Reihenfolge zu ändern.\n- **Jellyfin Media Player / ältere Engines (Qt WebEngine):** Erkennung zur Laufzeit (`ml-nogap`, `ml-noar`) für fehlendes Flex-`gap` (Chromium < 84) und `aspect-ratio` (< 88); Abstände werden dann über Außenränder erzeugt (Block am Dateiende), Cover erhalten feste Größen, Chips schrumpfen nicht mehr.\n- **GitHub:** `CODE_OF_CONDUCT.md`, Pull-Request-Vorlage, `ACCESSIBILITY.md`, Issue-Vorlagen ohne leere Tickets.",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/Chris-coder-lab/jellyfin-plugin-musiclook/releases/download/v2.1.0.0/musiclook_2.1.0.0.zip",
-        "checksum": "081940E2ACBE2D42415453EF9DE811FB",
-        "timestamp": "2026-10-29T13:47:22Z"
+        "checksum": "47C41580C2567FA8FBFD9EEBE3B2113E",
+        "timestamp": "2026-10-29T13:58:18Z"
       },
       {
         "version": "2.0.2.0",
