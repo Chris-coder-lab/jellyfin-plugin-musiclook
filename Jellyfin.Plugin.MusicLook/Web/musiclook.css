@@ -1475,47 +1475,6 @@ body.ml-music .MuiCircularProgress-circle { stroke-width: 2.2 !important; stroke
 .ml-sp-miss-row > .ml-sp-miss-art { flex: 1 1 100%; order: 3; }
 .ml-sp-opts { margin: 12px 0 4px; padding: 10px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
 
-/* ---------- Version 2.0.2: Leiste "Weiter hoeren" (Seitenleiste bzw. ueber der unteren Leiste) ---------- */
-.ml-rbar { position: relative; flex: 0 0 auto; margin: 0 8px 6px; border-radius: 8px; overflow: hidden; background: linear-gradient(90deg, rgba(30, 215, 96, 0.20), #262626 75%); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
-.ml-rbar[hidden] { display: none !important; }
-.ml-rbar-main { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 7px 10px 10px 7px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; -webkit-tap-highlight-color: transparent; }
-.ml-rbar-main:disabled { cursor: progress; opacity: 0.92; }
-@media (hover: hover) { .ml-rbar-main:not(:disabled):hover { background: rgba(255, 255, 255, 0.07); } }
-.ml-rbar-cover { flex: 0 0 auto; display: block; width: 44px; height: 44px; border-radius: 4px; overflow: hidden; }
-.ml-rbar-cover .ml-cover, .ml-rbar-cv { width: 100%; height: 100%; border-radius: 4px; }
-.ml-rbar-txt { flex: 1 1 auto; min-width: 0; display: block; padding-right: 20px; }
-.ml-rbar-kicker, .ml-rbar-title, .ml-rbar-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ml-rbar-kicker { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ml-accent, #1ed760); }
-.ml-rbar-title { font-size: 0.9rem; font-weight: 700; }
-.ml-rbar-sub { font-size: 0.76rem; color: var(--ml-muted, #b3b3b3); }
-.ml-rbar-play { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ml-accent, #1ed760); color: #000; }
-.ml-rbar-play svg { width: 20px; height: 20px; }
-.ml-rbar-play .ml-spin { width: 18px; height: 18px; border-width: 2.5px; border-color: rgba(0, 0, 0, 0.25); border-top-color: #000; }
-.ml-rbar-prog { position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; pointer-events: none; }
-.ml-rbar-prog[hidden] { display: none !important; }
-.ml-rbar-prog span { display: block; height: 100%; background: var(--ml-accent, #1ed760); }
-.ml-rbar-x { position: absolute; top: 0; right: 0; width: 26px; height: 26px; opacity: 0.65; }
-.ml-rbar-x svg { width: 14px; height: 14px; }
-.ml-rbar.ml-busy .ml-rbar-x { display: none; }
-/* Computer: dieselbe Flaeche und Aufteilung wie die Wiedergabeleiste, solange nichts spielt */
-.ml-rbar-mid { display: none; }
-.ml-rbar.ml-rbar-desk { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: minmax(200px, 1fr) minmax(340px, 2fr) minmax(220px, 1fr); align-items: center; gap: 16px; height: 76px; margin: 0; padding: 0 8px; box-sizing: border-box; border-radius: 0; overflow: visible; background: #000; box-shadow: none; }
-.ml-rbar.ml-rbar-desk[hidden] { display: none !important; }
-.ml-rbar-desk .ml-rbar-main { min-height: 0; padding: 0; gap: 12px; background: none; }
-.ml-rbar-desk .ml-rbar-cover { width: 56px; height: 56px; }
-.ml-rbar-desk .ml-rbar-txt { padding-right: 0; }
-.ml-rbar-desk .ml-rbar-kicker { font-size: 0.62rem; }
-.ml-rbar-desk .ml-rbar-main > .ml-rbar-play, .ml-rbar-desk .ml-rbar-prog { display: none; }
-.ml-rbar-desk .ml-rbar-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-.ml-rbar-desk .ml-rbar-play2 { width: 38px; height: 38px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; border: 0; padding: 0; cursor: pointer; }
-.ml-rbar-desk .ml-rbar-play2 .ml-spin { width: 18px; height: 18px; border-width: 2.5px; border-color: rgba(0, 0, 0, 0.25); border-top-color: #000; }
-@media (hover: hover) { .ml-rbar-desk .ml-rbar-play2:not(:disabled):hover { transform: scale(1.06); } }
-.ml-rbar-desk .ml-rbar-seek { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 640px; }
-.ml-rbar-desk .ml-rbar-track { flex: 1 1 auto; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); overflow: hidden; }
-.ml-rbar-desk .ml-rbar-track span { display: block; height: 100%; background: #fff; }
-.ml-rbar-desk .ml-rbar-x { position: static; justify-self: end; width: 32px; height: 32px; margin-right: 8px; opacity: 0.7; }
-.ml-rbar-desk.ml-busy .ml-rbar-x { display: block; visibility: hidden; }
-
 /* ---------- Version 2.0: Genres, intelligente Playlists, Statistik, Einschlaf-Timer ---------- */
 .ml-shelf-more { margin-left: 12px; vertical-align: middle; padding: 4px 12px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: inherit; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
 .ml-shelf-more:hover { background: rgba(255, 255, 255, 0.18); }
@@ -1678,6 +1637,30 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
   .ml-side-list { flex: 1 1 0; }
 }
 
+/* Download-Fortschritt oben (wie bei Spotify) */
+.ml-dlbar { position: fixed; z-index: 100000; left: 8px; right: 8px; top: calc(env(safe-area-inset-top, 0px) + 8px); padding: 10px 12px 12px; border-radius: 10px; background: #282828; color: #fff; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); font-family: var(--ml-font, system-ui); animation: ml-fade 0.15s ease; box-sizing: border-box; }
+.ml-dlbar[hidden] { display: none !important; }
+.ml-dlbar-top { display: flex; align-items: flex-start; gap: 10px; }
+.ml-dlbar-ic { flex: 0 0 auto; color: var(--ml-accent, #1ed760); display: inline-flex; margin-top: 1px; }
+.ml-dlbar-txt { flex: 1 1 auto; min-width: 0; }
+.ml-dlbar-title { font-weight: 800; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ml-dlbar-count { font-size: 0.82rem; font-weight: 700; margin-top: 2px; }
+.ml-dlbar-info { font-size: 0.76rem; color: #b3b3b3; margin-top: 2px; font-variant-numeric: tabular-nums; min-height: 1em; }
+.ml-dlbar-x { flex: 0 0 auto; width: 30px; height: 30px; margin: -4px -6px 0 0; color: #b3b3b3; }
+.ml-dlbar-x svg { width: 16px; height: 16px; }
+.ml-dlbar-bar { height: 4px; border-radius: 2px; margin-top: 9px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+.ml-dlbar-fill { height: 100%; width: 0; border-radius: 2px; background: var(--ml-accent, #1ed760); transition: width 0.4s linear; }
+@media (min-width: 900px) { .ml-dlbar { left: auto; right: 16px; top: 66px; width: 360px; } }
+
+/* Weiterhoeren im normalen Player: zuletzt gehoerter Titel, nur die Knoepfe ohne Wirkung sind abgeblendet */
+.ml-bar-last .ml-bar-skip, .ml-bar-last .ml-bar-toggle, .ml-bar-last .ml-bar-fav, .ml-bar-last .ml-bar-title, .ml-bar-last .ml-bar-artist, .ml-bar-last .ml-bar-seek, .ml-bar-last .ml-bar-right .ml-bar-icon:not(.ml-bar-devbtn) { opacity: 0.35; pointer-events: none; }
+.ml-bar-last .ml-bar-play .ml-spin, .ml-mini.ml-last .ml-mini-play .ml-spin { width: 18px; height: 18px; border-width: 2.5px; border-color: rgba(0, 0, 0, 0.25); border-top-color: #000; }
+.ml-bar-last .ml-bar-play:disabled, .ml-mini.ml-last .ml-mini-play:disabled { cursor: progress; }
+
+/* Weiter/Zurueck: Gedrueckt halten spult */
+.ml-hold { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+.ml-hold.ml-holding { color: var(--ml-accent, #1ed760) !important; transform: scale(1.12); }
+
 /* ===== BEGIN nogap (erzeugt von tools/gen_nogap.py, nicht von Hand aendern) ===== */
 /* Engines ohne Flex-Gap (Chromium < 84): Abstaende als Aussenabstand der Kinder; .ml-nogap setzt das Script beim Start. */
 .ml-nogap body.ml-chips-on .ml-chips > *:not(:last-child) { margin-right: 8px; }
@@ -1734,10 +1717,6 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
 .ml-nogap .ml-sp-miss-head > *:not(:last-child) { margin-right: 12px; }
 .ml-nogap .ml-sp-sec-actions > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-sp-sec-actions > * { margin-bottom: 8px; }
 .ml-nogap .ml-sp-miss-row > *:not(:last-child) { margin-right: 10px; } .ml-nogap .ml-sp-miss-row > * { margin-bottom: 10px; }
-.ml-nogap .ml-rbar-main > *:not(:last-child) { margin-right: 10px; }
-.ml-nogap .ml-rbar-desk .ml-rbar-main > *:not(:last-child) { margin-right: 12px; }
-.ml-nogap .ml-rbar-desk .ml-rbar-mid > *:not(:last-child) { margin-bottom: 4px; }
-.ml-nogap .ml-rbar-desk .ml-rbar-seek > *:not(:last-child) { margin-right: 8px; }
 .ml-nogap .ml-aux-tiles > *:not(:last-child) { margin-right: 14px; } .ml-nogap .ml-aux-tiles > * { margin-bottom: 14px; }
 .ml-nogap .ml-smart-chips > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-smart-chips > * { margin-bottom: 8px; }
 .ml-nogap .ml-smart-years > *:not(:last-child) { margin-right: 10px; }
@@ -1748,6 +1727,7 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
 .ml-nogap .ml-pop-views > *:not(:last-child) { margin-right: 4px; }
 .ml-nogap .ml-lv-grid-s .ml-list-row > *:not(:last-child) { margin-bottom: 6px; }
 .ml-nogap .ml-lv-grid-l .ml-list-row > *:not(:last-child) { margin-bottom: 6px; }
+.ml-nogap .ml-dlbar-top > *:not(:last-child) { margin-right: 10px; }
 @media (min-width: 900px) {
   .ml-nogap .ml-wide .ml-side > *:not(:last-child) { margin-bottom: 8px; }
   .ml-nogap .ml-side-navbtn > *:not(:last-child) { margin-right: 16px; }

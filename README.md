@@ -18,17 +18,17 @@
   <img src="docs/screenshots/desktop-player.png" alt="Computer-Ansicht: Seitenleiste mit Bibliothek, Playlist in der Mitte, laufender Titel rechts, Player-Leiste unten" width="100%">
 </p>
 
-| Start (Computer) | Weiter hören (Computer) |
+| Start (Computer) | Weiterhören (Computer) |
 | --- | --- |
-| <img src="docs/screenshots/desktop-start.png" alt="Startseite am Computer"> | <img src="docs/screenshots/desktop-resume.png" alt="Leiste „Weiter hören“ unten in der Wiedergabeleiste"> |
+| <img src="docs/screenshots/desktop-start.png" alt="Startseite am Computer"> | <img src="docs/screenshots/desktop-resume.png" alt="Weiterhören: die normale Wiedergabeleiste zeigt den zuletzt gehörten Titel"> |
 
-| Handy: Start | Handy: Weiter hören | Handy: Player |
+| Handy: Start | Handy: Weiterhören | Handy: Player |
 | --- | --- | --- |
 | <img src="docs/screenshots/mobile-start.png" alt="Startseite am Handy" width="260"> | <img src="docs/screenshots/mobile-resume.png" alt="Weiter hören über der unteren Leiste" width="260"> | <img src="docs/screenshots/mobile-player.png" alt="Player am Handy" width="260"> |
 
 ## Auf einen Blick
 - **Spotify-Look** für Handy, Tablet und Computer (ab 900 px Breite mit Seitenleiste, Kopfleiste und Player-Leiste), Start · Suche · Bibliothek, Chips Alle · Musik · Podcasts · Hörbücher.
-- **Weiter hören:** Was läuft (samt Playlist, Position, Hörbuch-Kapitel), merkt sich dein Jellyfin-Konto auf dem Server. App geschlossen, anderes Gerät – die Leiste unten (dort, wo sonst der Player ist) bringt dich mit einem Tipp zurück an die Stelle.
+- **Weiterhören:** Was läuft (samt Playlist, Position, Hörbuch-Kapitel), merkt sich dein Jellyfin-Konto auf dem Server. App geschlossen, anderes Gerät – der normale Player zeigt den zuletzt gehörten Titel, ein Druck auf Play macht genau dort weiter.
 - **Spotify-Playlists importieren** (Link, Titel-Links, Spotify-Datenexport, CSV oder Liste), danach aktualisierbar.
 - **Mixe, smarte Playlists, Genres, Statistik, Ähnliche Künstler, Einschlaf-Timer, M3U-Export/-Import.**
 - **Player** mit Songtext (LRC/TXT), Warteschlange, Geräte-Wechsel, Geschwindigkeit, **10-Band-Equalizer**.
@@ -37,6 +37,12 @@
 - **Podcasts und Hörbücher** getrennt von der Musik, mit eigenen Abschnitten und Fortschritt.
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
+
+## Neu in 2.2
+- **Weiterhören ganz normal im Player:** Die eigene „Weiter hören“-Leiste ist weg. Läuft nichts, zeigt der normale Player (unten am Computer, Mini-Player am Handy) den zuletzt gehörten Titel mit Cover, Künstler und Position. Ein Druck auf Play setzt die gemerkte Warteschlange genau dort fort, die Playlist ist wie gewohnt grün markiert, und danach läuft sie weiter wie jede andere Wiedergabe.
+- **Spulen durch Gedrückthalten:** Weiter/Zurück gedrückt halten spult: in den ersten 5 Sekunden in Sprüngen von 10 Sekunden (alle 0,8 s), danach in Sprüngen von 30 Sekunden. Ein kurzer Tipp wechselt wie bisher den Titel. Gilt in der Leiste, in der Vollansicht und im Songtext-Vollbild.
+- **Netz weg, Titel heruntergeladen:** Läuft ein heruntergeladener Titel (z. B. Hörbuch-Kapitel) noch vom Server und die Verbindung bricht ab, wird auf die lokale Datei an derselben Stelle gewechselt, auch pausiert. Außerdem startet ein Titel aus der Mitte einer Liste offline jetzt wirklich bei diesem Titel (vorher immer beim ersten).
+- **Download-Fortschritt oben:** Eine Karte oben zeigt Name, „x von y Titeln“, Prozent, geladene Menge, Tempo und geschätzte Restzeit; mit dem Kreuz bricht man ab.
 
 ## Neu in 2.1
 - **Weiter hören unten im Player:** Läuft nichts, zeigt die untere Wiedergabeleiste (am Handy die Leiste über der unteren Navigation) den zuletzt gehörten Titel mit Cover, Position und Abspielknopf. Ein Tipp macht genau dort weiter. Sobald etwas läuft, übernimmt die normale Leiste. Oben links über den Playlists steht nichts mehr.
@@ -79,7 +85,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.1.0.0 && git push origin v2.1.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.2.0.0 && git push origin v2.2.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

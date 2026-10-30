@@ -2979,6 +2979,20 @@
     var listeners = [];
     var loadP = null, persistAsked = false;
     var CONC = 2;
+    // Zaehler fuer die Anzeige oben (Tempo, Restzeit): alle geladenen Bytes mit Zeitmarken der letzten Sekunden
+    var flow = { bytes: 0, marks: [] };
+    function noteBytes(n) {
+      flow.bytes += n;
+      var now = Date.now(), last = flow.marks[flow.marks.length - 1];
+      if (!last || now - last[0] >= 250) flow.marks.push([now, flow.bytes]); else last[1] = flow.bytes;
+      while (flow.marks.length > 2 && now - flow.marks[0][0] > 6000) flow.marks.shift();
+    }
+    function rate() {
+      var m = flow.marks, now = Date.now();
+      if (m.length < 2 || now - m[m.length - 1][0] > 3000) return 0;
+      var span = (m[m.length - 1][0] - m[0][0]) / 1000;
+      return span >= 1 ? (m[m.length - 1][1] - m[0][1]) / span : 0;
+    }
 
     function emit() { listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* Zuhörer darf nichts blockieren */ } }); }
     function available() { return !!(window.indexedDB && window.fetch); }
@@ -3078,7 +3092,7 @@
       if (jobs[key]) return jobs[key].promise;
       if (!persistAsked) { persistAsked = true; D.persist(); }
       var ctrl = typeof AbortController === 'function' ? new AbortController() : { signal: undefined, abort: function () { } };
-      var job = { key: key, name: jobName || (collMeta && collMeta.name) || '', total: list.length, done: 0, failed: 0, part: 0, cancelled: false, ctrl: ctrl, noSpace: false };
+      var job = { key: key, name: jobName || (collMeta && collMeta.name) || '', total: list.length, done: 0, failed: 0, part: 0, cancelled: false, ctrl: ctrl, noSpace: false, doneBytes: 0, doneTracks: 0, active: {} };
       jobs[key] = job;
       var q = quality(), coverMemo = {}, existing = [], next = 0, idsAll = list.map(function (x) { return nid(x.Id); });
       var firstCover = '';
@@ -3095,7 +3109,12 @@
       function oneTrack(tr) {
         var id = nid(tr.Id);
         if (have[id] != null) { existing.push(id); job.done++; emit(); return Promise.resolve(); }
-        return fetchAudio(tr.Id, q, ctrl.signal, function (got, total) { job.part = total ? got / total : 0; }).then(function (a) {
+        var cur = job.active[id] = { got: 0, total: 0 };
+        return fetchAudio(tr.Id, q, ctrl.signal, function (got, total) {
+          job.part = total ? got / total : 0;
+          if (got >= cur.got) noteBytes(got - cur.got);   // fiel das Laden auf MP3 zurueck, beginnt der Zaehler neu
+          cur.got = got; cur.total = total;
+        }).then(function (a) {
           var pr = pairOf(tr), cp = Promise.resolve(null);
           if (pr) { var ck = nid(pr[0]); cp = coverMemo[ck] || (coverMemo[ck] = fetchCover(tr, ctrl.signal)); }
           return Promise.all([cp, fetchLyrics(tr.Id)]).then(function (both) {
@@ -3105,10 +3124,11 @@
             meta.mime = a.mime; meta.q = a.q; meta.added = Date.now();
             if (collMeta) meta.colls = [collMeta.key]; else meta.explicit = true;
             return D.saveTrack(meta, a.blob, cv ? cv.key : '', cv ? cv.blob : null).then(function () {
-              have[id] = a.blob.size; job.done++; job.part = 0; emit();
+              have[id] = a.blob.size; job.done++; job.part = 0; job.doneBytes += a.blob.size; job.doneTracks++; delete job.active[id]; emit();
             });
           });
         }).then(null, function (e) {
+          delete job.active[id];
           if (job.cancelled || (e && e.name === 'AbortError')) return;
           if (isQuota(e)) { job.noSpace = true; job.cancelled = true; try { ctrl.abort(); } catch (e2) { /* egal */ } return; }
           job.failed++; job.done++; emit();
@@ -3153,6 +3173,28 @@
       var j = jobs[key];
       return j ? { done: j.done, total: j.total, fraction: Math.min(1, (j.done + (j.part || 0)) / Math.max(1, j.total)) } : null;
     }
+    // Zusammenfassung aller laufenden Downloads fuer die Anzeige oben: Titel, Prozent, Tempo, geschaetzte Restzeit (null = nichts laeuft)
+    function stats() {
+      var list = Object.keys(jobs).map(function (k) { return jobs[k]; });
+      if (!list.length) return null;
+      var total = 0, done = 0, failed = 0, doneBytes = 0, doneTracks = 0, got = 0, known = 0, knownCount = 0, part = 0;
+      list.forEach(function (j) {
+        total += j.total; done += j.done; failed += j.failed; doneBytes += j.doneBytes || 0; doneTracks += j.doneTracks || 0;
+        Object.keys(j.active || {}).forEach(function (k) {
+          var a = j.active[k]; got += a.got;
+          if (a.total > 0) { known += a.total; knownCount++; part += a.got / a.total; }
+        });
+      });
+      var avg = doneTracks + knownCount ? (doneBytes + known) / (doneTracks + knownCount) : 0;   // mittlere Titelgroesse
+      var loaded = doneBytes + got, left = total - done;
+      var r = rate();
+      var eta = avg && r > 20000 ? Math.max(0, (avg * left - got)) / r : null;
+      return {
+        jobs: list.length, name: list.length === 1 ? list[0].name : '', total: total, done: done, failed: failed,
+        fraction: Math.min(1, (done + part) / Math.max(1, total)), loaded: loaded, estTotal: avg ? Math.max(loaded, Math.round(avg * (doneTracks + left))) : 0,
+        rate: r, eta: eta, cancelled: list.every(function (j) { return j.cancelled; })
+      };
+    }
     // Wurde eine geladene Playlist geändert (Titel dazu/weg), zieht der Download nach.
     function syncIfDownloaded(meta, tracks) {
       var c = colls[meta.key];
@@ -3176,11 +3218,11 @@
       has: function (id) { return have[nid(id)] != null; },
       isSingle: function (id) { return !!single[nid(id)]; },
       collState: collState, coll: function (key) { return colls[key] || null; }, allColls: function () { return Object.keys(colls).map(function (k) { return colls[k]; }); },
-      progress: progressOf, jobList: function () { return Object.keys(jobs).map(function (k) { return jobs[k]; }); },
+      progress: progressOf, stats: stats, jobList: function () { return Object.keys(jobs).map(function (k) { return jobs[k]; }); },
       sizeOf: function (id) { return have[nid(id)] || 0; },
       downloadColl: function (meta, tracks) { return start(tracks, meta); },
       downloadTrack: function (tr) { return start([tr], null, tr.Name); },
-      removeColl: removeColl, removeTrack: removeTrack, clearAll: clearAll, cancel: cancel,
+      removeColl: removeColl, removeTrack: removeTrack, clearAll: clearAll, cancel: cancel, cancelAll: cancelAll,
       syncIfDownloaded: syncIfDownloaded, lyricsOf: lyricsOf, backfillLyrics: backfillLyrics,
       usage: D.usage, estimate: D.estimate, persisted: D.persisted, persist: D.persist, tracks: D.allTracks
     };
@@ -3709,7 +3751,7 @@
         emptyLiked: 'Tippe bei einem Titel auf das Herz, dann erscheint er hier.',
         likedHint: 'Playlist • {0}',
         colNum: '#', colTitle: 'Titel', colAlbum: 'Album', colDuration: 'Dauer', colAdded: 'Hinzugefügt am',
-        yourLib: 'Deine Bibliothek', dashboardLbl: 'Dashboard', settingsLbl: 'Einstellungen', accountLbl: 'Konto', accountSettings: 'Jellyfin-Kontoeinstellungen', signOut: 'Abmelden', nextTrack: 'Nächster Titel', fromQueue: 'Aus der Warteschlange', nothingPlaying: 'Es läuft gerade nichts.',
+        yourLib: 'Deine Bibliothek', dashboardLbl: 'Dashboard', settingsLbl: 'Einstellungen', holdSeek: 'Gedrückt halten zum Spulen', accountLbl: 'Konto', accountSettings: 'Jellyfin-Kontoeinstellungen', signOut: 'Abmelden', nextTrack: 'Nächster Titel', fromQueue: 'Aus der Warteschlange', nothingPlaying: 'Es läuft gerade nichts.',
         openFullView: 'Vollbild-Ansicht', hideRight: 'Ansicht ausblenden', showRight: 'Wiedergabe-Ansicht einblenden',
         bookLabel: 'Hörbuch', chapters: 'Kapitel', chapter1: '1 Kapitel', chaptersN: '{0} Kapitel', openFolder: 'Ordner öffnen',
         audiobookDiag: 'Gefundene Bibliotheken auf deinem Server:', diagNone: 'Keine Bibliothek gefunden.',
@@ -3724,7 +3766,7 @@
         emptyLiked: 'Tap the heart on a track and it will show up here.',
         likedHint: 'Playlist • {0}',
         colNum: '#', colTitle: 'Title', colAlbum: 'Album', colDuration: 'Length', colAdded: 'Date added',
-        yourLib: 'Your library', dashboardLbl: 'Dashboard', settingsLbl: 'Settings', accountLbl: 'Account', accountSettings: 'Jellyfin account settings', signOut: 'Sign out', nextTrack: 'Next track', fromQueue: 'From the queue', nothingPlaying: 'Nothing is playing.',
+        yourLib: 'Your library', dashboardLbl: 'Dashboard', settingsLbl: 'Settings', holdSeek: 'Hold to fast-forward or rewind', accountLbl: 'Account', accountSettings: 'Jellyfin account settings', signOut: 'Sign out', nextTrack: 'Next track', fromQueue: 'From the queue', nothingPlaying: 'Nothing is playing.',
         openFullView: 'Full screen view', hideRight: 'Hide view', showRight: 'Show now playing view',
         bookLabel: 'Audiobook', chapters: 'Chapters', chapter1: '1 chapter', chaptersN: '{0} chapters', openFolder: 'Open folder',
         audiobookDiag: 'Libraries found on your server:', diagNone: 'No library found.',
@@ -5092,7 +5134,7 @@
 
   // Die laufende Playlist (auch wenn sie auf einem anderen Geraet laeuft) wird wie bei Spotify gruen markiert.
   function markContext() {
-    var cur = Player.contextId();
+    var cur = Player.contextId(true);
     var playing = Player.isPlayingNow();
     ML.qsa('[data-ctx]', root || document).forEach(function (n) {
       var on = !!cur && n.dataset.ctx === cur;
@@ -6599,16 +6641,8 @@
      ein Tipp startet genau dort, wo man aufgehört hat - Playlist, Album, Mix, einzelner Titel oder Hörbuch. */
   (function () {
     var extra = {
-      de: {
-        resumeLabel: 'Weiter hören', resumeBook: 'Hörbuch fortsetzen', resumePod: 'Folge fortsetzen',
-        resumeAt: 'bei {0} von {1}', resumeFromCtx: 'aus {0}', resumeHide: 'Ausblenden', resumeStarted: 'Wiedergabe wird fortgesetzt …', resumeStarting: 'wird gestartet …', resumeFailed: 'Fortsetzen hat nicht geklappt. Tippe noch einmal.',
-        resumeOn: 'zuletzt auf {0}', resumeItems: '{0} Titel in der Warteschlange'
-      },
-      en: {
-        resumeLabel: 'Continue listening', resumeBook: 'Continue audiobook', resumePod: 'Continue episode',
-        resumeAt: 'at {0} of {1}', resumeFromCtx: 'from {0}', resumeHide: 'Hide', resumeStarted: 'Resuming playback …', resumeStarting: 'starting …', resumeFailed: 'Could not resume. Tap to try again.',
-        resumeOn: 'last on {0}', resumeItems: '{0} tracks in the queue'
-      }
+      de: { resumeFailed: 'Fortsetzen hat nicht geklappt. Tippe noch einmal auf Play.' },
+      en: { resumeFailed: 'Could not resume. Tap play to try again.' }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
   })();
@@ -6691,13 +6725,6 @@
       return Store.set(KEY, null);
     }
 
-    function catLabel(v) { return v.cat === 'audiobooks' ? t('resumeBook') : v.cat === 'podcasts' ? t('resumePod') : t('resumeLabel'); }
-    function matchesChip(v, chip) {
-      if (!chip || chip === 'all') return true;
-      if (chip === 'music') return !v.cat || v.cat === 'music';
-      return v.cat === chip;
-    }
-
     // Stand wieder abspielen: Warteschlange ab dem gemerkten Titel, der erste Titel startet an der gemerkten Position.
     // Steht nur ein Titel im Stand (aeltere Staende, unbekannte Warteschlange), aber die Herkunft ist eine Playlist oder ein Album,
     // wird deren Titelliste neu geladen, damit nach dem Titel weitergespielt wird.
@@ -6746,101 +6773,33 @@
         return wait(1200).then(function () { return attempt(v, q, pos, n + 1); });
       });
     }
-    var running = null, holdUntil = 0;
+    var running = null;
     function play(v) {
       if (running) return running;   // ein zweiter Tipp waehrend des Startens tut nichts
       var ids = idList(v);
       if (!ids.length) return Promise.resolve(false);
       var pos = v.pos || 0;
       if (v.dur && pos > v.dur - 5) pos = 0;   // am Ende des Titels beginnt er wieder von vorn
-      setBusy(true);
       running = fullQueue(v, ids).then(function (q) { return attempt(v, q, pos, 0); }).then(null, function () { return false; }).then(function (ok) {
         running = null; setBusy(false);
-        if (ok) holdUntil = Date.now() + 20000;
-        else toast(t('resumeFailed'));
-        paint();
+        if (!ok) toast(t('resumeFailed'));
+        repaint();
         return ok;
       });
+      setBusy(true);   // erst jetzt gilt "laeuft": der Player zeigt den Ladekreis
       return running;
     }
 
-    /* ---------- Leiste "Weiter hören" ---------- */
-    // Sitzt dort, wo sonst der Player ist: am Computer in der unteren Wiedergabeleiste (solange nichts laeuft), am Handy ueber der unteren Leiste.
-    // Eine einzige Flaeche zum Tippen; verschwindet erst, wenn die Wiedergabe wirklich laeuft (oder der Stand ausgeblendet wird).
-    var barEl = null, ui = {}, barFor = null, lastRefresh = 0, painter = null;
-    function ensureBar() {
-      if (barEl) return barEl;
-      barEl = el('div', 'ml-rbar');
-      barEl.hidden = true;
-      ui.main = btn('ml-rbar-main');
-      ui.cover = el('span', 'ml-rbar-cover');
-      var txt = el('span', 'ml-rbar-txt');
-      ui.kicker = el('span', 'ml-rbar-kicker');
-      ui.title = el('span', 'ml-rbar-title');
-      ui.sub = el('span', 'ml-rbar-sub');
-      add(txt, ui.kicker, ui.title, ui.sub);
-      ui.play = el('span', 'ml-rbar-play');
-      ui.play.appendChild(icon('play'));
-      add(ui.main, ui.cover, txt, ui.play);
-      ui.main.addEventListener('click', function () { if (cur && !running) play(cur); });
-      ui.prog = el('span', 'ml-rbar-prog');
-      ui.fill = el('span');
-      ui.prog.appendChild(ui.fill);
-      ui.x = iconBtn('close', t('resumeHide'), 'ml-rbar-x', function () {
-        if (running) return;
-        clear(); barFor = null; paint();
-      });
-      // Am Computer sieht die Leiste aus wie die Wiedergabeleiste: links Titel, in der Mitte Abspielknopf mit Fortschritt (bei Handys ausgeblendet)
-      ui.mid = el('span', 'ml-rbar-mid');
-      ui.play2 = iconBtn('play', t('resumeLabel'), 'ml-rbar-play2', function () { if (cur && !running) play(cur); });
-      ui.seek = el('span', 'ml-rbar-seek');
-      ui.tpos = el('span', 'ml-bar-time', '0:00');
-      ui.track = el('span', 'ml-rbar-track');
-      ui.fill2 = el('span');
-      ui.track.appendChild(ui.fill2);
-      ui.tdur = el('span', 'ml-bar-time', '0:00');
-      add(ui.seek, ui.tpos, ui.track, ui.tdur);
-      add(ui.mid, ui.play2, ui.seek);
-      add(barEl, ui.main, ui.prog, ui.mid, ui.x);
-      return barEl;
-    }
-    function subLine(v) { return v.artist || (v.name ? t('resumeFromCtx', v.name) : ''); }
-    function kickerLine(v) { return catLabel(v) + (v.pos >= 1 ? ' · ' + fmtClock(v.pos) : ''); }
-    function setBusy(on) {
-      if (!barEl) return;
-      barEl.classList.toggle('ml-busy', !!on);
-      ui.main.disabled = !!on;
-      ui.main.setAttribute('aria-busy', on ? 'true' : 'false');
-      ui.play.textContent = '';
-      if (on) ui.play.appendChild(el('span', 'ml-spin')); else ui.play.appendChild(icon('play'));
-      ui.play2.disabled = !!on;
-      ui.play2.textContent = '';
-      if (on) ui.play2.appendChild(el('span', 'ml-spin')); else ui.play2.appendChild(icon('play'));
-      if (cur) ui.sub.textContent = on ? t('resumeStarting') : subLine(cur);
-    }
-    function paint() {
-      if (!barEl) return;
+    /* ---------- Anzeige im normalen Player ---------- */
+    var lastRefresh = 0, started = false;
+    // Der Stand, den der Player anzeigen darf: gueltig, nicht aelter als 90 Tage, nicht offline
+    function ghost() {
       var v = cur;
-      var show = !!v && !!idList(v).length && !(Net && Net.offline()) && Date.now() - (v.ts || 0) < 90 * 86400000 &&
-        (!!running || (!Player.isPlayingNow() && !Player.hasUi() && Date.now() >= holdUntil));
-      if (show && barFor !== v) {
-        barFor = v;
-        ui.cover.textContent = '';
-        ui.cover.appendChild(cover(v.cid ? imgUrl(v.cid, null, 120) : null, 'ml-rbar-cv'));
-        ui.kicker.textContent = kickerLine(v);
-        ui.main.title = (v.dur > 0 ? t('resumeAt', fmtClock(v.pos || 0), fmtClock(v.dur)) : '') + (v.name ? (v.dur > 0 ? ' · ' : '') + t('resumeFromCtx', v.name) : '');
-        ui.title.textContent = v.title || '';
-        ui.sub.textContent = running ? t('resumeStarting') : subLine(v);
-        ui.fill.style.width = v.dur > 0 ? clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%' : '0%';
-        ui.main.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || '') + (v.artist ? ' – ' + v.artist : ''));
-        ui.prog.hidden = !(v.dur > 0);
-        ui.fill2.style.width = v.dur > 0 ? clamp(((v.pos || 0) / v.dur) * 100, 0, 100).toFixed(1) + '%' : '0%';
-        ui.tpos.textContent = fmtClock(v.pos || 0);
-        ui.tdur.textContent = fmtClock(v.dur || 0);
-        ui.play2.setAttribute('aria-label', catLabel(v) + ': ' + (v.title || ''));
-      }
-      if (barEl.hidden === show) barEl.hidden = !show;
+      if (!v || !valid(v) || !idList(v).length || (Net && Net.offline()) || Date.now() - (v.ts || 0) > 90 * 86400000) return null;
+      return v;
     }
+    function repaint() { try { Player.repaint(); } catch (e) { /* Player noch nicht bereit */ } }
+    function setBusy(on) { repaint(); }
     // Stand vom Server neu lesen (z. B. nach dem Wechsel zurueck in die App), ohne einen neueren lokalen Stand zu ueberschreiben.
     function refresh() {
       if (Net && Net.offline()) return Promise.resolve();
@@ -6848,24 +6807,20 @@
       return Store.get(KEY, null, true).then(function (v) {
         if (valid(v)) { if (!cur || (v.ts || 0) >= (cur.ts || 0)) { cur = v; loadP = Promise.resolve(v); } }
         else if (!v && cur && !want) { cur = null; loadP = Promise.resolve(null); }
-        paint();
+        repaint();
       }, function () { /* naechster Versuch */ });
     }
-    // Die Leiste in den gegebenen Rahmen setzen (Computer: Hauptrahmen unten, Handy: ueber der unteren Leiste).
-    function mount(host, last) {
-      ensureBar();
+    function init() {
       hook();
-      if (host && barEl.parentNode !== host) { if (last) host.appendChild(barEl); else host.insertBefore(barEl, host.firstChild); }
-      barEl.classList.toggle('ml-rbar-desk', !!last);
-      if (!painter) painter = setInterval(function () { if (barEl && barEl.isConnected) paint(); }, 2000);
-      load().then(function () { paint(); });
-      return barEl;
+      if (started) return;
+      started = true;
+      load().then(repaint);
     }
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden && barEl && barEl.isConnected && !running && Date.now() - lastRefresh > 15000) refresh();
+      if (!document.hidden && started && !running && Date.now() - lastRefresh > 15000) refresh();
     });
-    window.addEventListener('online', function () { if (barEl && barEl.isConnected && !running) refresh(); });
-    return { load: load, refresh: refresh, note: function (s) { note(s); paint(); }, flush: flush, save: save, mount: mount, paint: paint, play: play, clear: clear, get: function () { return cur; }, hook: hook };
+    window.addEventListener('online', function () { if (started && !running) refresh(); });
+    return { load: load, refresh: refresh, note: note, flush: flush, save: save, init: init, play: play, clear: clear, ghost: ghost, busy: function () { return !!running; }, get: function () { return cur; }, hook: hook };
   })();
   /* ---------- Version 2.0: Intelligente Playlists, Genres, Statistik, ähnliche Künstler, Einschlaf-Timer ----------
      Alles läuft im Browser über Jellyfins offizielle Schnittstellen (Items, Genres, Artists/{id}/Similar); die Regeln der intelligenten
@@ -7975,6 +7930,74 @@
     });
     render();
   }
+  /* ---------- Download-Fortschritt oben (wie bei Spotify) ----------
+     Solange Titel geladen werden, steht oben eine Karte: Name, wie viele Titel fertig sind, Prozent, geladene Menge, Tempo, geschaetzte Restzeit.
+     Sie erscheint auf jeder Seite (auch ausserhalb der Spotify-Ansicht) und verschwindet, wenn alles geladen ist; das Kreuz bricht ab. */
+  (function () {
+    var extra = {
+      de: {
+        dlTitle: 'Wird heruntergeladen', dlCount: '{0} von {1} Titeln', dlLeft: 'noch ca. {0}', dlFailedN: '{0} fehlgeschlagen', dlCancel: 'Download abbrechen',
+        dlMany: '{0} Downloads', dlCancelled: 'Wird abgebrochen …', dlSecShort: '{0} s', dlMin: '{0} Min.', dlHour: '{0} Std.'
+      },
+      en: {
+        dlTitle: 'Downloading', dlCount: '{0} of {1} tracks', dlLeft: 'about {0} left', dlFailedN: '{0} failed', dlCancel: 'Cancel download',
+        dlMany: '{0} downloads', dlCancelled: 'Cancelling …', dlSecShort: '{0} s', dlMin: '{0} min', dlHour: '{0} h'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var DLBAR = (function () {
+    var card = null, ui = {}, timer = 0;
+    function eta(sec) {
+      sec = Math.max(1, Math.round(sec));
+      if (sec < 60) return t('dlSecShort', sec);
+      if (sec < 3600) { var m = Math.floor(sec / 60), s = sec % 60; return t('dlMin', m) + (m < 10 && s ? ' ' + t('dlSecShort', s) : ''); }
+      var h = Math.floor(sec / 3600); return t('dlHour', h) + ' ' + t('dlMin', Math.round((sec % 3600) / 60));
+    }
+    function ensure() {
+      if (card) return card;
+      card = el('div', 'ml-dlbar');
+      card.setAttribute('role', 'status');
+      card.hidden = true;
+      var top = el('div', 'ml-dlbar-top');
+      ui.icon = el('span', 'ml-dlbar-ic'); ui.icon.appendChild(icon('download_circle'));
+      var txt = el('div', 'ml-dlbar-txt');
+      ui.title = el('div', 'ml-dlbar-title');
+      ui.count = el('div', 'ml-dlbar-count');
+      ui.info = el('div', 'ml-dlbar-info');
+      add(txt, ui.title, ui.count, ui.info);
+      ui.x = iconBtn('close', t('dlCancel'), 'ml-dlbar-x', function () { OFF.cancelAll(); paint(); });
+      add(top, ui.icon, txt, ui.x);
+      ui.bar = el('div', 'ml-dlbar-bar'); ui.fill = el('div', 'ml-dlbar-fill'); ui.bar.appendChild(ui.fill);
+      add(card, top, ui.bar);
+      document.body.appendChild(card);
+      return card;
+    }
+    function paint() {
+      var s = OFF.stats();
+      if (!s) {
+        if (card) card.hidden = true;
+        clearInterval(timer); timer = 0;
+        return;
+      }
+      ensure();
+      card.hidden = false;
+      var pct = Math.floor(s.fraction * 100);
+      ui.title.textContent = s.cancelled ? t('dlCancelled') : (s.name ? t('dlTitle') + ' · ' + s.name : t('dlTitle') + (s.jobs > 1 ? ' · ' + t('dlMany', s.jobs) : ''));
+      ui.count.textContent = t('dlCount', Math.min(s.done, s.total), s.total) + ' · ' + pct + ' %' + (s.failed ? ' · ' + t('dlFailedN', s.failed) : '');
+      var parts = [];
+      if (s.loaded > 0) parts.push(s.estTotal ? fmtBytes(s.loaded) + ' / ' + fmtBytes(s.estTotal) : fmtBytes(s.loaded));
+      if (s.rate > 0) parts.push(fmtBytes(s.rate) + '/s');
+      if (s.eta != null && !s.cancelled) parts.push(t('dlLeft', eta(s.eta)));
+      ui.info.textContent = parts.join(' · ');
+      ui.fill.style.width = (s.fraction * 100).toFixed(1) + '%';
+      ui.card = card;
+    }
+    function tick() { if (!timer) timer = setInterval(paint, 500); paint(); }
+    OFF.listen(tick);
+    return { paint: paint, tick: tick };
+  })();
 
   /* ---------- Offline-Ansichten: Start, Bibliothek, Suche und Listen aus den heruntergeladenen Daten ---------- */
   (function () {
@@ -8251,13 +8274,13 @@
     var extra = {
       de: {
         offPlayLocal: 'Vom Gerät abspielen', offPlayAll: 'Alle abspielen', offShuffleAll: 'Zufall', offFromDevice: 'Vom Gerät', offLocalFail: 'Titel nicht abspielbar',
-        offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.',
+        offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.', offHandover: 'Keine Verbindung – es läuft vom Gerät an derselben Stelle weiter.',
         fromPlaylistCtx: 'Wiedergabe aus Playlist', fromAlbumCtx: 'Wiedergabe aus Album', fromLikedCtx: 'Wiedergabe aus', fromMixCtx: 'Wiedergabe aus Mix',
         fromRadioCtx: 'Wiedergabe aus Radio', fromMixtapeCtx: 'Wiedergabe aus Mixtape', lyricsBig: 'Songtext vergrößern', lyricsSmall: 'Songtext verkleinern'
       },
       en: {
         offPlayLocal: 'Play from device', offPlayAll: 'Play all', offShuffleAll: 'Shuffle', offFromDevice: 'From device', offLocalFail: 'Track cannot be played',
-        offNotAvail: 'You are offline. This track is not downloaded.',
+        offNotAvail: 'You are offline. This track is not downloaded.', offHandover: 'No connection – continuing from the device at the same position.',
         fromPlaylistCtx: 'Playing from playlist', fromAlbumCtx: 'Playing from album', fromLikedCtx: 'Playing from', fromMixCtx: 'Playing from mix',
         fromRadioCtx: 'Playing from radio', fromMixtapeCtx: 'Playing from mixtape', lyricsBig: 'Enlarge lyrics', lyricsSmall: 'Shrink lyrics'
       }
@@ -8268,7 +8291,7 @@
   var OFFPLAY = (function () {
     var D = MLOff;
     var aud = null;                       // eigenes Audio-Element (Jellyfins Element bleibt unberührt)
-    var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'RepeatNone', cur: null, url: '', ctxId: '', name: '', startedAt: 0 };
+    var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'RepeatNone', cur: null, url: '', ctxId: '', name: '', startedAt: 0, startPos: 0, startPaused: false };
     var tok = 0, covers = {}, coverWait = {}, handlers = false, active = false, items = {};
 
     function coverUrl(key) {
@@ -8346,7 +8369,9 @@
           P.queue = list; P.name = opts.name || '';
           P.ctxId = opts.ctx ? String(opts.ctx) : ctxFromColl(opts.coll);
           if (opts.shuffle != null) P.shuffle = !!opts.shuffle;
-          buildOrder(first); P.idx = 0; P.startedAt = Date.now();
+          buildOrder(first); P.idx = P.shuffle ? 0 : first; P.startedAt = Date.now();   // ohne Zufall startet genau der gewuenschte Titel
+          P.startPos = opts.positionSec > 0 ? opts.positionSec : 0; P.startPaused = !!opts.paused;
+          if (opts.repeat === 'RepeatAll' || opts.repeat === 'RepeatOne') P.repeat = opts.repeat;
           active = true;
           bindKeys();
           playCurrent();
@@ -8367,7 +8392,15 @@
         P.url = URL.createObjectURL(blob); P.cur = tr;
         aud.src = P.url;
         try { applySpeed(); } catch (e) { /* kein Tempo */ }
-        var p = aud.play(); if (p && p.catch) p.catch(function () { Player.repaint(); });
+        var sp = P.startPos, startPaused = P.startPaused;
+        P.startPos = 0; P.startPaused = false;
+        if (sp > 0) {   // Startposition (Wechsel vom Server auf die lokale Datei): vor dem Laden setzen und nach den Metadaten nochmals pruefen
+          try { aud.currentTime = sp; } catch (e) { /* nach den Metadaten */ }
+          var fix = function () { aud.removeEventListener('loadedmetadata', fix); if (my === tok && Math.abs((aud.currentTime || 0) - sp) > 1) { try { aud.currentTime = sp; } catch (e) { /* egal */ } } };
+          aud.addEventListener('loadedmetadata', fix);
+        }
+        if (startPaused) Player.repaint();
+        else { var p = aud.play(); if (p && p.catch) p.catch(function () { Player.repaint(); }); }
         meta(tr);
         Player.syncLocal();
         // Umgebende Titel vorladen: Cover für Warteschlange und "Als Nächstes"
@@ -8747,10 +8780,10 @@
       add(txt, ui.miniTitle, ui.miniSub, ui.miniDev);
       ui.miniText = txt;
       add(open, ui.miniCover, txt);
-      open.addEventListener('click', openFull);
+      open.addEventListener('click', function () { if (ghostOn()) resumeGhost(); else openFull(); });
       attachSwipe(open, function () { return [ui.miniCover, ui.miniText]; });
       ui.miniDevBtn = iconBtn('devices', t('devices'), 'ml-mini-devbtn', openDevices);
-      ui.miniToggle = iconBtn('play', t('play'), 'ml-mini-play', toggle);
+      ui.miniToggle = iconBtn('play', t('play'), 'ml-mini-play', playPress);
       ui.miniBar = el('div', 'ml-mini-progress');
       ui.miniFill = el('div', 'ml-mini-fill');
       ui.miniBar.appendChild(ui.miniFill);
@@ -8798,9 +8831,9 @@
       var mid = el('div', 'ml-bar-mid');
       var ctl = el('div', 'ml-bar-ctl');
       ui.bShuffle = iconBtn('shuffle', t('shuffle'), 'ml-bar-toggle', function () { setShuffle(!P.shuffle); });
-      ui.bPrev = iconBtn('prev', t('prev'), 'ml-bar-skip', function () { skip('PreviousTrack'); });
-      ui.bPlay = iconBtn('play', t('play'), 'ml-bar-play', toggle);
-      ui.bNext = iconBtn('next', t('next'), 'ml-bar-skip', function () { skip('NextTrack'); });
+      ui.bPrev = skipBtn('prev', t('prev'), 'ml-bar-skip', 'PreviousTrack');
+      ui.bPlay = iconBtn('play', t('play'), 'ml-bar-play', playPress);
+      ui.bNext = skipBtn('next', t('next'), 'ml-bar-skip', 'NextTrack');
       ui.bRepeat = iconBtn('repeat', t('repeat'), 'ml-bar-toggle', cycleRepeat);
       add(ctl, ui.bShuffle, ui.bPrev, ui.bPlay, ui.bNext, ui.bRepeat);
       var sk = el('div', 'ml-bar-seek');
@@ -9011,9 +9044,9 @@
 
       var ctl = el('div', 'ml-controls');
       ui.shuffle = iconBtn('shuffle', t('shuffle'), 'ml-ctl ml-ctl-toggle', function () { setShuffle(!P.shuffle); });
-      ui.prev = iconBtn('prev', t('prev'), 'ml-ctl ml-ctl-skip', function () { skip('PreviousTrack'); });
+      ui.prev = skipBtn('prev', t('prev'), 'ml-ctl ml-ctl-skip', 'PreviousTrack');
       ui.play = iconBtn('play', t('play'), 'ml-ctl ml-ctl-play', toggle);
-      ui.next = iconBtn('next', t('next'), 'ml-ctl ml-ctl-skip', function () { skip('NextTrack'); });
+      ui.next = skipBtn('next', t('next'), 'ml-ctl ml-ctl-skip', 'NextTrack');
       ui.repeat = iconBtn('repeat', t('repeat'), 'ml-ctl ml-ctl-toggle', cycleRepeat);
       add(ctl, ui.shuffle, ui.prev, ui.play, ui.next, ui.repeat);
       block.appendChild(ctl);
@@ -9089,7 +9122,50 @@
       }
       return command('Playing/Seek', { seekPositionTicks: Math.round(sec * 1e7) }).then(function () { P.pos = sec; P.at = Date.now(); kick(); });
     }
+    /* Weiter/Zurueck: kurzer Tipp wechselt den Titel. Gedrueckt halten spult: in den ersten 5 Sekunden in Spruengen von 10 Sekunden,
+       danach in Spruengen von 30 Sekunden (ein Sprung alle HOLD_TICK Millisekunden). Beim Loslassen bleibt es dort, kein Titelwechsel. */
+    var HOLD_DELAY = 450, HOLD_TICK = 800, HOLD_FAST_AFTER = 5000, HOLD_SMALL = 10, HOLD_BIG = 30;
+    function skipBtn(name, label, cls, cmd) {
+      var b = iconBtn(name, label, cls, null);
+      var dir = cmd === 'NextTrack' ? 1 : -1;
+      var delay = 0, tick = 0, startAt = 0, target = 0, did = false, swallow = false;
+      b.classList.add('ml-hold');
+      b.title = label + ' · ' + t('holdSeek');
+      function step() {
+        var dur = duration();
+        if (!(dur > 0)) return;
+        var secs = Date.now() - startAt < HOLD_FAST_AFTER ? HOLD_SMALL : HOLD_BIG;
+        target = Math.max(0, Math.min(dur - 1, target + dir * secs));
+        seekTo(target);
+        b.classList.add('ml-holding');
+      }
+      function begin() {
+        delay = 0;
+        if (!P.item) return;
+        did = true; startAt = Date.now(); target = position();
+        step();
+        tick = setInterval(step, HOLD_TICK);
+      }
+      function end() {
+        clearTimeout(delay); clearInterval(tick); delay = tick = 0;
+        b.classList.remove('ml-holding');
+        if (did) { did = false; swallow = true; setTimeout(function () { swallow = false; }, 80); }
+      }
+      b.addEventListener('pointerdown', function (e) {
+        if (e.button > 0 || delay || tick) return;
+        delay = setTimeout(begin, HOLD_DELAY);
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { b.addEventListener(ev, end); });
+      b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (swallow) { swallow = false; return; }
+        skip(cmd);
+      });
+      return b;
+    }
     function skip(cmd) {
+      if (!P.item) return;
       var a = audioEl();
       skipDir = cmd === 'PreviousTrack' ? -1 : 1; skipAt = Date.now();
       // Wie bei Spotify: "Zurueck" springt nach ein paar Sekunden zuerst an den Anfang des Titels.
@@ -9250,6 +9326,7 @@
       }, 6000);
     }
     function toggle() {
+      if (!P.item && ghostRec()) { resumeGhost(); return; }
       var a = audioEl();
       if (a) {
         var res = null;
@@ -9503,9 +9580,9 @@
       var tp = el('span', null, '0:00'), td = el('span', null, '0:00');
       add(times, tp, td);
       var ctl = el('div', 'ml-lyf-ctl');
-      var bPrev = iconBtn('prev', t('prev'), 'ml-ctl ml-ctl-skip', function () { skip('PreviousTrack'); });
+      var bPrev = skipBtn('prev', t('prev'), 'ml-ctl ml-ctl-skip', 'PreviousTrack');
       var bPlay = iconBtn('play', t('play'), 'ml-ctl ml-ctl-play ml-lyf-play', toggle);
-      var bNext = iconBtn('next', t('next'), 'ml-ctl ml-ctl-skip', function () { skip('NextTrack'); });
+      var bNext = skipBtn('next', t('next'), 'ml-ctl ml-ctl-skip', 'NextTrack');
       add(ctl, bPrev, bPlay, bNext);
       add(foot, seek, times, ctl);
       add(layer, top, body, foot);
@@ -9911,12 +9988,82 @@
       if (root) root.classList.remove('ml-has-np');
     }
 
+    /* ---------- Weiterhoeren im normalen Player ----------
+       Laeuft nichts, zeigen Leiste (Computer) und Mini-Player (Handy) den zuletzt gehoerten Titel wie gewohnt an. Der normale Play-Knopf
+       setzt die gemerkte Warteschlange an der gemerkten Position fort (siehe resume.js). */
+    var ghostFor = '', ghostBarFor = '';
+    function ghostRec() {
+      if (P.item || P.targetId || !running || !P.polled || OFFPLAY.active() || Net.offline()) return null;
+      try { return Resume.ghost(); } catch (e) { return null; }
+    }
+    function ghostOn() { return !!(mini && mini.classList.contains('ml-last')); }
+    function resumeGhost() { var g = ghostRec(); if (g && !Resume.busy()) Resume.play(g); }
+    function playPress() { if (ghostOn()) resumeGhost(); else toggle(); }
+    function ghostIcon(b, busy) {
+      b.disabled = !!busy;
+      if (busy) {
+        if (b.dataset.ic !== 'spin') { b.dataset.ic = 'spin'; b.textContent = ''; b.appendChild(el('span', 'ml-spin')); }
+        return;
+      }
+      swapIcon(b, 'play', t('play'));
+    }
+    function ghostCover(host, id, w) {
+      host.textContent = '';
+      host.appendChild(cover(id ? imgUrl(id, null, w) : null, 'ml-fill-cover'));
+    }
+    function paintGhost(m, g) {
+      var busy = Resume.busy();
+      var frac = g.dur > 0 ? Math.max(0, Math.min(1, (g.pos || 0) / g.dur)) : 0;
+      m.hidden = false;
+      m.classList.remove('ml-idle', 'ml-remote');
+      m.classList.add('ml-last');
+      bodyCls('ml-mini-on', true);
+      lastItemId = ''; barCoverId = ''; npCoverId = ''; npFor = '';
+      var key = g.cid || '';
+      ui.miniTitle.textContent = g.title || '';
+      ui.miniSub.textContent = g.artist || '';
+      ui.miniDev.hidden = true;
+      if (ghostFor !== key) { ghostFor = key; ghostCover(ui.miniCover, key, 96); }
+      ghostIcon(ui.miniToggle, busy);
+      ui.miniFill.style.width = (frac * 100) + '%';
+      if (bar && root && isWide()) {
+        bar.hidden = false;
+        bar.classList.add('ml-bar-last');
+        bar.classList.remove('ml-bar-idle');
+        ui.barTitle.textContent = g.title || '';
+        ui.barArtist.textContent = g.artist || '';
+        ui.barDev.hidden = true;
+        if (ghostBarFor !== key) { ghostBarFor = key; ghostCover(ui.barCover, key, 120); }
+        ghostIcon(ui.bPlay, busy);
+        ui.bSeek.value = String(Math.round(frac * 1000)); paintRange(ui.bSeek);
+        ui.bPos.textContent = fmtClock(g.pos || 0);
+        ui.bDur.textContent = fmtClock(g.dur || 0);
+      }
+      if (fullOpen) closeFull();
+      if (np) np.hidden = true;
+      if (root) root.classList.remove('ml-has-np');
+      try { markContext(); } catch (e) { /* ignorieren */ }
+    }
+    function ghostOff(m) {
+      if (!ghostOn() && !(bar && bar.classList.contains('ml-bar-last'))) return;
+      m.classList.remove('ml-last');
+      ghostFor = ''; ghostBarFor = '';
+      if (bar) bar.classList.remove('ml-bar-last');
+      ui.miniToggle.disabled = false;
+      if (ui.bPlay) { ui.bPlay.disabled = false; ui.bPlay.dataset.ic = ''; }
+      ui.miniToggle.dataset.ic = '';
+      try { markContext(); } catch (e) { /* ignorieren */ }
+    }
+
     function paint() {
       var has = !!P.item;
       if (!(isWide() && npRoom())) panels.filter(function (x) { return x.el.classList.contains('ml-panel-np'); }).forEach(function (x) { x.close(); });
       var m = ensureMini();
       if (!has && P.targetId) { paintIdle(m); return; }   // Zielgeraet gewaehlt, es spielt aber (noch) nichts: Player bleibt sichtbar
       m.classList.remove('ml-idle');
+      var g = has ? null : ghostRec();
+      if (g) { paintGhost(m, g); return; }
+      ghostOff(m);
       ui.miniToggle.disabled = false;
       if (bar) bar.classList.remove('ml-bar-idle');
       m.hidden = !has;
@@ -10089,6 +10236,7 @@
     var gapSince = 0;
     function applySession(s) {
       var np = s && s.NowPlayingItem;
+      P.polled = true;
       if (np) gapSince = 0;
       else if (P.item) {
         if (nearEnd(8) && autoEnd()) return;   // letzter Titel ist zu Ende und nichts folgt
@@ -10205,6 +10353,37 @@
       if (root) root.classList.remove('ml-has-np');
     }
 
+    /* ---------- Verbindung weg waehrend vom Server gestreamt wird ----------
+       Ist der laufende Titel heruntergeladen, spielt er ohne Pause an derselben Stelle von der lokalen Datei weiter (Warteschlange:
+       die heruntergeladenen Titel der Liste). Ausgeloest, sobald die Verbindung als weg gilt (Browser meldet offline, der Server antwortet
+       nicht mehr oder der Offline-Modus wird eingeschaltet) und wenn das Audio-Element des Servers stockt. */
+    var handingOver = false, lastProbeAt = 0;
+    function handoverLocal() {
+      if (handingOver || !P.item || P.targetId || OFFPLAY.active() || (P.session && P.session.Id === 'local')) return false;
+      if (!OFF.available() || !OFF.has(P.item.Id) || !audioEl()) return false;
+      var curId = nid(P.item.Id), pos = position(), paused = isPaused();
+      var ids = (P.queue || []).map(function (x) { return nid(x.Id); });
+      if (ids.indexOf(curId) < 0) ids = [curId];
+      ids = ids.filter(function (id) { return id === curId || OFF.has(id); });
+      var name = '';
+      try { var d = ctxDisplay(P.full || P.item); name = d && d.name ? d.name : ''; } catch (e) { name = ''; }
+      handingOver = true;
+      OFFPLAY.startIds(ids, ids.indexOf(curId), { name: name, ctx: P.ctxId || '', positionSec: pos, paused: paused, repeat: P.repeat }).then(function (ok) {
+        handingOver = false;
+        if (ok) toast(t('offHandover'));
+      }, function () { handingOver = false; });
+      return true;
+    }
+    Net.onChange(function (off) { if (off) handoverLocal(); });
+    ['error', 'stalled', 'waiting'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) {
+        var a = e.target;
+        if (!a || !a.classList || !a.classList.contains('mediaPlayerAudio') || !P.item || OFFPLAY.active() || !OFF.has(P.item.Id)) return;
+        if (Net.offline()) { handoverLocal(); return; }
+        if (Date.now() - lastProbeAt > 3000) { lastProbeAt = Date.now(); Net.probeNow(); }   // stockt der Stream, wird die Verbindung sofort geprueft
+      }, true);
+    });
+
     var fullEntry = null;
     function openFull() {
       if (!P.item) return;
@@ -10270,7 +10449,10 @@
     return {
       syncLocal: syncLocal, dropLocal: dropLocal, adoptLocal: adoptLocal,
       start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, toggle: toggle,
-      contextId: function () { return P.ctxId; }, isPlayingNow: function () { return !!P.item && !isPaused(); }, isRunning: function () { return running; }, hasUi: function () { return !!(mini && !mini.hidden) || !!P.item; }, currentId: currentId, refreshFavorite: refreshFavorite,
+      contextId: function (forMark) {
+        if (forMark && !P.item && !P.ctxId) { var g = ghostRec(); if (g && g.ctx) return nid(g.ctx); }
+        return P.ctxId;
+      }, isPlayingNow: function () { return !!P.item && !isPaused(); }, isRunning: function () { return running; }, hasUi: function () { return !!P.item; }, currentId: currentId, refreshFavorite: refreshFavorite,
       open: openFull, close: closeFull, isOpen: function () { return fullOpen; },
       targetId: function () { return P.targetId; }, sessionNow: fetchState, openDevices: openDevices,
       remaining: remaining, fade: fade, pauseNow: pauseNow,
@@ -10310,7 +10492,7 @@
     });
     bottomBar.appendChild(nav);
     root.appendChild(bottomBar);
-    Resume.mount(isWide() ? root : bottomBar, isWide());
+    Resume.init();
     document.body.appendChild(root);
     if (isWide()) { ensureSide(); root.insertBefore(side, scroller); mountDtop(); }
     Player.mount();
@@ -10455,7 +10637,7 @@
     layout();
     Player.mount();
     Player.repaint();
-    Resume.mount(isWide() ? root : bottomBar, isWide());
+    Resume.init();
     if (!root.hidden) {
       if (isWide() && !side.parentNode) root.insertBefore(side, scroller);
       if (isWide()) fillSide();

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 2.2.0.0
+- **Weiterhören im normalen Player:** Die eigene Leiste „Weiter hören“ (inklusive Kreuz zum Ausblenden und Sonderschrift) entfällt. Läuft auf diesem Gerät nichts, zeigen die Wiedergabeleiste unten (Computer) und der Mini-Player (Handy) den zuletzt gehörten Titel; Play startet die gemerkte Warteschlange an der gemerkten Position (Ladekreis auf dem Play-Knopf, bis zu drei Versuche wie bisher). Die Herkunftsplaylist wird grün markiert (`ml-ctx-on`), danach läuft die Liste weiter. Weiter/Zurück, Zufall und Wiederholen sind in diesem Zustand abgeblendet.
+- **Spulen:** Weiter/Zurück gedrückt halten (450 ms) spult, alle 0,8 s ein Sprung: in den ersten 5 Sekunden des Spulens 10 Sekunden, danach 30 Sekunden. Kurzer Tipp = Titelwechsel wie bisher. Leiste, Vollansicht und Songtext-Vollbild; Hinweis im Tooltip.
+- **Netzverlust bei heruntergeladenen Titeln:** Wird die Verbindung als weg erkannt (Browser offline, Server antwortet nicht, Offline-Modus eingeschaltet) oder stockt das Audio-Element des Servers, wechselt ein heruntergeladener Titel ohne Neustart auf die lokale Datei an derselben Stelle (auch pausiert), die Warteschlange besteht aus den heruntergeladenen Titeln der Liste. Fehler behoben: Offline gestartete Listen begannen immer beim ersten Titel statt beim gewählten.
+- **Download-Fortschritt:** Karte oben (am Computer rechts unter der Kopfleiste, am Handy über die Breite) mit Name, Titelzahl, Prozent, geladener und geschätzter Gesamtmenge, Tempo und Restzeit; Abbrechen mit dem Kreuz.
+
 ## 2.1.0.0
 - **Weiter hören in der Wiedergabeleiste:** Am Computer steht „Weiter hören“ jetzt in der unteren Leiste (gleiche Fläche und Aufteilung wie die Wiedergabeleiste: Cover, Titel, Abspielknopf, Zeit und Fortschritt), solange nichts spielt; die Leiste oben links in der Seitenleiste entfällt. Am Handy bleibt sie über der unteren Navigation. Verhalten beim Starten unverändert (gesperrt während des Startens, bis zu drei Versuche, Nachspulen).
 - **Konto oben rechts (Computer):** Benutzerbild ohne Namen (Menü: Jellyfin-Kontoeinstellungen, Jellyfin-Startseite, Dashboard für Administratoren, Abmelden falls `Dashboard.logout` vorhanden) und Zahnrad (bisheriges Menü: Playlist anlegen, Spotify-Import, Downloads, Equalizer, Einstellungen usw.). Die Fußleiste mit „Menü“ links unten entfällt.
