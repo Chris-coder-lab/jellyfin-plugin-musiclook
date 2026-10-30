@@ -38,6 +38,13 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.3
+- **Spulen ohne Netz:** Ein heruntergeladener Titel, der noch vom Server läuft, spielt beim Spulen an eine nicht geladene Stelle (oder bei Netzverlust) die lokale Datei genau dort weiter – ohne „Wiedergabefehler“.
+- **Spulen durch Gedrückthalten in drei Stufen:** erste 5 Sekunden je 15 Sekunden, bis zu einer Minute je 30 Sekunden, danach je 60 Sekunden. Nach dem Loslassen läuft es sofort weiter.
+- **Teilen mit QR-Code:** Im Teilen-Dialog „QR-Code anzeigen“ – die Person gegenüber scannt den Link mit der Handy-Kamera.
+- **Download großer Dateien** schont den Speicher (kein Absturz mehr beim Zusammensetzen bei 100 %).
+- **Zurück-Taste (Android-App):** Die Warteschlange und andere Ebenen schließen sich mit der Zurück-Taste; weitere Zurück-Tasten bleiben danach nutzbar.
+
 ## Neu in 2.2
 - **Weiterhören ganz normal im Player:** Die eigene „Weiter hören“-Leiste ist weg. Läuft nichts, zeigt der normale Player (unten am Computer, Mini-Player am Handy) den zuletzt gehörten Titel mit Cover, Künstler und Position. Ein Druck auf Play setzt die gemerkte Warteschlange genau dort fort, die Playlist ist wie gewohnt grün markiert, und danach läuft sie weiter wie jede andere Wiedergabe.
 - **Spulen durch Gedrückthalten:** Weiter/Zurück gedrückt halten spult: in den ersten 5 Sekunden in Sprüngen von 10 Sekunden (alle 0,8 s), danach in Sprüngen von 30 Sekunden. Ein kurzer Tipp wechselt wie bisher den Titel. Gilt in der Leiste, in der Vollansicht und im Songtext-Vollbild.
@@ -85,7 +92,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.2.0.0 && git push origin v2.2.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.3.0.0 && git push origin v2.3.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

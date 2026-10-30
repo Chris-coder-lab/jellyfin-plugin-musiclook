@@ -1,5 +1,12 @@
 # Änderungen
 
+## 2.3.0.0
+- **Spulen ohne Netz:** Ist ein Titel heruntergeladen und wird noch vom Server gestreamt, springt eine Spulposition, die noch nicht geladen ist, nicht mehr auf den Server (das endete mit „Wiedergabefehler / Netzwerkproblem“). Antwortet der Server nicht (Kurzprüfung 1,5 s) oder gilt die Verbindung als weg, spielt die lokale Datei an genau dieser Stelle weiter; Pause-Zustand bleibt erhalten. In der lokalen Wiedergabe wird immer direkt im Audio-Element gespult.
+- **Download bei 100 %:** Das Zusammensetzen großer Dateien (Hörbücher) hielt die ganze Datei doppelt im Skript-Speicher; die App konnte sich dabei schließen. Die Stücke werden jetzt laufend (alle 4 MB) zu Blobs gebündelt, die das Gerät außerhalb des Skript-Speichers hält.
+- **Gedrückt halten spult in drei Stufen:** erste 5 Sekunden Halten je 15 Sekunden, bis zur ersten Minute je 30 Sekunden, danach je 60 Sekunden (endlos); ein Sprung alle 0,8 s. Nach dem Loslassen spielt es sofort an dieser Stelle weiter (vorher blieb es teils pausiert).
+- **Teilen mit QR-Code:** Im Teilen-Dialog zeigt „QR-Code anzeigen“ den Link als QR-Code (lokal erzeugt, keine Anfrage ins Netz), damit die Person gegenüber ihn mit der Handy-Kamera öffnen kann.
+- **Android-Zurück-Taste:** Die Jellyfin-App ruft `appRouter.back()` auf, das auf ein Router-Ereignis wartet und bis dahin jede weitere Zurück-Taste blockiert. Das Plugin schluckt dieses Ereignis beim Schließen einer Ebene (Warteschlange, Menü, Vollansicht); jetzt gibt es das Versprechen des Routers frei, sodass die nächste Zurück-Taste wieder funktioniert.
+
 ## 2.2.0.0
 - **Weiterhören im normalen Player:** Die eigene Leiste „Weiter hören“ (inklusive Kreuz zum Ausblenden und Sonderschrift) entfällt. Läuft auf diesem Gerät nichts, zeigen die Wiedergabeleiste unten (Computer) und der Mini-Player (Handy) den zuletzt gehörten Titel; Play startet die gemerkte Warteschlange an der gemerkten Position (Ladekreis auf dem Play-Knopf, bis zu drei Versuche wie bisher). Die Herkunftsplaylist wird grün markiert (`ml-ctx-on`), danach läuft die Liste weiter. Weiter/Zurück, Zufall und Wiederholen sind in diesem Zustand abgeblendet.
 - **Spulen:** Weiter/Zurück gedrückt halten (450 ms) spult, alle 0,8 s ein Sprung: in den ersten 5 Sekunden des Spulens 10 Sekunden, danach 30 Sekunden. Kurzer Tipp = Titelwechsel wie bisher. Leiste, Vollansicht und Songtext-Vollbild; Hinweis im Tooltip.

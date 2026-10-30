@@ -81,6 +81,23 @@
     }
     return {
       start: start, offline: offline, probeNow: function () { fails = Math.max(fails, 1); probe(); },
+      // Schnelle Einzelpruefung (z. B. vor dem Spulen): true = Server antwortet innerhalb von ms. Bei Misserfolg gilt die Pruefung als fehlgeschlagen.
+      quick: function (ms) {
+        if (offline()) return Promise.resolve(false);
+        return new Promise(function (resolve) {
+          var url = probeUrl();
+          if (!url || typeof fetch !== 'function') { resolve(true); return; }
+          var ctrl = typeof AbortController === 'function' ? new AbortController() : null, done = false;
+          function fin(ok) {
+            if (done) return; done = true; clearTimeout(to);
+            if (!ok) { fails = Math.max(fails, 1); probe(); }
+            resolve(ok);
+          }
+          var to = setTimeout(function () { if (ctrl) ctrl.abort(); fin(false); }, ms || 1500);
+          fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })
+            .then(function (r) { fin(!!r); }, function () { fin(false); });
+        });
+      },
       // Eine fehlgeschlagene Anfrage ohne HTTP-Antwort: Server vermutlich nicht erreichbar -> bald pruefen.
       suspect: function () { if (!down && !probing) schedule(300); },
       forced: function () { return forced; },
@@ -128,7 +145,7 @@
       mAddToPlaylist: 'Zu Playlist hinzufügen', mRemoveFromPlaylist: 'Aus dieser Playlist entfernen', mAlbum: 'Album anzeigen', mArtist: 'Künstler*in aufrufen',
       mSpeed: 'Geschwindigkeit ändern', mRadio: 'Zum Song-Radio', mInfo: 'Songinfos', mUnlike: 'Aus Lieblingssongs entfernen', mLike: 'Zu Lieblingssongs hinzufügen',
       mClassic: 'Klassische Ansicht', mSpotify: 'Spotify-Ansicht', mNewPlaylist: 'Neue Playlist erstellen',
-      copyLink: 'Link kopieren', linkCopied: 'Link kopiert', shareNative: 'Teilen …',
+      copyLink: 'Link kopieren', linkCopied: 'Link kopiert', shareNative: 'Teilen …', shareQr: 'QR-Code anzeigen', shareQrHide: 'QR-Code ausblenden', shareQrHint: 'Die andere Person scannt den Code mit der Handy-Kamera und öffnet so den Link.', shareQrFail: 'Der Link ist für einen QR-Code zu lang.',
       shareHint: 'Den Link können nur Personen öffnen, die Zugriff auf die Playlist haben. Gib den Zugriff unten frei.',
       shareLinkTrack: 'Der Link öffnet das Album des Titels.', sharePeople: 'Personen mit Zugriff',
       detailsTitle: 'Details bearbeiten', nameLabel: 'Name', descLabel: 'Beschreibung', descPh: 'Beschreibung hinzufügen',
@@ -172,7 +189,7 @@
       mAddToPlaylist: 'Add to playlist', mRemoveFromPlaylist: 'Remove from this playlist', mAlbum: 'Go to album', mArtist: 'Go to artist',
       mSpeed: 'Change speed', mRadio: 'Go to song radio', mInfo: 'Song info', mUnlike: 'Remove from Liked Songs', mLike: 'Add to Liked Songs',
       mClassic: 'Classic view', mSpotify: 'Spotify view', mNewPlaylist: 'Create new playlist',
-      copyLink: 'Copy link', linkCopied: 'Link copied', shareNative: 'Share …',
+      copyLink: 'Copy link', linkCopied: 'Link copied', shareNative: 'Share …', shareQr: 'Show QR code', shareQrHide: 'Hide QR code', shareQrHint: 'The other person scans the code with their phone camera to open the link.', shareQrFail: 'The link is too long for a QR code.',
       shareHint: 'Only people with access to the playlist can open the link. Grant access below.',
       shareLinkTrack: 'The link opens the album of the track.', sharePeople: 'People with access',
       detailsTitle: 'Edit details', nameLabel: 'Name', descLabel: 'Description', descPh: 'Add a description',
@@ -228,6 +245,7 @@
     library: 'M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 5h-3v5.5c0 1.38-1.12 2.5-2.5 2.5S10 13.88 10 12.5s1.12-2.5 2.5-2.5c.57 0 1.08.19 1.5.51V5h4v2zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z',
     download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
     person_add: 'M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
+    qr: 'M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm2 2h2v2h-2zm2-2h2v2h-2zm0-4h2v2h-2zm2 2h2v2h-2zm0 4h2v2h-2z',
     share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z',
     queue: 'M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z',
     playlist_add: 'M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z',
@@ -543,6 +561,16 @@
       next();
     }
 
+    /* Die Jellyfin-App ruft bei der Zurueck-Taste appRouter.back() auf (window.Emby.Page): Das merkt sich ein Versprechen (promiseShow) und
+       wartet auf das Verlaufs-Ereignis des Routers. Schlucken wir das Ereignis (Ebene schliessen), bliebe das Versprechen offen, und jede
+       weitere Zurueck-Taste wuerde fuer immer darauf warten: "Zurueck" geht dann nicht mehr. Darum wird es hier freigegeben. */
+    function releaseRouter() {
+      try {
+        var r = window.Emby && window.Emby.Page;
+        if (r && r.promiseShow) r.promiseShow = null;
+      } catch (e) { /* kein Router */ }
+    }
+
     window.addEventListener('popstate', function (ev) {
       var st = window.history.state;
       var d = depthOf(st);
@@ -558,6 +586,7 @@
       }
       if (d < applied) {                                 // Nutzer ist zurueckgegangen
         ev.stopImmediatePropagation();
+        releaseRouter();
         var keep = 0, drop = [];
         stack.forEach(function (e) {
           if (e.hasEntry) { keep++; if (keep > d) drop.push(e); } else drop.push(e);
@@ -571,6 +600,7 @@
       }
       if (d > applied) {                                 // vorwaerts in eine nicht mehr vorhandene Ebene
         ev.stopImmediatePropagation();
+        releaseRouter();
         applied = d; sync();
       }
     }, true);
@@ -1627,6 +1657,224 @@
     if (okEngine) EQ.setLive(draft);
   }
 
+  /* ---------- QR-Code (lokal erzeugt, ohne Anfrage ins Netz) ----------
+     Byte-Modus, Fehlerkorrektur L oder M, Version 1-40. Gibt eine Matrix aus true/false zurueck bzw. ein SVG. */
+  var QR = (function () {
+    var ECC_PER_BLOCK = {
+      L: [-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+      M: [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28]
+    };
+    var NUM_BLOCKS = {
+      L: [-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25],
+      M: [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49]
+    };
+    var FORMAT_BITS = { L: 1, M: 0 };
+
+    function rawModules(v) {
+      var r = (16 * v + 128) * v + 64;
+      if (v >= 2) { var n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; }
+      return r;
+    }
+    function dataCodewords(v, e) { return Math.floor(rawModules(v) / 8) - ECC_PER_BLOCK[e][v] * NUM_BLOCKS[e][v]; }
+
+    // Reed-Solomon ueber GF(256), Polynom 0x11D
+    function gfMul(x, y) { var z = 0; for (var i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 255; }
+    function rsGenerator(deg) {
+      var res = [], i, j;
+      for (i = 0; i < deg - 1; i++) res.push(0);
+      res.push(1);
+      var root = 1;
+      for (i = 0; i < deg; i++) {
+        for (j = 0; j < res.length; j++) { res[j] = gfMul(res[j], root); if (j + 1 < res.length) res[j] ^= res[j + 1]; }
+        root = gfMul(root, 2);
+      }
+      return res;
+    }
+    function rsRemainder(data, gen) {
+      var res = gen.map(function () { return 0; });
+      data.forEach(function (b) {
+        var f = b ^ res.shift();
+        res.push(0);
+        gen.forEach(function (c, i) { res[i] ^= gfMul(c, f); });
+      });
+      return res;
+    }
+
+    function utf8(str) {
+      var out = [], s = unescape(encodeURIComponent(String(str)));
+      for (var i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
+      return out;
+    }
+
+    function build(text, level) {
+      var e = level === 'M' ? 'M' : 'L', bytes = utf8(text), v, bits;
+      for (v = 1; v <= 40; v++) {
+        var cap = dataCodewords(v, e) * 8, ccBits = v < 10 ? 8 : 16;
+        if (4 + ccBits + bytes.length * 8 <= cap) break;
+      }
+      if (v > 40) return null;
+      bits = [];
+      function put(val, n) { for (var i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); }
+      put(4, 4); put(bytes.length, v < 10 ? 8 : 16);
+      bytes.forEach(function (b) { put(b, 8); });
+      var capBits = dataCodewords(v, e) * 8;
+      put(0, Math.min(4, capBits - bits.length));
+      while (bits.length % 8) bits.push(0);
+      for (var pad = 0xEC; bits.length < capBits; pad ^= 0xEC ^ 0x11) put(pad, 8);
+      var data = [];
+      for (var i = 0; i < bits.length; i += 8) { var byte = 0; for (var k = 0; k < 8; k++) byte = (byte << 1) | bits[i + k]; data.push(byte); }
+
+      // Bloecke, Fehlerkorrektur, Verschraenkung
+      var nb = NUM_BLOCKS[e][v], eccLen = ECC_PER_BLOCK[e][v], raw = Math.floor(rawModules(v) / 8);
+      var shortCount = nb - raw % nb, shortLen = Math.floor(raw / nb), blocks = [], gen = rsGenerator(eccLen), pos = 0, b;
+      for (b = 0; b < nb; b++) {
+        var len = shortLen - eccLen + (b < shortCount ? 0 : 1), d = data.slice(pos, pos + len);
+        pos += len;
+        blocks.push({ d: d, ecc: rsRemainder(d, gen) });
+      }
+      var all = [], maxLen = shortLen - eccLen + 1;
+      for (i = 0; i < maxLen; i++) blocks.forEach(function (bl) { if (i < bl.d.length) all.push(bl.d[i]); });
+      for (i = 0; i < eccLen; i++) blocks.forEach(function (bl) { all.push(bl.ecc[i]); });
+
+      // Matrix
+      var size = v * 4 + 17, m = [], fn = [], r, c;
+      for (r = 0; r < size; r++) { m.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+      function setF(x, y, dark) { if (x >= 0 && y >= 0 && x < size && y < size) { m[y][x] = dark; fn[y][x] = true; } }
+      for (i = 0; i < size; i++) { setF(6, i, i % 2 === 0); setF(i, 6, i % 2 === 0); }
+      function finder(cx, cy) {
+        for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
+          var dist = Math.max(Math.abs(dx), Math.abs(dy));
+          setF(cx + dx, cy + dy, dist !== 2 && dist !== 4);
+        }
+      }
+      finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+      var apos = [];
+      if (v > 1) {
+        var na = Math.floor(v / 7) + 2, step = v === 32 ? 26 : Math.ceil((v * 4 + 4) / (na * 2 - 2)) * 2;
+        apos = [6];
+        for (var p = size - 7; apos.length < na; p -= step) apos.splice(1, 0, p);
+      }
+      apos.forEach(function (ax, i1) {
+        apos.forEach(function (ay, i2) {
+          if ((i1 === 0 && i2 === 0) || (i1 === 0 && i2 === apos.length - 1) || (i1 === apos.length - 1 && i2 === 0)) return;
+          for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) setF(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+        });
+      });
+      function formatBits(mask) {
+        var d = (FORMAT_BITS[e] << 3) | mask, rem = d, q;
+        for (q = 0; q < 10; q++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+        return ((d << 10) | rem) ^ 0x5412;
+      }
+      function drawFormat(mask) {
+        var f = formatBits(mask), q;
+        for (q = 0; q <= 5; q++) setF(8, q, ((f >>> q) & 1) !== 0);
+        setF(8, 7, ((f >>> 6) & 1) !== 0); setF(8, 8, ((f >>> 7) & 1) !== 0); setF(7, 8, ((f >>> 8) & 1) !== 0);
+        for (q = 9; q < 15; q++) setF(14 - q, 8, ((f >>> q) & 1) !== 0);
+        for (q = 0; q < 8; q++) setF(size - 1 - q, 8, ((f >>> q) & 1) !== 0);
+        for (q = 8; q < 15; q++) setF(8, size - 15 + q, ((f >>> q) & 1) !== 0);
+        setF(8, size - 8, true);
+      }
+      drawFormat(0);
+      if (v >= 7) {
+        var vr = v, q;
+        for (q = 0; q < 12; q++) vr = (vr << 1) ^ ((vr >>> 11) * 0x1F25);
+        var vb = (v << 12) | vr;
+        for (q = 0; q < 18; q++) {
+          var bit = ((vb >>> q) & 1) !== 0, a = size - 11 + q % 3, bb = Math.floor(q / 3);
+          setF(a, bb, bit); setF(bb, a, bit);
+        }
+      }
+      // Daten im Zickzack
+      var ai = 0;
+      for (var right = size - 1; right >= 1; right -= 2) {
+        if (right === 6) right = 5;
+        for (var vert = 0; vert < size; vert++) {
+          for (var j = 0; j < 2; j++) {
+            var x = right - j, upward = ((right + 1) & 2) === 0, y = upward ? size - 1 - vert : vert;
+            if (!fn[y][x] && ai < all.length * 8) { m[y][x] = ((all[ai >>> 3] >>> (7 - (ai & 7))) & 1) !== 0; ai++; }
+          }
+        }
+      }
+      // Maske waehlen
+      function applyMask(mask) {
+        for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) {
+          var inv;
+          switch (mask) {
+            case 0: inv = (x + y) % 2 === 0; break;
+            case 1: inv = y % 2 === 0; break;
+            case 2: inv = x % 3 === 0; break;
+            case 3: inv = (x + y) % 3 === 0; break;
+            case 4: inv = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+            case 5: inv = x * y % 2 + x * y % 3 === 0; break;
+            case 6: inv = (x * y % 2 + x * y % 3) % 2 === 0; break;
+            default: inv = ((x + y) % 2 + x * y % 3) % 2 === 0;
+          }
+          if (!fn[y][x] && inv) m[y][x] = !m[y][x];
+        }
+      }
+      function penalty() {
+        var score = 0, y, x, run, k2;
+        function lineScore(get) {
+          var s = 0, i2, n = size, runColor = false, runLen = 0;
+          for (i2 = 0; i2 < n; i2++) {
+            var col = get(i2);
+            if (i2 > 0 && col === runColor) { runLen++; if (runLen === 5) s += 3; else if (runLen > 5) s++; }
+            else { runColor = col; runLen = 1; }
+          }
+          return s;
+        }
+        for (y = 0; y < size; y++) score += lineScore(function (i2) { return m[y][i2]; });
+        for (x = 0; x < size; x++) score += lineScore(function (i2) { return m[i2][x]; });
+        for (y = 0; y < size - 1; y++) for (x = 0; x < size - 1; x++) if (m[y][x] === m[y][x + 1] && m[y][x] === m[y + 1][x] && m[y][x] === m[y + 1][x + 1]) score += 3;
+        var pat = [true, false, true, true, true, false, true, false, false, false, false], pat2 = pat.slice().reverse();
+        function finderLike(get) {
+          var s = 0;
+          for (var i2 = 0; i2 + 11 <= size; i2++) {
+            var a1 = true, a2 = true;
+            for (k2 = 0; k2 < 11; k2++) { var g = get(i2 + k2); if (g !== pat[k2]) a1 = false; if (g !== pat2[k2]) a2 = false; }
+            if (a1) s += 40; if (a2) s += 40;
+          }
+          return s;
+        }
+        for (y = 0; y < size; y++) score += finderLike(function (i2) { return m[y][i2]; });
+        for (x = 0; x < size; x++) score += finderLike(function (i2) { return m[i2][x]; });
+        var dark = 0;
+        for (y = 0; y < size; y++) for (x = 0; x < size; x++) if (m[y][x]) dark++;
+        run = Math.ceil(Math.abs(dark * 20 - size * size * 10) / (size * size)) - 1;
+        return score + Math.max(0, run) * 10;
+      }
+      var best = 0, bestScore = Infinity;
+      for (var mask = 0; mask < 8; mask++) {
+        applyMask(mask); drawFormat(mask);
+        var sc = penalty();
+        if (sc < bestScore) { bestScore = sc; best = mask; }
+        applyMask(mask);   // zurueck (XOR)
+      }
+      applyMask(best); drawFormat(best);
+      return { size: size, version: v, modules: m };
+    }
+
+    // SVG mit weissem Rand (4 Module); level 'L' (weniger dicht, besser zu scannen) oder 'M'
+    function svg(text, opts) {
+      opts = opts || {};
+      var q = build(text, opts.level || 'L');
+      if (!q) return null;
+      var quiet = 4, n = q.size + quiet * 2, d = [];
+      for (var y = 0; y < q.size; y++) for (var x = 0; x < q.size; x++) if (q.modules[y][x]) d.push('M' + (x + quiet) + ',' + (y + quiet) + 'h1v1h-1z');
+      var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
+      s.setAttribute('viewBox', '0 0 ' + n + ' ' + n);
+      s.setAttribute('shape-rendering', 'crispEdges');
+      s.setAttribute('role', 'img');
+      var bg = document.createElementNS(ns, 'rect');
+      bg.setAttribute('width', n); bg.setAttribute('height', n); bg.setAttribute('fill', '#fff');
+      var p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', d.join('')); p.setAttribute('fill', '#000');
+      s.appendChild(bg); s.appendChild(p);
+      return s;
+    }
+    return { build: build, svg: svg };
+  })();
+
   /* ---------- Daten ---------- */
   var libCache = { at: 0, list: null, all: [] };
   var plCache = { at: 0, list: null };
@@ -2062,6 +2310,28 @@
         navigator.share({ title: opts.title, text: opts.subtitle || opts.title, url: opts.url }).then(function () { ui.close(); }, function () { /* abgebrochen */ });
       });
     }
+    var qrBox = null, qrRow = null;
+    qrRow = (function () {
+      var b = btn('ml-menu-item');
+      var lab = el('span', 'ml-menu-label', t('shareQr'));
+      b.appendChild(icon('qr')); b.appendChild(lab);
+      b.addEventListener('click', function () {
+        if (qrBox) { if (qrBox.parentNode) qrBox.parentNode.removeChild(qrBox); qrBox = null; lab.textContent = t('shareQr'); return; }
+        var svg = null;
+        try { svg = QR.svg(opts.url, { level: 'L' }); } catch (e) { svg = null; }
+        if (!svg) { toast(t('shareQrFail')); return; }
+        qrBox = el('div', 'ml-qr');
+        var frame = el('div', 'ml-qr-code');
+        frame.appendChild(svg);
+        qrBox.appendChild(frame);
+        qrBox.appendChild(el('div', 'ml-sheet-note ml-center', t('shareQrHint')));
+        if (b.nextSibling) b.parentNode.insertBefore(qrBox, b.nextSibling); else b.parentNode.appendChild(qrBox);
+        lab.textContent = t('shareQrHide');
+        try { qrBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* ohne Scrollen */ }
+      });
+      ui.sheet.appendChild(b);
+      return b;
+    })();
     if (opts.invite) row('person_add', t('mInvite'), function () { ui.close(); ML.openShareSheet(opts.invite); });
     ui.sheet.appendChild(el('div', 'ml-sheet-note', opts.note || t('shareHint')));
     if (!shareHostIsPublic()) ui.sheet.appendChild(el('div', 'ml-sheet-note ml-warn', t('shareLinkWarn')));
@@ -3029,11 +3299,15 @@
         }
         var total = +res.headers.get('content-length') || 0;
         if (!res.body || !res.body.getReader) return res.blob().then(function (b) { return { blob: b, mime: mime, q: q }; });
-        var reader = res.body.getReader(), chunks = [], got = 0;
+        // Speicherschonend: Stuecke werden laufend zu Blobs gebuendelt (das Geraet haelt sie ausserhalb des Skript-Speichers). Bei grossen
+        // Hoerbuechern waere sonst die ganze Datei doppelt im Speicher, sobald sie zusammengesetzt wird (das schliesst die App).
+        var reader = res.body.getReader(), chunks = [], parts = [], pending = 0, got = 0, FLUSH = 4 * 1024 * 1024;
+        function flush() { if (chunks.length) { parts.push(new Blob(chunks)); chunks = []; pending = 0; } }
         function pump() {
           return reader.read().then(function (r) {
-            if (r.done) return { blob: new Blob(chunks, { type: mime || 'audio/mpeg' }), mime: mime, q: q };
-            chunks.push(r.value); got += r.value.length;
+            if (r.done) { flush(); return { blob: new Blob(parts, { type: mime || 'audio/mpeg' }), mime: mime, q: q }; }
+            chunks.push(r.value); got += r.value.length; pending += r.value.length;
+            if (pending >= FLUSH) flush();
             if (onBytes) onBytes(got, total);
             return pump();
           });
@@ -9114,27 +9388,59 @@
       if (/\.m3u8/i.test(a.currentSrc || a.src || '')) return true;
       try { return !!(a.seekable && a.seekable.length > 0 && a.seekable.end(a.seekable.length - 1) + 0.5 >= sec); } catch (e) { return false; }
     }
-    function seekTo(sec) {
-      sec = Math.max(0, sec);
+    function isBuffered(a, sec) {
+      try { for (var i = 0; i < a.buffered.length; i++) if (a.buffered.start(i) - 0.3 <= sec && a.buffered.end(i) + 0.3 >= sec) return true; } catch (e) { /* kein Puffer */ }
+      return false;
+    }
+    function seekNow(sec) {
       var a = audioEl();
+      if (OFFPLAY.active() && a) {   // Datei auf dem Geraet: immer direkt spulen, kein Server-Befehl
+        try { a.currentTime = sec; P.pos = sec; P.at = Date.now(); progress(); } catch (e) { /* nach den Metadaten */ }
+        return Promise.resolve();
+      }
       if (canSeekLocal(a, sec)) {
         try { a.currentTime = sec; P.pos = sec; P.at = Date.now(); progress(); return Promise.resolve(); } catch (e) { /* weiter mit Server-Befehl */ }
       }
       return command('Playing/Seek', { seekPositionTicks: Math.round(sec * 1e7) }).then(function () { P.pos = sec; P.at = Date.now(); kick(); });
     }
-    /* Weiter/Zurueck: kurzer Tipp wechselt den Titel. Gedrueckt halten spult: in den ersten 5 Sekunden in Spruengen von 10 Sekunden,
-       danach in Spruengen von 30 Sekunden (ein Sprung alle HOLD_TICK Millisekunden). Beim Loslassen bleibt es dort, kein Titelwechsel. */
-    var HOLD_DELAY = 450, HOLD_TICK = 800, HOLD_FAST_AFTER = 5000, HOLD_SMALL = 10, HOLD_BIG = 30;
+    function seekTo(sec) {
+      sec = Math.max(0, sec);
+      var a = audioEl();
+      // Titel ist heruntergeladen und wird vom Server gestreamt: eine Stelle, die noch nicht geladen ist, wuerde den Server brauchen.
+      // Ist er nicht erreichbar, wird stattdessen die lokale Datei an dieser Stelle gespielt (sonst bricht der Stream mit "Netzwerkproblem" ab).
+      if (a && !OFFPLAY.active() && !P.targetId && P.item && OFF.available() && OFF.has(P.item.Id) && !isBuffered(a, sec)) {
+        var wasPaused = a.paused;
+        return (Net.offline() ? Promise.resolve(false) : Net.quick(1500)).then(function (ok) {
+          if (ok || OFFPLAY.active()) return seekNow(sec);
+          if (!handoverLocal(sec, wasPaused)) return seekNow(sec);
+          P.pos = sec; P.at = Date.now();
+        });
+      }
+      return seekNow(sec);
+    }
+    /* Weiter/Zurueck: kurzer Tipp wechselt den Titel. Gedrueckt halten spult in Spruengen (ein Sprung alle HOLD_TICK Millisekunden):
+       in den ersten 5 Sekunden Halten je 15 Sekunden, bis zur ersten Minute je 30 Sekunden, danach je 60 Sekunden (endlos).
+       Beim Loslassen spielt es sofort an dieser Stelle weiter, kein Titelwechsel. */
+    var HOLD_DELAY = 450, HOLD_TICK = 800, HOLD_PHASES = [[5000, 15], [60000, 30], [Infinity, 60]];
+    function holdStep(ms) {
+      for (var i = 0; i < HOLD_PHASES.length; i++) if (ms < HOLD_PHASES[i][0]) return HOLD_PHASES[i][1];
+      return HOLD_PHASES[HOLD_PHASES.length - 1][1];
+    }
+    function resumePlayback() {
+      var a = audioEl();
+      if (a) { if (a.paused) { try { var pr = a.play(); if (pr && pr.catch) pr.catch(function () { /* Browser verweigert */ }); } catch (e) { /* kein Abspielen */ } } return; }
+      if (P.paused) command('Playing/Unpause').then(function () { kick(); }, function () { /* egal */ });
+    }
     function skipBtn(name, label, cls, cmd) {
       var b = iconBtn(name, label, cls, null);
       var dir = cmd === 'NextTrack' ? 1 : -1;
-      var delay = 0, tick = 0, startAt = 0, target = 0, did = false, swallow = false;
+      var delay = 0, tick = 0, startAt = 0, target = 0, did = false, swallow = false, wasPlaying = false;
       b.classList.add('ml-hold');
       b.title = label + ' · ' + t('holdSeek');
       function step() {
         var dur = duration();
         if (!(dur > 0)) return;
-        var secs = Date.now() - startAt < HOLD_FAST_AFTER ? HOLD_SMALL : HOLD_BIG;
+        var secs = holdStep(Date.now() - startAt);
         target = Math.max(0, Math.min(dur - 1, target + dir * secs));
         seekTo(target);
         b.classList.add('ml-holding');
@@ -9142,14 +9448,17 @@
       function begin() {
         delay = 0;
         if (!P.item) return;
-        did = true; startAt = Date.now(); target = position();
+        did = true; startAt = Date.now(); target = position(); wasPlaying = !isPaused();
         step();
         tick = setInterval(step, HOLD_TICK);
       }
       function end() {
         clearTimeout(delay); clearInterval(tick); delay = tick = 0;
         b.classList.remove('ml-holding');
-        if (did) { did = false; swallow = true; setTimeout(function () { swallow = false; }, 80); }
+        if (did) {
+          did = false; swallow = true; setTimeout(function () { swallow = false; }, 80);
+          if (wasPlaying) { resumePlayback(); setTimeout(function () { if (!did && wasPlaying) resumePlayback(); }, 400); }   // nach dem Spulen sofort weiterspielen
+        }
       }
       b.addEventListener('pointerdown', function (e) {
         if (e.button > 0 || delay || tick) return;
@@ -10358,10 +10667,10 @@
        die heruntergeladenen Titel der Liste). Ausgeloest, sobald die Verbindung als weg gilt (Browser meldet offline, der Server antwortet
        nicht mehr oder der Offline-Modus wird eingeschaltet) und wenn das Audio-Element des Servers stockt. */
     var handingOver = false, lastProbeAt = 0;
-    function handoverLocal() {
+    function handoverLocal(atSec, pausedOverride) {
       if (handingOver || !P.item || P.targetId || OFFPLAY.active() || (P.session && P.session.Id === 'local')) return false;
       if (!OFF.available() || !OFF.has(P.item.Id) || !audioEl()) return false;
-      var curId = nid(P.item.Id), pos = position(), paused = isPaused();
+      var curId = nid(P.item.Id), pos = atSec >= 0 ? atSec : position(), paused = pausedOverride != null ? !!pausedOverride : isPaused();
       var ids = (P.queue || []).map(function (x) { return nid(x.Id); });
       if (ids.indexOf(curId) < 0) ids = [curId];
       ids = ids.filter(function (id) { return id === curId || OFF.has(id); });

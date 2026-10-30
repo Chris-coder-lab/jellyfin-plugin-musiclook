@@ -13,7 +13,7 @@ body:
     attributes:
       label: Music-Look-Version
       description: Dashboard → Plugins → Music Look
-      placeholder: "z. B. 2.2.0.0"
+      placeholder: "z. B. 2.3.0.0"
     validations:
       required: true
   - type: input
