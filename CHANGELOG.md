@@ -1,5 +1,11 @@
 # Änderungen
 
+## 2.5.1.0
+- **Kein Titel startet in der Android-App (Fernsteuerung weg):** Das Protokoll zeigte, dass die Sitzung der App keine Fernsteuerung meldete – Abspielbefehle werden dann vom Server angenommen, vom Gerät aber nie ausgeführt. Der WebSocket des Web-Clients wird jetzt geprüft und bei Bedarf neu aufgebaut: beim Zurückkehren in die App, bei fehlender Fernsteuerung, bei „Weiter hören“ und wenn ein Titel nicht startet (nur öffentliche Methoden des ApiClient; höchstens alle 8 s). Eine klare Meldung nennt in dem Fall die fehlende Verbindung statt nichts.
+- **„Weiter hören“ wartete fast eine Minute:** Die Wartezeiten auf die Fernsteuerung (6 s im Abspielen, 8 mal in „Weiter hören“) vervielfachten sich. Jetzt höchstens etwa 7 s.
+- **Titel in der Leiste verschwindet, nichts startet:** Beobachtete das Handy ein anderes, pausiertes Gerät (automatisch übernommen) und man tippte einen Titel an, wurde das andere Gerät sofort gestoppt. Jetzt wird es erst gestoppt, wenn der neue Titel hier wirklich läuft; startet er nicht, bleibt dort alles beim Alten.
+- **Protokoll:** wird alle 5 s statt 20 s geschrieben (Zeilen gingen verloren, wenn die App vorher in den Hintergrund ging); Gerätename wird erkannt (stand vorher „?“, wenn der Client beim Start noch nicht bereit war); neue Zeilen: Sitzung mit Fernsteuerung und WebSocket-Zustand bei jedem Abspielen, Zustand des Audio-Elements und der Sitzung, wenn ein Titel nicht startet, WebSocket-Aktionen.
+
 ## 2.5.0.0
 - **Hängender Titel / Zurückspringen:** Ein nicht abspielbarer gemerkter Titel konnte „Weiter hören“ in einer Schleife halten: Die Versuche liefen im Hintergrund weiter und mischten sich ein, wenn man danach etwas anderes startete; zudem überschrieb die Sitzung, die kurz nach dem Start noch den alten Titel zeigt, den gemerkten Stand. Jetzt zählt jeder Start (`playGen`); ältere Versuche brechen ab, sobald ein neuer Start kommt. Beim Start eines Titels wird der Stand der Sitzung nicht gemerkt, bis der neue Titel dort steht (höchstens 15 s), und die „Weiter hören“-Leiste bleibt in dieser Zeit ausgeblendet.
 - **Neustart bei hängendem Web-Client:** Startet ein Titel binnen 10 s nicht, stoppt das Plugin die Sitzung dieses Geräts und sendet den Startbefehl noch einmal (vorher nur ein Hinweis). Bei „Weiter hören“ gehen den Wiederholungen ein Stopp voraus.

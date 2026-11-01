@@ -1011,6 +1011,46 @@
       return L.join('\n');
     });
   }
+  // Die Fernsteuerung (Abspielbefehle von diesem Plugin, Jellyfin-Oberflaeche, anderen Geraeten) laeuft ueber den WebSocket des Web-Clients.
+  // In der Android-App wird er beim Wechsel in den Hintergrund oft stillgelegt; der Server meldet dann "SupportsRemoteControl: false", und
+  // Abspielbefehle werden angenommen, aber nie ausgefuehrt. Hier wird er geprueft und bei Bedarf neu aufgebaut (nur oeffentliche Methoden des ApiClient).
+  var lastHeal = 0;
+  function socketState() {
+    try { var c = client(); return c && typeof c.isWebSocketOpen === 'function' ? (c.isWebSocketOpen() ? 'offen' : 'zu') : '?'; } catch (e) { return '?'; }
+  }
+  function healSocket(why, force) {
+    var c = client();
+    if (!c || typeof c.ensureWebSocket !== 'function') return false;
+    var now = Date.now();
+    if (now - lastHeal < 8000) return false;
+    var st = socketState();
+    if (st === 'offen' && !force) return false;
+    lastHeal = now;
+    dlog('WebSocket (' + why + '): ' + st + ' -> neu verbinden');
+    try {
+      if (st === 'offen' && typeof c.closeWebSocket === 'function') {
+        c.closeWebSocket();
+        setTimeout(function () { try { c.ensureWebSocket(); } catch (e) { dlog('WebSocket Fehler: ' + e); } }, 600);
+      } else c.ensureWebSocket();
+    } catch (e) { dlog('WebSocket Fehler: ' + e); }
+    return true;
+  }
+  var lastRemoteCheck = 0;
+  function checkRemote(why) {
+    var now = Date.now();
+    if (now - lastRemoteCheck < 10000 || !client() || !uid()) return;
+    lastRemoteCheck = now;
+    setTimeout(function () {
+      if (socketState() === 'zu') healSocket(why, false);
+      mySession().then(function (s) {
+        if (s && s.SupportsRemoteControl === false) healSocket(why + ', Server meldet keine Fernsteuerung', true);
+      }, function () { /* offline: spaeter */ });
+    }, 1500);
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkRemote('Seite sichtbar'); });
+  window.addEventListener('pageshow', function () { checkRemote('pageshow'); });
+  window.addEventListener('online', function () { checkRemote('online'); });
+
   function copyPlain(text) {
     if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) return navigator.clipboard.writeText(text);
     return new Promise(function (resolve, reject) {
@@ -1093,7 +1133,7 @@
     refresh: function () { updateContext(); },
     forceMusic: function (on) { musicOn = null; setMusic(!!on); },
     uncloak: uncloak,
-    dlog: dlog, dlogSink: dlogSink, dlogClean: dlogClean, copyPlain: copyPlain, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
+    dlog: dlog, dlogSink: dlogSink, dlogClean: dlogClean, copyPlain: copyPlain, healSocket: healSocket, socketState: socketState, checkRemote: checkRemote, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
   };
   window.MusicLook = api;
   loadKnownMusic();

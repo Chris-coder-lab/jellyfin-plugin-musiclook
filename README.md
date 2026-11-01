@@ -38,6 +38,10 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.5.1
+- **Android-App: Titel starten wieder zuverlässiger.** Meldet die Sitzung der App keine Fernsteuerung (WebSocket stillgelegt), baut das Plugin die Verbindung neu auf und sagt es dir, statt nichts zu tun. „Weiter hören“ wartet nicht mehr fast eine Minute. Ein beobachtetes anderes Gerät wird erst gestoppt, wenn der neue Titel hier läuft.
+- **Protokoll** schreibt schneller und nennt Sitzung, Fernsteuerung und WebSocket bei jedem Abspielen.
+
 ## Neu in 2.5
 - **Hängender Titel / Zurückspringen behoben:** „Weiter hören“ wiederholt seine Versuche nicht mehr, wenn du inzwischen etwas anderes gestartet hast, und der Stand der Sitzung wird beim Start eines neuen Titels nicht mehr mit dem alten Titel überschrieben. Startet ein Titel nicht, wird die Sitzung gestoppt und der Befehl einmal wiederholt. Lässt sich ein gemerkter Titel zweimal nicht abspielen, springt „Weiter hören“ zum nächsten Titel (oder entfernt den Stand).
 - **Protokoll (Fehlersuche)** im Menü: technische Ereignisse (Abspielen, Weiter hören, Verbindung, Titelwechsel, Fehler des Audio-Elements) werden **pro Benutzer** in den Anzeige-Einstellungen auf dem Jellyfin-Server gespeichert (Eintrag `musiclooklog`), damit sie auch nach einem Neustart der App noch da sind. Dort lassen sie sich ansehen, kopieren und löschen; Aufzeichnen kann abgeschaltet werden (gilt für alle Geräte des Benutzers). Dazu zwei Notausgänge: *Wiedergabe zurücksetzen* und *Weiter-hören-Stand löschen*.
@@ -103,7 +107,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.5.0.0 && git push origin v2.4.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.5.1.0 && git push origin v2.5.1.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

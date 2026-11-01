@@ -159,7 +159,7 @@
       addSongsTitle: 'Titel hinzufügen', searchSongsPh: 'Titel, Alben oder Künstler suchen', added: 'Hinzugefügt', addFailed: 'Hinzufügen fehlgeschlagen',
       addToTitle: 'Zu Playlist hinzufügen', addedTo: 'Zu „{0}“ hinzugefügt', playlistCreated: 'Playlist „{0}“ erstellt', createFailed: 'Erstellen fehlgeschlagen',
       newPlaylistPh: 'Name der neuen Playlist', createPlaylist: 'Erstellen', toJam: 'Zur Jam-Warteschlange', jamAdded: 'Zur Jam hinzugefügt', jamFailed: 'Jam: Aktion fehlgeschlagen',
-      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
+      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoSocket: 'Dieses Gerät ist gerade nicht mit dem Server verbunden (keine Fernsteuerung). Die Verbindung wird neu aufgebaut – bitte gleich noch einmal tippen oder die App kurz neu öffnen.', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
       searchPh: 'Was möchtest du hören?', searchHint: 'Suche nach Titeln, Alben, Künstlern und Playlists.', noResults: 'Keine Treffer für „{0}“.',
       loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung und Ansicht', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
@@ -203,7 +203,7 @@
       addSongsTitle: 'Add tracks', searchSongsPh: 'Search tracks, albums or artists', added: 'Added', addFailed: 'Could not add',
       addToTitle: 'Add to playlist', addedTo: 'Added to "{0}"', playlistCreated: 'Playlist "{0}" created', createFailed: 'Could not create',
       newPlaylistPh: 'Name of the new playlist', createPlaylist: 'Create', toJam: 'Add to Jam queue', jamAdded: 'Added to the Jam', jamFailed: 'Jam: action failed',
-      queued: 'Added to queue', playFailed: 'Playback could not be started', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
+      queued: 'Added to queue', playFailed: 'Playback could not be started', playNoSocket: 'This device is not connected to the server right now (no remote control). The connection is being re-established – tap again in a moment or reopen the app.', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
       searchPh: 'What do you want to listen to?', searchHint: 'Search for tracks, albums, artists and playlists.', noResults: 'No results for "{0}".',
       loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Sort order and view', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
@@ -778,7 +778,7 @@
        - Zeilen werden vor dem Speichern bereinigt (siehe dlogClean im Kern: keine Schluessel/Token, keine Server-Adresse, keine E-Mail),
        - begrenzt auf 400 Zeilen, 14 Tage und rund 48 KB, danach faellt das Aelteste weg,
        - jederzeit abschaltbar und loeschbar; "aus" gilt fuer alle Geraete des Benutzers,
-       - geschrieben wird gebuendelt (hoechstens alle 20 Sekunden), nie bei jedem Ereignis. */
+       - geschrieben wird gebuendelt (hoechstens alle 5 Sekunden), nie bei jedem Ereignis. */
   (function () {
     var extra = {
       de: {
@@ -805,17 +805,19 @@
 
   var Plog = (function () {
     var ID = 'musiclooklog', CLIENT = 'musiclook', KEYE = 'ml_log', KEYON = 'ml_on';
-    var MAX_N = 400, MAX_AGE = 14 * 86400000, MAX_BYTES = 48000, MAX_PEND = 200, FLUSH_MS = 20000;
+    var MAX_N = 400, MAX_AGE = 14 * 86400000, MAX_BYTES = 48000, MAX_PEND = 200, FLUSH_MS = 5000;
     var pend = [], timer = null, busy = false, on = true, loaded = false, last = [], lastMsg = '', lastTs = 0, tagTxt = '';
     try { on = window.localStorage.getItem('ml.log.on') !== '0'; } catch (e) { on = true; }
 
     function params() { return { userId: uid(), client: CLIENT }; }
     function tag() {
       if (tagTxt) return tagTxt;
+      var c = null;
+      try { c = ML.client(); } catch (e) { c = null; }
+      if (!c || !c.deviceId) return '?';   // Client noch nicht bereit: nicht merken, beim naechsten Mal erneut versuchen
       try {
-        var c = ML.client();
-        tagTxt = (ML.dlogClean ? ML.dlogClean(c.deviceName ? c.deviceName() : '?') : '?').replace(/[\[\]\/]/g, '').slice(0, 18) + '/' + String(c.deviceId ? c.deviceId() : '').replace(/[^\w]/g, '').slice(0, 4);
-      } catch (e) { tagTxt = '?'; }
+        tagTxt = (ML.dlogClean ? ML.dlogClean(c.deviceName ? c.deviceName() : '?') : '?').replace(/[\[\]\/]/g, '').slice(0, 18) + '/' + String(c.deviceId()).replace(/[^\w]/g, '').slice(0, 4);
+      } catch (e2) { return '?'; }
       return tagTxt;
     }
     function parseEntries(text) {
@@ -2240,6 +2242,8 @@
       // bis zu 6 Sekunden, statt ins Leere zu gehen (der Server nimmt ihn an, das Geraet fuehrt ihn aber nicht aus).
       if (!s || s.SupportsRemoteControl !== false) return s;
       var tries = 8;
+      ML.dlog('Sitzung ' + String(s.Id || '').slice(0, 6) + ' meldet keine Fernsteuerung, WebSocket ' + ML.socketState());
+      ML.healSocket('Sitzung ohne Fernsteuerung', true);
       return (function again() {
         return new Promise(function (r) { setTimeout(r, 750); }).then(mySession).then(function (n) {
           if (n && n.SupportsRemoteControl !== false) return n;
@@ -2299,7 +2303,7 @@
     // Merkt, aus welcher Playlist (oder Lieblingssongs) hier gestartet wird; so ist die gruene Markierung auf diesem Geraet eindeutig.
     playIntent = opts.ctx ? { key: String(opts.ctx), ids: (ids.length <= PLAY_CHUNK ? ids : ids.slice(start)).slice() } : null;
     if (opts.ctx && typeof Recent !== 'undefined') Recent.note(opts.ctx);
-    if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto();
+    if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto(true);   // das beobachtete Geraet wird erst gestoppt, wenn der Titel hier laeuft
     var head, startIndex, rest = [];
     if (ids.length <= PLAY_CHUNK) { head = ids; startIndex = start; }
     else {
@@ -2310,6 +2314,7 @@
     // Bis der neue Titel in der Sitzung steht, zeigt der Server noch den alten: das darf den gemerkten Stand nicht ueberschreiben.
     try { Resume.expect(head[startIndex]); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ }
     function playNow(s) {
+      ML.dlog('Sitzung: ' + String(s.Id || '').slice(0, 6) + (s.remote ? ' (anderes Geraet)' : '') + ' Fernsteuerung=' + s.SupportsRemoteControl + ' WebSocket=' + ML.socketState());
       var first = { playCommand: 'PlayNow', itemIds: head.join(','), startIndex: startIndex };
       if (opts.positionTicks > 0) first.startPositionTicks = Math.round(opts.positionTicks);
       return sessionCall(s, 'Playing', first);
@@ -2325,11 +2330,12 @@
       });
     }).then(function () {
       Player.kick();
+      if (opts.quiet || remoteNow() || !Player.verifyStarted) { try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } }
       if (!opts.quiet && !remoteNow() && Player.verifyStarted) {
         var firstId = head[startIndex];
         Player.verifyStarted(firstId, 10000).then(function (ok) {
-          if (ok) { ML.dlog('Titel läuft: ' + firstId); return null; }
-          if (Net.offline() || myGen !== playGen) return null;
+          if (ok) { ML.dlog('Titel läuft: ' + firstId); try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } return null; }
+          if (Net.offline() || myGen !== playGen) { try { Player.finishRelease(false); } catch (e0) { /* egal */ } return null; }
           // Der Web-Client hat den Befehl nicht ausgefuehrt (z. B. haengt noch der vorige, nicht abspielbare Titel): Sitzung stoppen, neu starten.
           ML.dlog('Titel startet nicht: ' + firstId + ' - Sitzung wird gestoppt, zweiter Start');
           return withSession(function (s) {
@@ -2339,12 +2345,23 @@
           }).then(function () { return myGen === playGen ? Player.verifyStarted(firstId, 10000) : true; }, function () { return false; }).then(function (ok2) {
             if (ok2) { ML.dlog('Titel läuft nach zweitem Start: ' + firstId); return; }
             ML.dlog('Titel startet auch nach zweitem Start nicht: ' + firstId);
-            if (!Net.offline() && myGen === playGen) toast(t('playNoStart'));
+            try { Player.finishRelease(false); } catch (e0) { /* nichts freizugeben */ }
+            if (!Net.offline() && myGen === playGen) {
+              var ja = document.querySelector('audio.mediaPlayerAudio');
+              ML.dlog('Audio-Element: ' + (ja ? (ja.paused ? 'pausiert' : 'spielt') + ', Fehler ' + (ja.error ? ja.error.code : '-') + ', Quelle ' + (ja.currentSrc ? 'ja' : 'leer') : 'fehlt') + ' | WebSocket ' + ML.socketState());
+              mySession().then(function (ms) {
+                if (!ms) { ML.dlog('Sitzung dieses Geraets: nicht gefunden'); return; }
+                var age = ms.LastActivityDate ? Math.round((Date.now() - Date.parse(ms.LastActivityDate)) / 1000) : '?';
+                ML.dlog('Sitzung dieses Geraets: Fernsteuerung=' + ms.SupportsRemoteControl + ' | spielt=' + (ms.NowPlayingItem ? nid(ms.NowPlayingItem.Id) : '-') + ' | letzte Aktivitaet vor ' + age + ' s | ' + String(ms.Client || '?').slice(0, 20) + ' ' + String(ms.ApplicationVersion || '').slice(0, 10));
+              }, function () { /* nur Protokoll */ });
+              ML.healSocket('Titel startet nicht', true);
+              toast(t(ML.socketState() === 'offen' ? 'playNoStart' : 'playNoSocket'));
+            }
           });
         });
       }
       return true;
-    }, function (e) { try { Resume.expect(''); } catch (e2) { /* egal */ } ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
+    }, function (e) { try { Resume.expect(''); Player.finishRelease(false); } catch (e2) { /* egal */ } ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
   }
   function remoteNow() { try { return !!(typeof Player !== 'undefined' && Player && Player.targetId && Player.targetId()); } catch (e) { return false; } }
 
@@ -7287,9 +7304,15 @@
     // Die Sitzung dieses Geraets: direkt nach dem Oeffnen der App meldet der Web-Client seine Faehigkeiten (und oeffnet die Verbindung zum Server)
     // etwas spaeter. Vorher an die Sitzung geschickte Abspielbefehle gehen ins Leere - deshalb hier kurz warten, bis sie fernsteuerbar ist.
     function readySession(tries) {
-      return getSession(true).then(function (s) { return s; }, function () { return null; }).then(function (s) {
-        if (s && s.SupportsRemoteControl !== false) return s;
-        if (tries <= 0) return s;
+      // Steuert der Player ein anderes Geraet, gehen die Befehle dorthin (wie getSession); sonst die eigene Sitzung direkt abfragen
+      // (ohne das innere Warten von getSession: sonst vervielfachen sich die Wartezeiten auf fast eine Minute).
+      var remote = null;
+      try { remote = Player.targetId(); } catch (e) { remote = null; }
+      if (remote) return Promise.resolve({ Id: remote, remote: true });
+      return mySession().then(function (s) { return s; }, function () { return null; }).then(function (s) {
+        if (s && s.SupportsRemoteControl !== false) { sessCache = { at: Date.now(), s: s }; return s; }
+        if (tries <= 0) { ML.dlog('Fortsetzen: Sitzung bleibt ohne Fernsteuerung (WebSocket ' + ML.socketState() + ')'); return s; }
+        if (tries === 8 || tries === 4) { ML.dlog('Fortsetzen: warte auf Fernsteuerung (WebSocket ' + ML.socketState() + ')'); ML.healSocket('Weiter hoeren', true); }
         return wait(800).then(function () { return readySession(tries - 1); });
       });
     }
@@ -9163,11 +9186,22 @@
       paint();
     }
     // Uebernimmt die Wiedergabe auf diesem Geraet (z. B. beim Abspielen im Browser, waehrend das Handy spielt): das beobachtete Geraet wird gestoppt.
-    function releaseAuto() {
+    // Mit defer wird das beobachtete Geraet erst in finishRelease(true) gestoppt (wenn der neue Titel hier wirklich laeuft); startet er nicht,
+    // bleibt dort alles beim Alten (sonst steht nach dem Antippen nirgends mehr Musik und der Titel in der Leiste ist weg).
+    var released = '';
+    function releaseAuto(defer) {
       if (!P.auto || !P.targetId) return;
       var old = P.targetId;
       setTarget(null, '');
+      if (defer) { released = old; autoOff = true; setTimeout(function () { if (released === old) finishRelease(false); }, 30000); return; }
       call('POST', 'Sessions/' + old + '/Playing/Stop').catch(function () { /* ignorieren */ });
+    }
+    function finishRelease(ok) {
+      var old = released; released = '';
+      if (!old) return;
+      if (ok) call('POST', 'Sessions/' + old + '/Playing/Stop').catch(function () { /* ignorieren */ });
+      autoOff = false;
+      ML.dlog('Anderes Geraet ' + (ok ? 'gestoppt' : 'bleibt unveraendert'));
     }
 
     function sessionsOfUser() {
@@ -11124,7 +11158,7 @@
     }
     return {
       syncLocal: syncLocal, dropLocal: dropLocal, adoptLocal: adoptLocal,
-      start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, toggle: toggle, diag: diagLines, verifyStarted: verifyStarted,
+      start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, finishRelease: finishRelease, toggle: toggle, diag: diagLines, verifyStarted: verifyStarted,
       contextId: function (forMark) {
         if (forMark && !P.item && !P.ctxId) { var g = ghostRec(); if (g && g.ctx) return nid(g.ctx); }
         return P.ctxId;
