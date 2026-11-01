@@ -38,6 +38,12 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.4
+- **Diagnose** im Menü: kopierbarer Bericht zu Sitzungen (auch Swiftfin), Ladezeiten, Layout und Ereignissen – hilft, wenn auf einem Gerät das alte Layout erscheint oder ein Titel nicht startet.
+- **Robusteres Laden und Abspielen:** das App-Skript wird bei Ausfall nachgeladen; der Abspielbefehl wartet auf die Fernsteuerung des Geräts; startet ein Titel nicht, gibt es einen Hinweis.
+- **Gerätewechsel** hält die aktuelle Seite, falls der Web-Client von selbst wegspringt.
+- **QR-Code** zeigt den Link zusätzlich als Text.
+
 ## Neu in 2.3
 - **Spulen ohne Netz:** Ein heruntergeladener Titel, der noch vom Server läuft, spielt beim Spulen an eine nicht geladene Stelle (oder bei Netzverlust) die lokale Datei genau dort weiter – ohne „Wiedergabefehler“.
 - **Spulen durch Gedrückthalten in drei Stufen:** erste 5 Sekunden je 15 Sekunden, bis zu einer Minute je 30 Sekunden, danach je 60 Sekunden. Nach dem Loslassen läuft es sofort weiter.
@@ -92,7 +98,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.3.0.0 && git push origin v2.3.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.4.0.0 && git push origin v2.4.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

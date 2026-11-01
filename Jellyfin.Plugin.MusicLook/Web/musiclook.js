@@ -48,7 +48,7 @@
       jamStart: 'Jam starten', jamCodePh: 'Code eingeben (6 Zeichen)', jamJoin: 'Beitreten', jamInvalid: 'Ungültiger Code', jamNotFound: 'Jam nicht gefunden oder voll',
       jamStartFail: 'Jam konnte nicht gestartet werden', jamCode: 'Code: {0} · {1} Teilnehmer', jamEmpty: 'Die Warteschlange ist leer. Nutze das „+“ an Titeln und Alben.',
       jamNext: 'Nächster Titel', jamLeave: 'Jam verlassen', jamEnded: 'Jam beendet', jamAdded: 'Zur Jam hinzugefügt', jamAddFail: 'Jam: Hinzufügen fehlgeschlagen',
-      jamOwnOnly: 'Nur eigene Titel entfernbar', jamNoSession: 'Wiedergabe konnte nicht gestartet werden', jamQueueEnd: 'Ende der Warteschlange erreicht.', track: 'Titel'
+      jamOwnOnly: 'Nur eigene Titel entfernbar', diagTitle: 'Diagnose', diagCopy: 'Kopieren', diagCopied: 'Bericht kopiert', diagRefresh: 'Aktualisieren', diagBusy: 'Wird erstellt …', diagOffer: 'Music Look konnte nicht vollständig geladen werden.', jamNoSession: 'Wiedergabe konnte nicht gestartet werden', jamQueueEnd: 'Ende der Warteschlange erreicht.', track: 'Titel'
     },
     en: {
       addTitle: 'Add to …', loadingTracks: 'Loading tracks …', noTracks: 'No tracks found.', tracks1: '1 track', tracksN: '{0} tracks',
@@ -63,7 +63,7 @@
       jamStart: 'Start Jam', jamCodePh: 'Enter code (6 characters)', jamJoin: 'Join', jamInvalid: 'Invalid code', jamNotFound: 'Jam not found or full',
       jamStartFail: 'Could not start the Jam', jamCode: 'Code: {0} · {1} members', jamEmpty: 'The queue is empty. Use the "+" on tracks and albums.',
       jamNext: 'Next track', jamLeave: 'Leave Jam', jamEnded: 'Jam ended', jamAdded: 'Added to the Jam', jamAddFail: 'Jam: could not add',
-      jamOwnOnly: 'You can only remove your own tracks', jamNoSession: 'Playback could not be started', jamQueueEnd: 'End of the queue reached.', track: 'Track'
+      jamOwnOnly: 'You can only remove your own tracks', diagTitle: 'Diagnostics', diagCopy: 'Copy', diagCopied: 'Report copied', diagRefresh: 'Refresh', diagBusy: 'Creating …', diagOffer: 'Music Look could not be loaded completely.', jamNoSession: 'Playback could not be started', jamQueueEnd: 'End of the queue reached.', track: 'Track'
     }
   };
   var LANG = String(navigator.language || 'en').toLowerCase().indexOf('de') === 0 ? 'de' : 'en';
@@ -885,6 +885,171 @@
     }).then(function (s) { if (s) applyJamState(s); });
   }
 
+  /* ---------- Ereignisprotokoll und Diagnose ----------
+     Das Protokoll liegt nur im Speicher der Seite (nichts wird gesendet). Die Diagnose zeigt Sitzungen, Ladezeiten und Layout und laesst
+     sich kopieren: damit lassen sich Probleme auf einzelnen Geraeten (Laden, Abspielen, Seitenwechsel) nachvollziehen. */
+  var dlogBuf = [], dlogT0 = Date.now();
+  function dlog(msg) {
+    dlogBuf.push(((Date.now() - dlogT0) / 1000).toFixed(1) + ' s  ' + String(msg).slice(0, 220));
+    if (dlogBuf.length > 140) dlogBuf.shift();
+  }
+  dlog('Start ' + location.hash.slice(0, 80));
+  try {
+    window.addEventListener('error', function (e) {
+      var t = e && e.target;
+      if (t && t !== window && (t.src || t.href)) dlog('Laden fehlgeschlagen: ' + String(t.src || t.href).split('?')[0].split('/').slice(-2).join('/'));
+      else dlog('Fehler: ' + (e && e.message) + ' @' + String((e && e.filename) || '').split('/').pop() + ':' + (e && e.lineno));
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) { dlog('Abgelehnt: ' + String((e && e.reason && (e.reason.message || e.reason.status)) || (e && e.reason) || '?')); });
+    window.addEventListener('hashchange', function () { dlog('Adresse: ' + location.hash.slice(0, 80)); });
+    document.addEventListener('visibilitychange', function () { dlog(document.hidden ? 'Seite im Hintergrund' : 'Seite wieder sichtbar'); });
+    window.addEventListener('pagehide', function (e) { dlog('pagehide' + (e && e.persisted ? ' (Cache)' : '')); });
+    window.addEventListener('pageshow', function (e) { dlog('pageshow' + (e && e.persisted ? ' (aus Cache)' : '')); });
+    window.addEventListener('online', function () { dlog('Browser: online'); });
+    window.addEventListener('offline', function () { dlog('Browser: offline'); });
+    document.addEventListener('freeze', function () { dlog('Seite eingefroren'); });
+    document.addEventListener('resume', function () { dlog('Seite fortgesetzt'); });
+  } catch (e) { /* ohne Protokoll */ }
+
+  function scriptVersion() {
+    var sc = document.querySelector('script[src*="MusicLook/client.js"]');
+    var m = sc && /[?&]v=([^&]+)/.exec(sc.src);
+    return m ? decodeURIComponent(m[1]) : '?';
+  }
+  function insets() {
+    try {
+      var d = el('div'); d.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+      document.body.appendChild(d);
+      var cs = getComputedStyle(d), r = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join('/');
+      document.body.removeChild(d);
+      return r;
+    } catch (e) { return '?'; }
+  }
+  function rectOf(sel) {
+    var n = document.querySelector(sel);
+    if (!n) return 'fehlt';
+    var r = n.getBoundingClientRect(), cs = getComputedStyle(n);
+    return Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + (n.hidden || cs.display === 'none' || cs.visibility === 'hidden' ? ' (versteckt)' : '');
+  }
+  function ping(url) {
+    var t = Date.now();
+    return new Promise(function (resolve) {
+      var done = false, to = setTimeout(function () { if (!done) { done = true; resolve('>6000 ms'); } }, 6000);
+      fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now(), { cache: 'no-store', credentials: 'omit' }).then(function (r) {
+        if (!done) { done = true; clearTimeout(to); resolve((Date.now() - t) + ' ms (HTTP ' + r.status + ')'); }
+      }, function () { if (!done) { done = true; clearTimeout(to); resolve('Fehler'); } });
+    });
+  }
+  function diagReport() {
+    var c = client(), L = [];
+    function add(x) { L.push(x); }
+    add('Music Look Diagnose  ' + new Date().toISOString());
+    add('Plugin: client ' + scriptVersion() + ' | App-Skript: ' + (api.app ? 'geladen' : 'NICHT geladen') + ' | Musik-Seite: ' + (musicOn ? 'ja' : 'nein') + ' | Route: ' + routeInfo.kind);
+    add('Seite: ' + location.protocol + ' secure=' + window.isSecureContext + ' | online=' + navigator.onLine + (navigator.connection ? ' | Netz=' + (navigator.connection.effectiveType || '?') + ' ' + (navigator.connection.downlink || '?') + 'Mbit' : ''));
+    add('Browser: ' + navigator.userAgent);
+    var vv = window.visualViewport;
+    add('Anzeige: innen ' + window.innerWidth + 'x' + window.innerHeight + ' | visual ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) : '?') + ' | Bildschirm ' + screen.width + 'x' + screen.height + ' (verfuegbar ' + screen.availWidth + 'x' + screen.availHeight + ') | Faktor ' + window.devicePixelRatio + ' | Rand(oben/rechts/unten/links) ' + insets());
+    add('Layout: Body "' + document.body.className.slice(0, 120) + '" | App ' + rectOf('#ml-app') + ' | Navigation ' + rectOf('.ml-nav') + ' | Mini ' + rectOf('.ml-mini') + ' | Jellyfin-Leiste ' + rectOf('.nowPlayingBar'));
+    var sheets = qsa('link[rel=stylesheet]').map(function (l) { return String(l.href).replace(/^https?:\/\/[^/]+/, '').split('?')[0]; });
+    add('Stylesheets: ' + sheets.join(', ').slice(0, 400));
+    try {
+      var res = (performance.getEntriesByType('resource') || []).filter(function (r) { return /MusicLook\//.test(r.name); }).slice(-8);
+      add('Ladezeiten: ' + (res.length ? res.map(function (r) { return r.name.split('?')[0].split('/').slice(-1)[0] + ' ' + Math.round(r.duration) + ' ms ' + (r.transferSize ? Math.round(r.transferSize / 1024) + ' KB' : '') + (r.responseStatus ? ' HTTP ' + r.responseStatus : ''); }).join(' | ') : 'keine Daten'));
+    } catch (e) { add('Ladezeiten: ?'); }
+    if (!c) { add('ApiClient: FEHLT'); return Promise.resolve(L.concat(['', 'Protokoll:'], dlogBuf).join('\n')); }
+    var here = '';
+    try { here = c.deviceId(); } catch (e) { here = ''; }
+    add('Client: ' + (c.appName ? c.appName() : '?') + ' ' + (c.appVersion ? c.appVersion() : '?') + ' | Geraet "' + (c.deviceName ? c.deviceName() : '?') + '" Kennung ' + String(here).slice(0, 8) + '… | WebSocket ' + (typeof c.isWebSocketOpen === 'function' ? (c.isWebSocketOpen() ? 'offen' : 'ZU') : '?') + ' | angemeldet ' + (uid() ? 'ja' : 'NEIN'));
+    return Promise.all([
+      ping(c.getUrl('System/Info/Public')), ping(c.getUrl('System/Info/Public')), ping(c.getUrl('System/Info/Public')),
+      call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) { return r || []; }, function (e) { return 'Fehler ' + (e && e.status); }),
+      Promise.resolve(api.app && api.app.diagExtra ? api.app.diagExtra() : [])
+    ]).then(function (r) {
+      add('Server-Antwortzeit (3 Anfragen): ' + r[0] + ' | ' + r[1] + ' | ' + r[2]);
+      if (typeof r[3] === 'string') add('Sitzungen: ' + r[3]);
+      else {
+        var me = nid(uid());
+        var own = r[3].filter(function (x) { return nid(x.UserId) === me; });
+        add('Sitzungen des Kontos (' + own.length + '):');
+        own.forEach(function (x) {
+          var np = x.NowPlayingItem;
+          add('  ' + (x.DeviceId === here ? '[DIESES GERAET] ' : '') + (x.DeviceName || '?') + ' / ' + (x.Client || '?') + ' ' + (x.ApplicationVersion || '') + ' | Fernsteuerung ' + x.SupportsRemoteControl + ' | spielbar ' + ((x.PlayableMediaTypes || []).join('+') || '?') + ' | aktiv vor ' + (x.LastActivityDate ? Math.round((Date.now() - Date.parse(x.LastActivityDate)) / 1000) + ' s' : '?') + ' | ' + (np ? 'spielt ' + (np.MediaType || '?') + ': ' + String(np.Name || '').slice(0, 40) + (x.PlayState && x.PlayState.IsPaused ? ' (Pause)' : '') : 'spielt nichts'));
+        });
+        if (!own.some(function (x) { return x.DeviceId === here; })) add('  ACHTUNG: keine Sitzung fuer dieses Geraet gefunden (Abspielen kann nicht funktionieren)');
+      }
+      (r[4] || []).forEach(function (x) { add(x); });
+      add('');
+      add('Protokoll (' + dlogBuf.length + '):');
+      dlogBuf.forEach(function (x) { add(x); });
+      return L.join('\n');
+    });
+  }
+  function copyPlain(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {
+      var ta = el('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta); ta.select();
+      try { if (document.execCommand('copy')) resolve(); else reject(new Error('copy')); } catch (e) { reject(e); }
+      if (ta.parentNode) ta.parentNode.removeChild(ta);
+    });
+  }
+  function showDiag() {
+    var ui = openSheet(T('diagTitle'));
+    var pre = el('pre', 'ml-diag', T('diagBusy'));
+    ui.sheet.appendChild(pre);
+    var row = el('div', 'ml-diag-row');
+    var copy = button('ml-pill ml-primary', T('diagCopy')), again = button('ml-pill', T('diagRefresh'));
+    row.appendChild(copy); row.appendChild(again);
+    ui.sheet.appendChild(row);
+    var last = '';
+    function run() {
+      pre.textContent = T('diagBusy');
+      diagReport().then(function (txt) { last = txt; pre.textContent = txt; }, function (e) { last = 'Fehler: ' + e; pre.textContent = last; });
+    }
+    copy.addEventListener('click', function () { copyPlain(last || pre.textContent).then(function () { toast(T('diagCopied')); }, function () { try { var rg = document.createRange(); rg.selectNodeContents(pre); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e) { /* ignorieren */ } }); });
+    again.addEventListener('click', run);
+    run();
+    return ui;
+  }
+  var offerShown = false;
+  function offerDiag() {
+    if (offerShown || !document.body) return;
+    offerShown = true;
+    var b = el('div', 'ml-offer');
+    b.appendChild(el('span', null, T('diagOffer')));
+    var go = button('ml-pill ml-primary', T('diagTitle'));
+    go.addEventListener('click', function () { if (b.parentNode) b.parentNode.removeChild(b); showDiag(); });
+    var x = button('ml-pill', '×');
+    x.addEventListener('click', function () { if (b.parentNode) b.parentNode.removeChild(b); });
+    b.appendChild(go); b.appendChild(x);
+    document.body.appendChild(b);
+  }
+
+  // Das App-Skript (musiclookapp.js) wird mit der Seite geladen. Kommt es nicht an (Verbindung kurz weg, Server ausgelastet), bleibt sonst das alte Layout
+  // oder eine halbe Ansicht stehen: darum wird es nach Verzoegerung erneut angefordert (mehrfaches Laden schadet nicht, die App startet nur einmal).
+  var appTries = 0;
+  function watchApp() {
+    function chk() {
+      if (api.app) return;
+      if (document.hidden || navigator.onLine === false) { setTimeout(chk, 4000); return; }
+      if (appTries >= 4) { dlog('App-Skript nach ' + appTries + ' Versuchen nicht geladen'); offerDiag(); return; }
+      var base = document.querySelector('script[src*="MusicLook/client.js"]');
+      if (!base) { if (appTries++ < 40) setTimeout(chk, 4000); return; }
+      appTries++;
+      var src = base.src.replace(/client\.js/, 'app.js');
+      src += (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + appTries + '-' + Date.now();
+      dlog('App-Skript fehlt, Versuch ' + appTries);
+      var sc = document.createElement('script');
+      sc.src = src;
+      sc.onerror = function () { dlog('App-Skript Versuch ' + appTries + ' fehlgeschlagen'); };
+      sc.onload = function () { dlog('App-Skript Versuch geladen, App ' + (api.app ? 'bereit' : 'nicht bereit')); };
+      document.body.appendChild(sc);
+      setTimeout(chk, 9000);
+    }
+    setTimeout(chk, 8000);
+  }
+
   /* ---------- Schnittstelle fuer musiclookapp.js ---------- */
   var api = {
     version: 2,
@@ -900,7 +1065,8 @@
     jamState: function () { return { code: jam.code, state: jam.state }; },
     refresh: function () { updateContext(); },
     forceMusic: function (on) { musicOn = null; setMusic(!!on); },
-    uncloak: uncloak
+    uncloak: uncloak,
+    dlog: dlog, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
   };
   window.MusicLook = api;
   loadKnownMusic();
@@ -947,4 +1113,6 @@
   }
 
   if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
+  watchApp();
+  if (/[?&]mldiag=1/.test(location.hash)) setTimeout(function () { try { showDiag(); } catch (e) { /* ignorieren */ } }, 2500);
 })();

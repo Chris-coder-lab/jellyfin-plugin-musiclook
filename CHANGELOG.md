@@ -1,5 +1,12 @@
 # Änderungen
 
+## 2.4.0.0
+- **Diagnose:** Menü (Zahnrad am Computer, Benutzermenü am Handy) → „Diagnose“ zeigt und kopiert einen Bericht: Plugin- und App-Stand, Browser/WebView, Anzeige und Ränder, Layout (App, Navigation, Mini-Player, Jellyfin-Leiste), Ladezeiten der Plugin-Dateien, Antwortzeit des Servers, WebSocket-Zustand, alle Sitzungen des Kontos (auch Swiftfin: Gerät, Fernsteuerung, spielbare Medientypen, was gerade läuft) und ein Protokoll der letzten Ereignisse (Fehler, Adresswechsel, Hintergrund/Vordergrund, Verbindung, Geräte­wechsel). Läuft ohne geladene App: Lädt das App-Skript nicht, erscheint ein Hinweis mit Knopf „Diagnose“; zusätzlich über die Adresse `…#/music?mldiag=1`.
+- **App-Skript wird nachgeladen:** Kommt `app.js` nicht an (Verbindung kurz weg, Server unter Last), bleibt nicht mehr das alte Layout oder eine halbe Ansicht stehen: nach 8 s bis zu vier Wiederholungen; doppeltes Laden ist unschädlich.
+- **Abspielen:** Meldet die Sitzung dieses Geräts noch keine Fernsteuerung (z. B. direkt nach dem Öffnen), wartet der Befehl bis zu 6 s, statt ins Leere zu gehen. Startet der Titel binnen 10 s nicht, erscheint ein Hinweis (und ein Eintrag im Protokoll) statt gar keiner Reaktion.
+- **Gerätewechsel:** Springt der Web-Client beim Stoppen der eigenen Wiedergabe von selbst auf eine andere Seite (z. B. in die Bibliothek), wird die Seite während des Wechsels und 4 s danach gehalten.
+- **QR-Code:** Der Link steht als Text unter dem Code (so ist sichtbar, was der Code enthält); Hinweis, dass der Link die Jellyfin-Webseite im Browser öffnet.
+
 ## 2.3.0.0
 - **Spulen ohne Netz:** Ist ein Titel heruntergeladen und wird noch vom Server gestreamt, springt eine Spulposition, die noch nicht geladen ist, nicht mehr auf den Server (das endete mit „Wiedergabefehler / Netzwerkproblem“). Antwortet der Server nicht (Kurzprüfung 1,5 s) oder gilt die Verbindung als weg, spielt die lokale Datei an genau dieser Stelle weiter; Pause-Zustand bleibt erhalten. In der lokalen Wiedergabe wird immer direkt im Audio-Element gespult.
 - **Download bei 100 %:** Das Zusammensetzen großer Dateien (Hörbücher) hielt die ganze Datei doppelt im Skript-Speicher; die App konnte sich dabei schließen. Die Stücke werden jetzt laufend (alle 4 MB) zu Blobs gebündelt, die das Gerät außerhalb des Skript-Speichers hält.

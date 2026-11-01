@@ -145,7 +145,7 @@
       mAddToPlaylist: 'Zu Playlist hinzufügen', mRemoveFromPlaylist: 'Aus dieser Playlist entfernen', mAlbum: 'Album anzeigen', mArtist: 'Künstler*in aufrufen',
       mSpeed: 'Geschwindigkeit ändern', mRadio: 'Zum Song-Radio', mInfo: 'Songinfos', mUnlike: 'Aus Lieblingssongs entfernen', mLike: 'Zu Lieblingssongs hinzufügen',
       mClassic: 'Klassische Ansicht', mSpotify: 'Spotify-Ansicht', mNewPlaylist: 'Neue Playlist erstellen',
-      copyLink: 'Link kopieren', linkCopied: 'Link kopiert', shareNative: 'Teilen …', shareQr: 'QR-Code anzeigen', shareQrHide: 'QR-Code ausblenden', shareQrHint: 'Die andere Person scannt den Code mit der Handy-Kamera und öffnet so den Link.', shareQrFail: 'Der Link ist für einen QR-Code zu lang.',
+      copyLink: 'Link kopieren', linkCopied: 'Link kopiert', shareNative: 'Teilen …', shareQr: 'QR-Code anzeigen', shareQrHide: 'QR-Code ausblenden', shareQrHint: 'Die andere Person scannt den Code mit der Handy-Kamera. Der Link öffnet die Jellyfin-Webseite im Browser (Anmeldung nötig).', shareQrFail: 'Der Link ist für einen QR-Code zu lang.',
       shareHint: 'Den Link können nur Personen öffnen, die Zugriff auf die Playlist haben. Gib den Zugriff unten frei.',
       shareLinkTrack: 'Der Link öffnet das Album des Titels.', sharePeople: 'Personen mit Zugriff',
       detailsTitle: 'Details bearbeiten', nameLabel: 'Name', descLabel: 'Beschreibung', descPh: 'Beschreibung hinzufügen',
@@ -158,7 +158,7 @@
       addSongsTitle: 'Titel hinzufügen', searchSongsPh: 'Titel, Alben oder Künstler suchen', added: 'Hinzugefügt', addFailed: 'Hinzufügen fehlgeschlagen',
       addToTitle: 'Zu Playlist hinzufügen', addedTo: 'Zu „{0}“ hinzugefügt', playlistCreated: 'Playlist „{0}“ erstellt', createFailed: 'Erstellen fehlgeschlagen',
       newPlaylistPh: 'Name der neuen Playlist', createPlaylist: 'Erstellen', toJam: 'Zur Jam-Warteschlange', jamAdded: 'Zur Jam hinzugefügt', jamFailed: 'Jam: Aktion fehlgeschlagen',
-      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
+      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
       searchPh: 'Was möchtest du hören?', searchHint: 'Suche nach Titeln, Alben, Künstlern und Playlists.', noResults: 'Keine Treffer für „{0}“.',
       loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung und Ansicht', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
@@ -189,7 +189,7 @@
       mAddToPlaylist: 'Add to playlist', mRemoveFromPlaylist: 'Remove from this playlist', mAlbum: 'Go to album', mArtist: 'Go to artist',
       mSpeed: 'Change speed', mRadio: 'Go to song radio', mInfo: 'Song info', mUnlike: 'Remove from Liked Songs', mLike: 'Add to Liked Songs',
       mClassic: 'Classic view', mSpotify: 'Spotify view', mNewPlaylist: 'Create new playlist',
-      copyLink: 'Copy link', linkCopied: 'Link copied', shareNative: 'Share …', shareQr: 'Show QR code', shareQrHide: 'Hide QR code', shareQrHint: 'The other person scans the code with their phone camera to open the link.', shareQrFail: 'The link is too long for a QR code.',
+      copyLink: 'Copy link', linkCopied: 'Link copied', shareNative: 'Share …', shareQr: 'Show QR code', shareQrHide: 'Hide QR code', shareQrHint: 'The other person scans the code with their phone camera. The link opens the Jellyfin web page in the browser (sign-in required).', shareQrFail: 'The link is too long for a QR code.',
       shareHint: 'Only people with access to the playlist can open the link. Grant access below.',
       shareLinkTrack: 'The link opens the album of the track.', sharePeople: 'People with access',
       detailsTitle: 'Edit details', nameLabel: 'Name', descLabel: 'Description', descPh: 'Add a description',
@@ -202,7 +202,7 @@
       addSongsTitle: 'Add tracks', searchSongsPh: 'Search tracks, albums or artists', added: 'Added', addFailed: 'Could not add',
       addToTitle: 'Add to playlist', addedTo: 'Added to "{0}"', playlistCreated: 'Playlist "{0}" created', createFailed: 'Could not create',
       newPlaylistPh: 'Name of the new playlist', createPlaylist: 'Create', toJam: 'Add to Jam queue', jamAdded: 'Added to the Jam', jamFailed: 'Jam: action failed',
-      queued: 'Added to queue', playFailed: 'Playback could not be started', left: 'Removed from your library', leaveFailed: 'Could not remove',
+      queued: 'Added to queue', playFailed: 'Playback could not be started', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
       searchPh: 'What do you want to listen to?', searchHint: 'Search for tracks, albums, artists and playlists.', noResults: 'No results for "{0}".',
       loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Sort order and view', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
@@ -2022,7 +2022,18 @@
     var remote = typeof Player !== 'undefined' && Player && Player.targetId ? Player.targetId() : null;
     if (remote) return Promise.resolve({ Id: remote, remote: true });
     if (!force && sessCache.s && Date.now() - sessCache.at < 20000) return Promise.resolve(sessCache.s);
-    return mySession().then(function (s) { sessCache = { at: Date.now(), s: s }; return s; });
+    return mySession().then(function (s) {
+      // Direkt nach dem Oeffnen der App (oder bei kurz gestoerter Verbindung) meldet die Sitzung noch keine Fernsteuerung: dann wartet der Befehl
+      // bis zu 6 Sekunden, statt ins Leere zu gehen (der Server nimmt ihn an, das Geraet fuehrt ihn aber nicht aus).
+      if (!s || s.SupportsRemoteControl !== false) return s;
+      var tries = 8;
+      return (function again() {
+        return new Promise(function (r) { setTimeout(r, 750); }).then(mySession).then(function (n) {
+          if (n && n.SupportsRemoteControl !== false) return n;
+          return tries-- > 0 ? again() : (n || s);
+        }, function () { return tries-- > 0 ? again() : s; });
+      })();
+    }).then(function (s) { sessCache = { at: Date.now(), s: s }; return s; });
   }
   // Fuehrt fn mit der eigenen Sitzung aus; bei Fehlern einmal mit frisch ermittelter Sitzung.
   function withSession(fn) {
@@ -2090,8 +2101,18 @@
           }, Promise.resolve());
         });
       });
-    }).then(function () { Player.kick(); return true; }, function () { if (!opts.quiet) toast(t('playFailed')); return false; });
+    }).then(function () {
+      Player.kick();
+      if (!opts.quiet && !remoteNow() && Player.verifyStarted) {
+        var firstId = head[startIndex];
+        Player.verifyStarted(firstId, 10000).then(function (ok) {
+          if (!ok && !Net.offline()) { ML.dlog('Titel startet nicht: ' + firstId); toast(t('playNoStart')); }
+        });
+      }
+      return true;
+    }, function (e) { ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
   }
+  function remoteNow() { try { return !!(typeof Player !== 'undefined' && Player && Player.targetId && Player.targetId()); } catch (e) { return false; } }
 
   function queueIds(ids) {
     ids = (ids || []).filter(function (id) { return ID_RE.test(id); });
@@ -2324,6 +2345,7 @@
         var frame = el('div', 'ml-qr-code');
         frame.appendChild(svg);
         qrBox.appendChild(frame);
+        qrBox.appendChild(el('div', 'ml-qr-link', opts.url));
         qrBox.appendChild(el('div', 'ml-sheet-note ml-center', t('shareQrHint')));
         if (b.nextSibling) b.parentNode.insertBefore(qrBox, b.nextSibling); else b.parentNode.appendChild(qrBox);
         lab.textContent = t('shareQrHide');
@@ -4307,7 +4329,8 @@
         { icon: 'album', label: t('mClassic'), run: function () { setClassic(true); } },
         { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
         { hidden: !me.admin, icon: 'info', label: t('dashboardLbl'), run: function () { go('#/dashboard'); } },
-        { icon: 'person', label: t('settingsLbl'), run: function () { go('#/mypreferencesmenu'); } }
+        { icon: 'person', label: t('settingsLbl'), run: function () { go('#/mypreferencesmenu'); } },
+        { icon: 'info', label: ML.T('diagTitle'), run: function () { ML.showDiag(); } }
       ]);
     });
   }
@@ -8934,7 +8957,9 @@
       if (transferBusy) return Promise.resolve(false);
       transferBusy = true;
       var toThis = target.DeviceId === thisDeviceId();
-      function done(v) { transferBusy = false; return v; }
+      var guard = guardRoute();
+      ML.dlog('Geraetewechsel nach ' + deviceLabel(target));
+      function done(v) { transferBusy = false; guard.end(4000); ML.dlog('Geraetewechsel ' + (v ? 'fertig' : 'fehlgeschlagen')); return v; }
       return fetchState().then(function (cur) {
         var srcId = cur && cur.Id;
         if (srcId && srcId === target.Id) return true;
@@ -10755,9 +10780,50 @@
     }
     function adoptLocal() { if (P.targetId) setTarget(null, ''); autoOff = true; }
 
+    /* ---------- Diagnose (Zeilen fuer die Diagnose-Ansicht des Kerns) ---------- */
+    function diagLines() {
+      var L = [];
+      try {
+        var a = document.querySelector('audio.mediaPlayerAudio');
+        L.push('Player: laeuft=' + running + ' | Titel=' + (P.item ? String(P.item.Name || '').slice(0, 40) : '-') + ' | pausiert=' + isPaused() + ' | Ziel=' + (P.targetId ? (P.targetName + (P.auto ? ' (automatisch)' : '')) : 'dieses Geraet') + ' | lokale Datei=' + OFFPLAY.active() + ' | Warteschlange=' + (P.queue || []).length);
+        L.push('Audio-Element: ' + (a ? ((a.paused ? 'pausiert' : 'spielt') + ', Fehlercode ' + (a.error ? a.error.code : '-') + ', networkState ' + a.networkState + ', readyState ' + a.readyState) : 'fehlt'));
+        L.push('Netz: offline=' + Net.offline() + ' erzwungen=' + Net.forced() + ' | Wiedergabe-Sitzung bekannt=' + !!P.session + (P.session ? ' (Fernsteuerung ' + P.session.SupportsRemoteControl + ')' : ''));
+      } catch (e) { L.push('Player: Fehler ' + e); }
+      return L;
+    }
+    /* Der Web-Client kann beim Stoppen der eigenen Wiedergabe (Geraetewechsel) von sich aus die Seite wechseln (z. B. zurueck in die Bibliothek).
+       Waehrend des Wechsels und kurz danach wird deshalb die Seite gehalten: springt die Adresse weg, geht es zur vorigen Ansicht zurueck. */
+    function guardRoute() {
+      var keep = location.hash, until = Date.now() + 120000, grace = 0, off = null;
+      function onHash() {
+        var now = location.hash;
+        if (now === keep) return;
+        if (grace && Date.now() > grace) { stop(); return; }
+        stop();
+        ML.dlog('Routen-Wächter: Sprung von ' + keep.slice(0, 60) + ' nach ' + now.slice(0, 60) + ' rückgängig');
+        try { location.replace(location.href.split('#')[0] + keep); } catch (e) { /* bleibt */ }
+      }
+      function stop() { window.removeEventListener('hashchange', onHash); if (off) clearTimeout(off); }
+      window.addEventListener('hashchange', onHash);
+      off = setTimeout(stop, until - Date.now());
+      return { end: function (ms) { grace = Date.now() + (ms || 3000); clearTimeout(off); off = setTimeout(stop, ms || 3000); } };
+    }
+    // Prueft nach dem Start, ob der Titel wirklich laeuft (Sitzung meldet ihn oder das Audio-Element spielt ihn); sonst Hinweis statt stummem Nichts.
+    function verifyStarted(itemId, ms) {
+      return new Promise(function (resolve) {
+        var until = Date.now() + (ms || 10000);
+        (function look() {
+          var a = document.querySelector('audio.mediaPlayerAudio');
+          var np = P.session && P.session.NowPlayingItem;
+          if (OFFPLAY.active() || (P.item && nid(P.item.Id) === nid(itemId)) || (np && nid(np.Id) === nid(itemId)) || (a && !a.paused && nid(a.currentSrc || a.src || '').indexOf(nid(itemId)) >= 0)) { resolve(true); return; }
+          if (Date.now() > until) { resolve(false); return; }
+          setTimeout(look, 600);
+        })();
+      });
+    }
     return {
       syncLocal: syncLocal, dropLocal: dropLocal, adoptLocal: adoptLocal,
-      start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, toggle: toggle,
+      start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, toggle: toggle, diag: diagLines, verifyStarted: verifyStarted,
       contextId: function (forMark) {
         if (forMark && !P.item && !P.ctxId) { var g = ghostRec(); if (g && g.ctx) return nid(g.ctx); }
         return P.ctxId;
@@ -11198,6 +11264,7 @@
 
   ML.app = {
     route: onRoute,
+    diagExtra: function () { try { return Player.diag(); } catch (e) { return ['Player: Fehler ' + e]; } },
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
