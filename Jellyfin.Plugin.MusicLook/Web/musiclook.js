@@ -938,6 +938,28 @@
     document.addEventListener('resume', function () { dlog('Seite fortgesetzt'); });
   } catch (e) { /* ohne Protokoll */ }
 
+  // WebSocket-Ereignisse ins Protokoll (nur Pfad, Zeitpunkt und Schliess-Code; keine Adresse, kein Schluessel): zeigt, warum die Fernsteuerung fehlt.
+  try {
+    var NativeWS = window.WebSocket;
+    if (NativeWS && !NativeWS.__mlWrapped) {
+      var WrappedWS = function (url, protocols) {
+        var ws = protocols !== undefined ? new NativeWS(url, protocols) : new NativeWS(url);
+        var path = '?';
+        try { path = new URL(String(url), location.href).pathname; } catch (e) { path = '?'; }
+        var t0 = Date.now();
+        dlog('WebSocket neu: ' + path);
+        ws.addEventListener('open', function () { dlog('WebSocket offen: ' + path); });
+        ws.addEventListener('error', function () { dlog('WebSocket Fehler: ' + path + ' nach ' + Math.round((Date.now() - t0) / 1000) + ' s'); });
+        ws.addEventListener('close', function (e) { dlog('WebSocket zu: ' + path + ' Code ' + (e && e.code) + (e && e.reason ? ' (' + String(e.reason).slice(0, 40) + ')' : '') + ' nach ' + Math.round((Date.now() - t0) / 1000) + ' s'); });
+        return ws;
+      };
+      WrappedWS.prototype = NativeWS.prototype;
+      ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) { try { WrappedWS[k] = NativeWS[k]; } catch (e) { /* egal */ } });
+      WrappedWS.__mlWrapped = true;
+      window.WebSocket = WrappedWS;
+    }
+  } catch (e) { /* ohne WebSocket-Protokoll */ }
+
   function scriptVersion() {
     var sc = document.querySelector('script[src*="MusicLook/client.js"]');
     var m = sc && /[?&]v=([^&]+)/.exec(sc.src);

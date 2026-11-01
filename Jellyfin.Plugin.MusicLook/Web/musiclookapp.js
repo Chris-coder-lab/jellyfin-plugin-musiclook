@@ -2231,7 +2231,7 @@
   function idsOf(tracks) { return tracks.map(function (x) { return x.Id; }); }
 
   /* ---------- Wiedergabe (ueber die Sitzung des Web-Clients) ---------- */
-  var sessCache = { at: 0, s: null };
+  var sessCache = { at: 0, s: null }, noRemoteAt = 0;   // noRemoteAt: wann zuletzt festgestellt wurde, dass die Sitzung nicht fernsteuerbar ist
   function getSession(force) {
     // Steuert der Player gerade ein anderes Geraet (Geraete-Wechsel), gehen alle Befehle dorthin.
     var remote = typeof Player !== 'undefined' && Player && Player.targetId ? Player.targetId() : null;
@@ -2241,13 +2241,14 @@
       // Direkt nach dem Oeffnen der App (oder bei kurz gestoerter Verbindung) meldet die Sitzung noch keine Fernsteuerung: dann wartet der Befehl
       // bis zu 6 Sekunden, statt ins Leere zu gehen (der Server nimmt ihn an, das Geraet fuehrt ihn aber nicht aus).
       if (!s || s.SupportsRemoteControl !== false) return s;
-      var tries = 8;
+      if (Date.now() - noRemoteAt < 45000) { ML.healSocket('Sitzung ohne Fernsteuerung', true); return s; }   // eben erst festgestellt: nicht noch einmal warten
+      var tries = 4;
       ML.dlog('Sitzung ' + String(s.Id || '').slice(0, 6) + ' meldet keine Fernsteuerung, WebSocket ' + ML.socketState());
       ML.healSocket('Sitzung ohne Fernsteuerung', true);
       return (function again() {
         return new Promise(function (r) { setTimeout(r, 750); }).then(mySession).then(function (n) {
           if (n && n.SupportsRemoteControl !== false) return n;
-          return tries-- > 0 ? again() : (n || s);
+          return tries-- > 0 ? again() : (noRemoteAt = Date.now(), n || s);
         }, function () { return tries-- > 0 ? again() : s; });
       })();
     }).then(function (s) { sessCache = { at: Date.now(), s: s }; return s; });
@@ -2282,6 +2283,7 @@
 
   // Spielt die Titel ab dem Index start; sehr lange Listen werden ab start nachgeladen.
   // opts.positionTicks: Startposition im ersten Titel (Geraete-Wechsel).
+  var streamNoted = false;
   var playGen = 0;   // zaehlt jeden Start; Wiederholungen aelterer Starts (z. B. Weiter hoeren) brechen ab, sobald ein neuer Start dazukommt
   function playGeneration() { return playGen; }
   function playIds(ids, start, opts) {
@@ -2319,7 +2321,21 @@
       if (opts.positionTicks > 0) first.startPositionTicks = Math.round(opts.positionTicks);
       return sessionCall(s, 'Playing', first);
     }
+    var streamed = false;
+    function canStream() { return typeof OFFPLAY !== 'undefined' && OFFPLAY.startStream && !Net.offline() && !remoteNow(); }
+    function streamIt(why) {
+      ML.dlog('Notweg: ' + why + ' - spiele direkt auf diesem Geraet');
+      return OFFPLAY.startStream(head, startIndex, { name: opts.name || '', ctx: opts.ctx || '', positionSec: opts.positionTicks > 0 ? opts.positionTicks / 1e7 : 0 }).then(function (ok) {
+        if (!ok) throw new Error('stream');
+        streamed = true;
+        if (!opts.quiet && !streamNoted) { streamNoted = true; toast(t('streamFallback')); }
+        rest.reduce(function (p, part) { return p.then(function () { return OFFPLAY.addIds(part, false); }); }, Promise.resolve());
+        return null;
+      });
+    }
     return withSession(function (s) {
+      // Ohne Fernsteuerung kommt der Befehl nie an: dann spielt das Plugin den Titel selbst (direkt vom Server, auf diesem Geraet).
+      if (!s.remote && s.SupportsRemoteControl === false && canStream()) return streamIt('Sitzung ' + String(s.Id || '').slice(0, 6) + ' ohne Fernsteuerung, WebSocket ' + ML.socketState());
       return playNow(s).then(function () {
         if (!rest.length) return null;
         return waitForPlaying(head[startIndex], 16).then(function () {
@@ -2328,10 +2344,13 @@
           }, Promise.resolve());
         });
       });
+    }).then(null, function (e) {
+      if (!streamed && e && e.message === 'no session' && canStream()) return streamIt('keine Sitzung fuer dieses Geraet');
+      throw e;
     }).then(function () {
       Player.kick();
-      if (opts.quiet || remoteNow() || !Player.verifyStarted) { try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } }
-      if (!opts.quiet && !remoteNow() && Player.verifyStarted) {
+      if (streamed || opts.quiet || remoteNow() || !Player.verifyStarted) { try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } }
+      if (!streamed && !opts.quiet && !remoteNow() && Player.verifyStarted) {
         var firstId = head[startIndex];
         Player.verifyStarted(firstId, 10000).then(function (ok) {
           if (ok) { ML.dlog('Titel läuft: ' + firstId); try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } return null; }
@@ -2368,6 +2387,7 @@
   function queueIds(ids) {
     ids = (ids || []).filter(function (id) { return ID_RE.test(id); });
     if (!ids.length) return Promise.resolve();
+    if (typeof OFFPLAY !== 'undefined' && OFFPLAY.streaming && OFFPLAY.streaming()) return OFFPLAY.addIds(ids, false).then(function () { toast(t('queued')); Player.kick(); });
     return withSession(function (s) {
       return ML.chunk(ids, PLAY_CHUNK).reduce(function (p, part) {
         return p.then(function () { return sessionCall(s, 'Playing', { playCommand: 'PlayLast', itemIds: part.join(',') }); });
@@ -7311,8 +7331,8 @@
       if (remote) return Promise.resolve({ Id: remote, remote: true });
       return mySession().then(function (s) { return s; }, function () { return null; }).then(function (s) {
         if (s && s.SupportsRemoteControl !== false) { sessCache = { at: Date.now(), s: s }; return s; }
-        if (tries <= 0) { ML.dlog('Fortsetzen: Sitzung bleibt ohne Fernsteuerung (WebSocket ' + ML.socketState() + ')'); return s; }
-        if (tries === 8 || tries === 4) { ML.dlog('Fortsetzen: warte auf Fernsteuerung (WebSocket ' + ML.socketState() + ')'); ML.healSocket('Weiter hoeren', true); }
+        if (tries <= 0) { noRemoteAt = Date.now(); ML.dlog('Fortsetzen: Sitzung bleibt ohne Fernsteuerung (WebSocket ' + ML.socketState() + ')'); return s; }
+        if (tries === 5 || tries === 3) { ML.dlog('Fortsetzen: warte auf Fernsteuerung (WebSocket ' + ML.socketState() + ')'); ML.healSocket('Weiter hoeren', true); }
         return wait(800).then(function () { return readySession(tries - 1); });
       });
     }
@@ -7331,7 +7351,7 @@
     function attempt(v, q, pos, n, ctl) {
       function gone() { return playGeneration() !== ctl.gen; }
       var first = n > 0 ? withSession(function (s) { return sessionCall(s, 'Playing/Stop'); }).then(function () { return wait(900); }, function () { /* kein Stopp noetig */ }) : Promise.resolve();
-      return first.then(function () { return readySession(n === 0 ? 8 : 4); }).then(function () {
+      return first.then(function () { return readySession(n === 0 ? 5 : 3); }).then(function () {
         if (gone()) return 'cancelled';
         ML.dlog('Fortsetzen: Versuch ' + (n + 1) + ' (' + q.ids[q.i] + ' ab ' + Math.round(pos) + ' s)');
         var pr = playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '', quiet: true });
@@ -8890,13 +8910,13 @@
   (function () {
     var extra = {
       de: {
-        offPlayLocal: 'Vom Gerät abspielen', offPlayAll: 'Alle abspielen', offShuffleAll: 'Zufall', offFromDevice: 'Vom Gerät', offLocalFail: 'Titel nicht abspielbar',
+        streamFallback: 'Keine Fernsteuerung – der Titel spielt direkt auf diesem Gerät.', offPlayLocal: 'Vom Gerät abspielen', offPlayAll: 'Alle abspielen', offShuffleAll: 'Zufall', offFromDevice: 'Vom Gerät', offLocalFail: 'Titel nicht abspielbar',
         offNotAvail: 'Du bist offline. Dieser Titel ist nicht heruntergeladen.', offHandover: 'Keine Verbindung – es läuft vom Gerät an derselben Stelle weiter.',
         fromPlaylistCtx: 'Wiedergabe aus Playlist', fromAlbumCtx: 'Wiedergabe aus Album', fromLikedCtx: 'Wiedergabe aus', fromMixCtx: 'Wiedergabe aus Mix',
         fromRadioCtx: 'Wiedergabe aus Radio', fromMixtapeCtx: 'Wiedergabe aus Mixtape', lyricsBig: 'Songtext vergrößern', lyricsSmall: 'Songtext verkleinern'
       },
       en: {
-        offPlayLocal: 'Play from device', offPlayAll: 'Play all', offShuffleAll: 'Shuffle', offFromDevice: 'From device', offLocalFail: 'Track cannot be played',
+        streamFallback: 'No remote control – playing directly on this device.', offPlayLocal: 'Play from device', offPlayAll: 'Play all', offShuffleAll: 'Shuffle', offFromDevice: 'From device', offLocalFail: 'Track cannot be played',
         offNotAvail: 'You are offline. This track is not downloaded.', offHandover: 'No connection – continuing from the device at the same position.',
         fromPlaylistCtx: 'Playing from playlist', fromAlbumCtx: 'Playing from album', fromLikedCtx: 'Playing from', fromMixCtx: 'Playing from mix',
         fromRadioCtx: 'Playing from radio', fromMixtapeCtx: 'Playing from mixtape', lyricsBig: 'Enlarge lyrics', lyricsSmall: 'Shrink lyrics'
@@ -8910,6 +8930,7 @@
     var aud = null;                       // eigenes Audio-Element (Jellyfins Element bleibt unberührt)
     var P = { queue: [], order: [], idx: -1, shuffle: false, repeat: 'RepeatNone', cur: null, url: '', ctxId: '', name: '', startedAt: 0, startPos: 0, startPaused: false };
     var tok = 0, covers = {}, coverWait = {}, handlers = false, active = false, items = {};
+    var streaming = false, progTimer = null, reported = null;   // Notweg: Wiedergabe direkt vom Server auf diesem Geraet
 
     function coverUrl(key) {
       if (!key) return Promise.resolve('');
@@ -8920,6 +8941,7 @@
     }
     // Titel im Format der Server-Antworten, damit alle Teile des Players ihn unverändert verwenden (ohne Album- und Künstler-IDs: nichts davon ist offline erreichbar)
     function itemOf(m) {
+      if (m.server) return m.server;   // Notweg: der Titel kommt vom Server und hat schon alle Felder
       var it = items[m.id];
       if (it) return it;
       it = {
@@ -8938,8 +8960,21 @@
       aud = new Audio(); aud.preload = 'auto';
       try { var ja = document.querySelector('audio.mediaPlayerAudio'); if (ja && isFinite(ja.volume)) aud.volume = ja.volume; } catch (e) { /* Standard */ }
       aud.addEventListener('ended', function () { if (P.repeat === 'RepeatOne') { aud.currentTime = 0; aud.play(); } else advance(1); });
-      aud.addEventListener('error', function () { if (P.cur && active) { toast(t('offLocalFail')); advance(1); } });
-      ['play', 'pause', 'volumechange', 'seeked'].forEach(function (ev) { aud.addEventListener(ev, function () { if (active) { position(); Player.repaint(); } }); });
+      aud.addEventListener('error', function () {
+        if (!(P.cur && active)) return;
+        if (streaming && !P.cur.__transcode) {   // Direktwiedergabe nicht moeglich (Format): einmal als MP3 umgewandelt versuchen
+          P.cur.__transcode = true;
+          ML.dlog('Notweg: Format nicht abspielbar, zweiter Versuch umgewandelt (' + P.cur.id + ')');
+          var at = aud.currentTime || 0;
+          aud.src = streamUrl(P.cur, true);
+          try { if (at > 1) aud.currentTime = at; } catch (e) { /* egal */ }
+          aud.play().catch(function () { Player.repaint(); });
+          return;
+        }
+        if (streaming) ML.dlog('Notweg: Titel nicht abspielbar (' + P.cur.id + ')');
+        toast(t('offLocalFail')); advance(1);
+      });
+      ['play', 'pause', 'volumechange', 'seeked'].forEach(function (ev) { aud.addEventListener(ev, function () { if (active) { position(); Player.repaint(); if (streaming && ev !== 'volumechange') report('progress'); } }); });
       aud.addEventListener('loadedmetadata', function () { position(); try { applySpeed(); } catch (e) { /* kein Tempo */ } });
       // Startet Jellyfin selbst eine Wiedergabe (anderer Titel, anderes Gerät), übernimmt sie: die lokale endet.
       document.addEventListener('play', function (e) {
@@ -9001,6 +9036,7 @@
     function playCurrent() {
       var tr = current();
       if (!tr) return;
+      if (streaming) return playStream(tr);
       var my = ++tok;
       Promise.all([D.getBlob(tr.id), coverUrl(tr.coverKey)]).then(function (r) {
         if (my !== tok) return;
@@ -9029,7 +9065,7 @@
       if (!P.queue.length || !aud) return;
       var n = P.order.length, ni = P.idx + dir;
       if (ni >= n) {
-        if (P.repeat === 'RepeatAll') ni = 0; else { aud.pause(); aud.currentTime = 0; Player.repaint(); return; }
+        if (P.repeat === 'RepeatAll') ni = 0; else { aud.pause(); aud.currentTime = 0; if (streaming) report('stop'); Player.repaint(); return; }
       }
       if (ni < 0) { if (P.repeat === 'RepeatAll') ni = n - 1; else { aud.currentTime = 0; return; } }
       P.idx = ni; playCurrent();
@@ -9037,7 +9073,8 @@
     function jump(i) { if (!active || i < 0 || i >= P.order.length) return; P.idx = i; playCurrent(); }
     function stop() {
       if (!active) return;
-      ML.dlog('Lokal: Wiedergabe beendet');
+      ML.dlog((streaming ? 'Notweg' : 'Lokal') + ': Wiedergabe beendet');
+      if (streaming) { report('stop'); clearInterval(progTimer); progTimer = null; streaming = false; reported = null; }
       active = false; tok++;
       if (aud) { aud.pause(); aud.removeAttribute('src'); try { aud.load(); } catch (e) { /* egal */ } }
       if (P.url) { URL.revokeObjectURL(P.url); P.url = ''; }
@@ -9057,7 +9094,7 @@
       if (!active || !P.cur || !aud) return null;
       var vol = Math.round(Math.pow(Math.max(0, Math.min(1, aud.volume)), 1 / 3) * 100);
       return {
-        Id: 'local', DeviceName: '', Client: 'Music Look', SupportsRemoteControl: false, UserId: uid(),
+        Id: 'local', Stream: streaming, DeviceName: '', Client: 'Music Look', SupportsRemoteControl: false, UserId: uid(),
         NowPlayingItem: itemOf(P.cur),
         PlayState: { IsPaused: aud.paused, PositionTicks: Math.round((aud.currentTime || 0) * 1e7), RepeatMode: P.repeat, PlaybackOrder: P.shuffle ? 'Shuffle' : 'Default', VolumeLevel: vol },
         NowPlayingQueue: P.order.map(function (i) { return { Id: P.queue[i].id, PlaylistItemId: 'l' + i }; })
@@ -9090,7 +9127,7 @@
     }
     function meta(tr) {
       if (!('mediaSession' in navigator)) return;
-      coverUrl(tr.coverKey).then(function (u) {
+      (tr.server ? Promise.resolve(itemImg(tr.server, 400) || '') : coverUrl(tr.coverKey)).then(function (u) {
         try { navigator.mediaSession.metadata = new MediaMetadata({ title: tr.name, artist: tr.artist, album: tr.album, artwork: u ? [{ src: u, sizes: '400x400', type: 'image/jpeg' }] : [] }); } catch (e) { /* ältere Browser */ }
       });
     }
@@ -9105,7 +9142,104 @@
       ids.forEach(function (id) { if (OFF.has(id)) { if (want && nid(id) === want && ns < 0) ns = keep.length; keep.push(id); } });
       return { ids: keep, start: want ? ns : start };
     }
+
+    /* ---- Notweg: Wiedergabe direkt vom Server auf diesem Geraet ----
+       Meldet die Sitzung dieses Geraets keine Fernsteuerung (WebSocket des Web-Clients zu), kommen Abspielbefehle nie an. Dann spielt dieses
+       Modul den Titel selbst (eigenes Audio-Element, Strom vom Server) und meldet Beginn, Fortschritt und Ende an Jellyfin zurueck,
+       damit Wiedergabezaehler, "zuletzt gehoert" und Weiter hoeren stimmen. */
+    function streamUrl(tr, transcode) {
+      var c = ML.client(), id = tr.id;
+      if (!transcode) return c.getUrl('Audio/' + id + '/stream', { static: true, UserId: uid(), DeviceId: c.deviceId(), MediaSourceId: id, api_key: c.accessToken() });
+      return c.getUrl('Audio/' + id + '/universal', { UserId: uid(), DeviceId: c.deviceId(), MaxStreamingBitrate: 320000, Container: 'mp3', TranscodingContainer: 'mp3', TranscodingProtocol: 'http', AudioCodec: 'mp3', api_key: c.accessToken() });
+    }
+    function trackOfServerItem(it) {
+      var id = nid(it.Id);
+      return { id: id, name: it.Name || '', artists: it.Artists || [], artist: (it.Artists && it.Artists[0]) || it.AlbumArtist || '', albumArtist: it.AlbumArtist || '', album: it.Album || '', ticks: it.RunTimeTicks || 0, coverKey: '', server: it };
+    }
+    // Titel zu den IDs holen, in der Reihenfolge der IDs (Unbekannte entfallen)
+    function fetchMeta(ids) {
+      var parts = ML.chunk(ids, 80), by = {};
+      return Promise.all(parts.map(function (part) {
+        return call('GET', 'Items', { Ids: part.join(','), UserId: uid(), Fields: 'Genres' }).then(function (r) {
+          ((r && r.Items) || []).forEach(function (it) { by[nid(it.Id)] = it; });
+        });
+      })).then(function () {
+        var seen = {}, out = [];
+        ids.forEach(function (id) { var k = nid(id); if (by[k] && !seen[k]) { seen[k] = 1; out.push(trackOfServerItem(by[k])); } });
+        return out;
+      });
+    }
+    function startStream(ids, start, opts) {
+      opts = opts || {};
+      ids = (ids || []).map(nid).filter(function (x) { return ID_RE.test(x); });
+      var startId = start >= 0 && ids[start] ? ids[start] : '';
+      return fetchMeta(ids).then(function (list) {
+        if (!list.length) { ML.dlog('Notweg: keine Titel vom Server gelesen'); return false; }
+        var first = 0;
+        for (var i = 0; i < list.length; i++) if (startId && list[i].id === startId) { first = i; break; }
+        if (active && !streaming) stop();
+        if (streaming) { report('stop'); }
+        ensureAudio();
+        pauseServer();
+        streaming = true; active = true; reported = null;
+        P.queue = list; P.name = opts.name || ''; P.ctxId = opts.ctx ? String(opts.ctx) : '';
+        P.shuffle = false; P.repeat = 'RepeatNone';
+        buildOrder(first); P.idx = first; P.startedAt = Date.now();
+        P.startPos = opts.positionSec > 0 ? opts.positionSec : 0; P.startPaused = false;
+        bindKeys();
+        clearInterval(progTimer);
+        progTimer = setInterval(function () { if (streaming && aud && !aud.paused) report('progress'); }, 10000);
+        ML.dlog('Notweg: Wiedergabe direkt vom Server (' + list.length + ' Titel, ab ' + list[first].id + ')');
+        playCurrent();
+        return true;
+      });
+    }
+    function playStream(tr) {
+      var my = ++tok;
+      if (reported) report('stop');
+      P.cur = tr; tr.__transcode = false;
+      aud.src = streamUrl(tr, false);
+      try { applySpeed(); } catch (e) { /* kein Tempo */ }
+      var sp = P.startPos; P.startPos = 0;
+      if (sp > 0) {
+        try { aud.currentTime = sp; } catch (e) { /* nach den Metadaten */ }
+        var fix = function () { aud.removeEventListener('loadedmetadata', fix); if (my === tok && Math.abs((aud.currentTime || 0) - sp) > 1) { try { aud.currentTime = sp; } catch (e) { /* egal */ } } };
+        aud.addEventListener('loadedmetadata', fix);
+      }
+      var p = aud.play(); if (p && p.catch) p.catch(function () { Player.repaint(); });
+      meta(tr);
+      Player.syncLocal();
+      report('start');
+    }
+    // Beginn, Fortschritt und Ende an Jellyfin melden (ohne Verbindung oder bei Fehlern stillschweigend)
+    function report(kind) {
+      if (!streaming || !P.cur || !aud || Net.offline()) { if (kind === 'stop') reported = null; return; }
+      var tr = reported && kind === 'stop' ? reported : P.cur;
+      if (kind === 'stop' && !reported) return;
+      var body = {
+        ItemId: tr.id, MediaSourceId: tr.id, PositionTicks: Math.round((aud.currentTime || 0) * 1e7), IsPaused: !!aud.paused, IsMuted: !!aud.muted, CanSeek: true,
+        PlayMethod: tr.__transcode ? 'Transcode' : 'DirectStream', RepeatMode: P.repeat
+      };
+      var path = kind === 'start' ? 'Sessions/Playing' : kind === 'stop' ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress';
+      if (kind === 'start') reported = tr;
+      if (kind === 'stop') reported = null;
+      call('POST', path, null, body).then(null, function () { /* Melden ist nur eine Zugabe */ });
+    }
+    // Titel an die Warteschlange haengen (atNext: direkt hinter den laufenden)
+    function addIds(ids, atNext) {
+      if (!streaming) return Promise.resolve(false);
+      return fetchMeta(ids).then(function (list) {
+        if (!list.length || !streaming) return false;
+        var base = P.queue.length, at = atNext ? P.idx + 1 : P.order.length;
+        list.forEach(function (tr) { P.queue.push(tr); });
+        var add = list.map(function (tr, i) { return base + i; });
+        P.order.splice.apply(P.order, [at, 0].concat(add));
+        Player.syncLocal();
+        return true;
+      });
+    }
     return {
+      startStream: startStream, addIds: addIds, streaming: function () { return streaming; },
       startIds: startIds, stop: stop, audio: function () { return aud; }, active: function () { return active; },
       recentlyStarted: function () { return Date.now() - P.startedAt < 4000; },
       offlineIds: offlineIds, session: session, itemFor: itemFor, itemOf: itemOf, preload: preload, coverUrl: coverUrl,
@@ -10957,12 +11091,12 @@
       renderNpCards();
       resolveContext();
       markContext();
-      if (!isLocal) { maybeAutoplay(s); try { Resume.note(resumeSnap()); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ } }
+      if (!isLocal || s.Stream) { if (!isLocal) maybeAutoplay(s); try { Resume.note(resumeSnap()); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ } }
     }
     // Stand fuer "Weiter hoeren": Warteschlange, Titel, Position, Herkunft (siehe resume.js)
     function resumeSnap() {
       var it = P.item;
-      if (!it || !ID_RE.test(nid(it.Id)) || (P.session && P.session.Id === 'local')) return null;
+      if (!it || !ID_RE.test(nid(it.Id)) || (P.session && P.session.Id === 'local' && !P.session.Stream)) return null;
       var ids = (P.queue || []).map(function (x) { return nid(x.Id); }).filter(function (x) { return ID_RE.test(x); });
       var idx = queueIndex();
       var single = false;
