@@ -888,10 +888,30 @@
   /* ---------- Ereignisprotokoll und Diagnose ----------
      Das Protokoll liegt nur im Speicher der Seite (nichts wird gesendet). Die Diagnose zeigt Sitzungen, Ladezeiten und Layout und laesst
      sich kopieren: damit lassen sich Probleme auf einzelnen Geraeten (Laden, Abspielen, Seitenwechsel) nachvollziehen. */
-  var dlogBuf = [], dlogT0 = Date.now();
+  var dlogBuf = [], dlogT0 = Date.now(), dlogSinks = [];
+  // Bereinigt eine Protokollzeile, bevor sie irgendwo gespeichert wird: keine Zugangsdaten, keine Server-Adressen, keine Steuerzeichen.
+  function dlogClean(msg) {
+    var x = String(msg == null ? '' : msg);
+    x = x.replace(/https?:\/\/[^\/\s"']+/gi, '');                                        // Server-Adresse (Host und Port)
+    x = x.replace(/([?&;,\s]|^)(api_?key|access_?token|token|x-emby-token|x-mediabrowser-token|authorization|password|passwd|pw|secret|key)\s*[=:]\s*("[^"]*"|'[^']*'|[^\s&,;]+)/gi, '$1$2=***');
+    x = x.replace(/Bearer\s+[A-Za-z0-9._~+\/=-]+/g, 'Bearer ***');
+    x = x.replace(/MediaBrowser\s+[^\n]*/g, 'MediaBrowser ***');
+    x = x.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '***@***');                              // E-Mail-Adressen
+    x = x.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s{2,}/g, ' ');
+    return x.slice(0, 220);
+  }
   function dlog(msg) {
-    dlogBuf.push(((Date.now() - dlogT0) / 1000).toFixed(1) + ' s  ' + String(msg).slice(0, 220));
+    var now = Date.now(), clean = dlogClean(msg);
+    dlogBuf.push(((now - dlogT0) / 1000).toFixed(1) + ' s  ' + clean);
     if (dlogBuf.length > 140) dlogBuf.shift();
+    for (var i = 0; i < dlogSinks.length; i++) { try { dlogSinks[i](now, clean); } catch (e) { /* Senke darf nie stoeren */ } }
+  }
+  // Die App haengt hier das dauerhafte Protokoll an; schon vorhandene Zeilen werden nachgereicht.
+  function dlogSink(fn) {
+    if (typeof fn !== 'function') return;
+    dlogSinks.push(fn);
+    var base = dlogT0;
+    dlogBuf.forEach(function (line) { var m = /^(\d+(?:\.\d)?) s {2}([\s\S]*)$/.exec(line); if (m) { try { fn(base + Math.round(parseFloat(m[1]) * 1000), m[2]); } catch (e) { /* egal */ } } });
   }
   dlog('Start ' + location.hash.slice(0, 80));
   try {
@@ -907,6 +927,13 @@
     window.addEventListener('pageshow', function (e) { dlog('pageshow' + (e && e.persisted ? ' (aus Cache)' : '')); });
     window.addEventListener('online', function () { dlog('Browser: online'); });
     window.addEventListener('offline', function () { dlog('Browser: offline'); });
+    document.addEventListener('error', function (e) {
+      var a = e && e.target;
+      if (!a || !a.tagName || !/^(AUDIO|VIDEO)$/.test(a.tagName)) return;
+      var src = String(a.currentSrc || a.src || ''), kind = /^blob:/.test(src) ? 'lokal' : (src ? 'Stream' : 'leer');
+      var id = (/\/Audio\/([0-9a-f]{32})\//i.exec(src) || /\/Items\/([0-9a-f]{32})\//i.exec(src) || [])[1] || '';
+      dlog('Audio-Fehler: Code ' + (a.error ? a.error.code : '?') + (a.error && a.error.message ? ' (' + String(a.error.message).slice(0, 60) + ')' : '') + ' | ' + kind + (id ? ' | Titel ' + id : '') + ' | networkState ' + a.networkState + ' readyState ' + a.readyState);
+    }, true);
     document.addEventListener('freeze', function () { dlog('Seite eingefroren'); });
     document.addEventListener('resume', function () { dlog('Seite fortgesetzt'); });
   } catch (e) { /* ohne Protokoll */ }
@@ -1066,7 +1093,7 @@
     refresh: function () { updateContext(); },
     forceMusic: function (on) { musicOn = null; setMusic(!!on); },
     uncloak: uncloak,
-    dlog: dlog, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
+    dlog: dlog, dlogSink: dlogSink, dlogClean: dlogClean, copyPlain: copyPlain, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
   };
   window.MusicLook = api;
   loadKnownMusic();

@@ -926,6 +926,11 @@ body.ml-full-on { overflow: hidden; }
 .ml-diag-row { display: flex; gap: 10px; margin: 6px 0 2px; }
 .ml-offer { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 100001; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: #282828; color: #fff; font: 600 0.88rem system-ui, sans-serif; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 .ml-offer > span { flex: 1 1 180px; }
+.ml-plog-intro { font-size: 0.82rem; line-height: 1.45; color: var(--ml-muted, #b3b3b3); margin: 4px 0 10px; }
+.ml-plog-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.ml-plog-pre { white-space: pre-wrap; word-break: break-word; font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace; max-height: 30vh; overflow: auto; background: #0b0b0b; color: #d6d6d6; padding: 10px; border-radius: 8px; margin: 8px 0; user-select: text; -webkit-user-select: text; }
+.ml-plog-note { font-size: 0.8rem; color: #ffb4a8; margin: 4px 0; }
+.ml-plog-hint { font-size: 0.78rem; line-height: 1.4; color: var(--ml-muted, #b3b3b3); margin: 8px 0 2px; }
 .ml-qr { margin: 10px 0 4px; }
 .ml-qr-link { margin: 8px 0 0; font-size: 0.78rem; color: var(--ml-muted, #b3b3b3); word-break: break-all; text-align: center; user-select: text; -webkit-user-select: text; }
 .ml-qr-code { width: min(250px, 68vw); margin: 0 auto; padding: 0; background: #fff; border-radius: 12px; overflow: hidden; line-height: 0; }
@@ -1707,6 +1712,7 @@ body.ml-full-on .ml-sleep-chip { bottom: auto; top: 14px; right: 62px; }
 .ml-nogap .ml-allbar-actions > *:not(:last-child) { margin-right: 4px; }
 .ml-nogap .ml-diag-row > *:not(:last-child) { margin-right: 10px; }
 .ml-nogap .ml-offer > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-offer > * { margin-bottom: 8px; }
+.ml-nogap .ml-plog-row > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-plog-row > * { margin-bottom: 8px; }
 .ml-nogap .ml-eq-chips > *:not(:last-child) { margin-right: 8px; } .ml-nogap .ml-eq-chips > * { margin-bottom: 8px; }
 .ml-nogap .ml-eq-switch > *:not(:last-child) { margin-right: 16px; }
 .ml-nogap .ml-eq-actions > *:not(:last-child) { margin-right: 10px; }

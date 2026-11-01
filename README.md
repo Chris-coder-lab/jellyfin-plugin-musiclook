@@ -38,6 +38,11 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.5
+- **Hängender Titel / Zurückspringen behoben:** „Weiter hören“ wiederholt seine Versuche nicht mehr, wenn du inzwischen etwas anderes gestartet hast, und der Stand der Sitzung wird beim Start eines neuen Titels nicht mehr mit dem alten Titel überschrieben. Startet ein Titel nicht, wird die Sitzung gestoppt und der Befehl einmal wiederholt. Lässt sich ein gemerkter Titel zweimal nicht abspielen, springt „Weiter hören“ zum nächsten Titel (oder entfernt den Stand).
+- **Protokoll (Fehlersuche)** im Menü: technische Ereignisse (Abspielen, Weiter hören, Verbindung, Titelwechsel, Fehler des Audio-Elements) werden **pro Benutzer** in den Anzeige-Einstellungen auf dem Jellyfin-Server gespeichert (Eintrag `musiclooklog`), damit sie auch nach einem Neustart der App noch da sind. Dort lassen sie sich ansehen, kopieren und löschen; Aufzeichnen kann abgeschaltet werden (gilt für alle Geräte des Benutzers). Dazu zwei Notausgänge: *Wiedergabe zurücksetzen* und *Weiter-hören-Stand löschen*.
+  - Sicherheit: Es werden keine Passwörter, Zugangsschlüssel (`api_key`, Token), Server-Adressen oder E-Mail-Adressen gespeichert (die Zeilen werden vor dem Speichern bereinigt); höchstens 400 Zeilen, 14 Tage und rund 48 KB; geschrieben wird gebündelt, höchstens alle 20 Sekunden. Andere Benutzer sehen das Protokoll nicht. Wer den Server verwaltet, kann wie bei allen Anzeige-Einstellungen technisch darauf zugreifen. Eine gemeinsame Ansicht für Administratoren gibt es bewusst nicht.
+
 ## Neu in 2.4
 - **Diagnose** im Menü: kopierbarer Bericht zu Sitzungen (auch Swiftfin), Ladezeiten, Layout und Ereignissen – hilft, wenn auf einem Gerät das alte Layout erscheint oder ein Titel nicht startet.
 - **Robusteres Laden und Abspielen:** das App-Skript wird bei Ausfall nachgeladen; der Abspielbefehl wartet auf die Fernsteuerung des Geräts; startet ein Titel nicht, gibt es einen Hinweis.
@@ -98,7 +103,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.4.0.0 && git push origin v2.4.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.5.0.0 && git push origin v2.4.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

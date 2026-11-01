@@ -42,6 +42,7 @@
     try { forced = window.localStorage.getItem('ml.offmode') === '1'; } catch (e) { forced = false; }
     function offline() { return forced || down || navigator.onLine === false; }
     function emit() {
+      try { ML.dlog('Netz: ' + (offline() ? 'offline' : 'online') + (forced ? ' (Offline-Modus)' : '') + (down ? ' (Server nicht erreichbar)' : '')); } catch (e) { /* nur Protokoll */ }
       try { document.body.classList.toggle('ml-offline', offline()); } catch (e) { /* Seite noch nicht bereit */ }
       listeners.slice().forEach(function (f) { try { f(offline()); } catch (e) { /* Zuhoerer darf nichts blockieren */ } });
     }
@@ -768,6 +769,218 @@
     }
     return { get: get, set: set, update: update, beacon: beacon, reset: function () { doc = null; } };
   })();
+  /* ---------- Version 2.5: dauerhaftes Protokoll (pro Benutzer, auf dem Jellyfin-Server) ----------
+     Das Ereignisprotokoll des Kerns (Abspielen, Fortsetzen, Verbindung, Fehler) lebt nur im Speicher der Seite und ist nach einem
+     Neustart der App weg. Genau dann braucht man es aber: wenn ein Titel haengt und die App neu geoeffnet wurde. Darum wird es hier
+     zusaetzlich in den Anzeige-Einstellungen des Benutzers abgelegt (eigener Eintrag "musiclooklog", also getrennt von den uebrigen
+     Einstellungen). Sicherheit:
+       - nur fuer das eigene Konto lesbar (Jellyfin liefert Anzeige-Einstellungen nur dem Benutzer selbst),
+       - Zeilen werden vor dem Speichern bereinigt (siehe dlogClean im Kern: keine Schluessel/Token, keine Server-Adresse, keine E-Mail),
+       - begrenzt auf 400 Zeilen, 14 Tage und rund 48 KB, danach faellt das Aelteste weg,
+       - jederzeit abschaltbar und loeschbar; "aus" gilt fuer alle Geraete des Benutzers,
+       - geschrieben wird gebuendelt (hoechstens alle 20 Sekunden), nie bei jedem Ereignis. */
+  (function () {
+    var extra = {
+      de: {
+        logTitle: 'Protokoll', logMenu: 'Protokoll (Fehlersuche)',
+        logIntro: 'Hier werden technische Ereignisse aufgezeichnet (Abspielen, Weiter hören, Verbindung, Fehler), damit sich Probleme nachvollziehen lassen. Gespeichert wird nur für dein Konto in deinen Anzeige-Einstellungen auf dem Jellyfin-Server, höchstens 400 Zeilen und 14 Tage. Passwörter, Zugangsschlüssel und Server-Adressen werden nie gespeichert. Andere Benutzer sehen dein Protokoll nicht; wer den Server verwaltet, hat technisch wie bei allen Einstellungen Zugriff auf die Daten.',
+        logOn: 'Aufzeichnen: an', logOff: 'Aufzeichnen: aus', logRefresh: 'Aktualisieren', logCopy: 'Kopieren', logClear: 'Löschen',
+        logCopied: 'Protokoll kopiert', logCleared: 'Protokoll gelöscht', logEmpty: 'Noch keine Einträge.', logBusy: 'Lade …', logLoadFailed: 'Das gespeicherte Protokoll konnte nicht gelesen werden. Angezeigt werden nur die Einträge dieser Sitzung.',
+        logReset: 'Wiedergabe zurücksetzen', logResetDone: 'Wiedergabe dieses Geräts zurückgesetzt', logResetFailed: 'Zurücksetzen hat nicht geklappt',
+        logForget: 'Weiter-hören-Stand löschen', logForgot: 'Weiter-hören-Stand gelöscht',
+        logRecoverHint: 'Hängt ein Titel? „Wiedergabe zurücksetzen“ stoppt die Sitzung dieses Geräts; „Weiter-hören-Stand löschen“ entfernt den gemerkten Titel.'
+      },
+      en: {
+        logTitle: 'Log', logMenu: 'Log (troubleshooting)',
+        logIntro: 'Technical events (playback, resume, connection, errors) are recorded here so problems can be traced. They are stored only for your account, in your display preferences on the Jellyfin server, at most 400 lines and 14 days. Passwords, access keys and server addresses are never stored. Other users cannot see your log; whoever administers the server can technically access the data, as with all settings.',
+        logOn: 'Recording: on', logOff: 'Recording: off', logRefresh: 'Refresh', logCopy: 'Copy', logClear: 'Delete',
+        logCopied: 'Log copied', logCleared: 'Log deleted', logEmpty: 'No entries yet.', logBusy: 'Loading …', logLoadFailed: 'The saved log could not be read. Only this session’s entries are shown.',
+        logReset: 'Reset playback', logResetDone: 'Playback on this device was reset', logResetFailed: 'Reset did not work',
+        logForget: 'Delete resume point', logForgot: 'Resume point deleted',
+        logRecoverHint: 'A track stuck? “Reset playback” stops this device’s session; “Delete resume point” removes the remembered track.'
+      }
+    };
+    Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
+  })();
+
+  var Plog = (function () {
+    var ID = 'musiclooklog', CLIENT = 'musiclook', KEYE = 'ml_log', KEYON = 'ml_on';
+    var MAX_N = 400, MAX_AGE = 14 * 86400000, MAX_BYTES = 48000, MAX_PEND = 200, FLUSH_MS = 20000;
+    var pend = [], timer = null, busy = false, on = true, loaded = false, last = [], lastMsg = '', lastTs = 0, tagTxt = '';
+    try { on = window.localStorage.getItem('ml.log.on') !== '0'; } catch (e) { on = true; }
+
+    function params() { return { userId: uid(), client: CLIENT }; }
+    function tag() {
+      if (tagTxt) return tagTxt;
+      try {
+        var c = ML.client();
+        tagTxt = (ML.dlogClean ? ML.dlogClean(c.deviceName ? c.deviceName() : '?') : '?').replace(/[\[\]\/]/g, '').slice(0, 18) + '/' + String(c.deviceId ? c.deviceId() : '').replace(/[^\w]/g, '').slice(0, 4);
+      } catch (e) { tagTxt = '?'; }
+      return tagTxt;
+    }
+    function parseEntries(text) {
+      if (!text) return [];
+      try {
+        var v = JSON.parse(text), e = v && v.e;
+        if (!Array.isArray(e)) return [];
+        return e.filter(function (x) { return Array.isArray(x) && typeof x[0] === 'number' && typeof x[2] === 'string'; }).map(function (x) { return [x[0], String(x[1] || '').slice(0, 24), x[2].slice(0, 220)]; });
+      } catch (e2) { return []; }
+    }
+    // Zusammenfuehren: doppelte Zeilen entfernen, nach Zeit ordnen, nach Alter, Anzahl und Groesse kuerzen.
+    function merge(a, b) {
+      var seen = {}, out = [], limit = Date.now() - MAX_AGE;
+      a.concat(b).forEach(function (x) {
+        var k = x[0] + '|' + x[1] + '|' + x[2];
+        if (seen[k] || x[0] < limit) return;
+        seen[k] = 1; out.push(x);
+      });
+      out.sort(function (p, q) { return p[0] - q[0]; });
+      if (out.length > MAX_N) out = out.slice(out.length - MAX_N);
+      while (out.length > 20 && JSON.stringify({ v: 1, e: out }).length > MAX_BYTES) out.shift();
+      return out;
+    }
+    function schedule(ms) { if (timer || !on) return; timer = setTimeout(flush, ms || FLUSH_MS); }
+    function offline() { try { return Net.offline(); } catch (e) { return false; } }
+    function mapFrom(cp) {
+      var map = {};
+      Object.keys(cp || {}).forEach(function (k) { if (k.indexOf('ml_') === 0 && cp[k] != null) map[k] = String(cp[k]); });
+      return map;
+    }
+    function setOnLocal(v) { on = !!v; try { window.localStorage.setItem('ml.log.on', on ? '1' : '0'); } catch (e) { /* nur diese Sitzung */ } if (!on) pend = []; }
+    function flush() {
+      clearTimeout(timer); timer = null;
+      if (!on || !pend.length) return Promise.resolve();
+      if (busy) { schedule(5000); return Promise.resolve(); }
+      if (offline() || !ML.client()) { schedule(30000); return Promise.resolve(); }
+      busy = true;
+      var batch = pend.splice(0);
+      return call('GET', 'DisplayPreferences/' + ID, params()).then(function (r) {
+        var cp = (r && r.CustomPrefs) || {};
+        if (cp[KEYON] === '0') { setOnLocal(false); return null; }   // auf einem anderen Geraet ausgeschaltet
+        var all = merge(parseEntries(cp[KEYE]), batch), map = mapFrom(cp);
+        map[KEYE] = JSON.stringify({ v: 1, e: all });
+        last = all; loaded = true;
+        return call('POST', 'DisplayPreferences/' + ID, params(), { Id: ID, CustomPrefs: map });
+      }).then(function () { busy = false; if (pend.length) schedule(); }, function () {
+        busy = false;
+        pend = batch.concat(pend).slice(-MAX_PEND);
+        schedule(60000);
+      });
+    }
+    // Beim Schliessen der Seite: nur wenn der Serverstand schon einmal gelesen wurde (sonst wuerde die Vorgeschichte ueberschrieben),
+    // sonst ein normaler Schreibversuch.
+    function leave() {
+      if (!on || !pend.length) return;
+      try {
+        var c = ML.client();
+        if (loaded && !busy && c && navigator.sendBeacon && c.accessToken && !offline()) {
+          var all = merge(last, pend), map = {};
+          map[KEYE] = JSON.stringify({ v: 1, e: all });
+          var url = c.getUrl('DisplayPreferences/' + ID, { userId: uid(), client: CLIENT, ApiKey: c.accessToken() });
+          if (navigator.sendBeacon(url, new Blob([JSON.stringify({ Id: ID, CustomPrefs: map })], { type: 'application/json' }))) { last = all; pend = []; return; }
+        }
+      } catch (e) { /* normaler Weg */ }
+      flush();
+    }
+    function add(ts, msg) {
+      if (!on) return;
+      if (msg === lastMsg && ts - lastTs < 5000) return;   // dieselbe Zeile in kurzer Folge nur einmal
+      lastMsg = msg; lastTs = ts;
+      pend.push([ts, tag(), msg]);
+      if (pend.length > MAX_PEND) pend.shift();
+      schedule();
+    }
+    // Gespeicherte Eintraege frisch vom Server plus die noch nicht gesendeten dieser Sitzung
+    function read() {
+      var mine = pend.slice();
+      return call('GET', 'DisplayPreferences/' + ID, params()).then(function (r) {
+        var cp = (r && r.CustomPrefs) || {};
+        if (cp[KEYON] === '0' && on) setOnLocal(false);
+        last = parseEntries(cp[KEYE]); loaded = true;
+        return { entries: merge(last, mine), ok: true };
+      }, function () { return { entries: merge([], mine), ok: false }; });
+    }
+    function clear() {
+      pend = []; last = [];
+      return call('GET', 'DisplayPreferences/' + ID, params()).then(function (r) {
+        var map = mapFrom(r && r.CustomPrefs);
+        delete map[KEYE];
+        loaded = true;
+        return call('POST', 'DisplayPreferences/' + ID, params(), { Id: ID, CustomPrefs: map });
+      });
+    }
+    function setOn(v) {
+      setOnLocal(v);
+      return call('GET', 'DisplayPreferences/' + ID, params()).then(function (r) {
+        var map = mapFrom(r && r.CustomPrefs);
+        map[KEYON] = v ? '1' : '0';
+        return call('POST', 'DisplayPreferences/' + ID, params(), { Id: ID, CustomPrefs: map });
+      }, function () { /* gilt zumindest auf diesem Geraet */ });
+    }
+    function two(n) { return n < 10 ? '0' + n : '' + n; }
+    function fmt(entries) {
+      return entries.map(function (x) {
+        var d = new Date(x[0]);
+        return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds()) + ' [' + x[1] + '] ' + x[2];
+      }).join('\n');
+    }
+    function start() {
+      if (typeof ML.dlogSink === 'function') ML.dlogSink(add);
+      window.addEventListener('pagehide', leave);
+      document.addEventListener('visibilitychange', function () { if (document.hidden) leave(); });
+      window.addEventListener('online', function () { if (pend.length) schedule(3000); });
+    }
+    start();
+    return { read: read, clear: clear, setOn: setOn, isOn: function () { return on; }, fmt: fmt, flush: flush, pending: function () { return pend.length; } };
+  })();
+
+  // Ansicht "Protokoll": Hinweis, Schalter, Zeilen, Kopieren, Loeschen und zwei Notausgaenge fuer einen haengenden Titel.
+  function openLog() {
+    var ui = makeSheet({ cls: 'ml-plog', title: t('logTitle') });
+    sheetTitle(ui, t('logTitle'));
+    ui.sheet.appendChild(el('div', 'ml-plog-intro', t('logIntro')));
+    var onBtn = btn('ml-pill', t(Plog.isOn() ? 'logOn' : 'logOff'));
+    var pre = el('pre', 'ml-plog-pre', t('logBusy'));
+    var note = el('div', 'ml-plog-note');
+    note.hidden = true;
+    var row1 = el('div', 'ml-plog-row'), row2 = el('div', 'ml-plog-row');
+    var again = btn('ml-pill', t('logRefresh')), copy = btn('ml-pill ml-primary', t('logCopy')), clr = btn('ml-pill', t('logClear'));
+    row1.appendChild(onBtn); row1.appendChild(again); row1.appendChild(copy); row1.appendChild(clr);
+    var reset = btn('ml-pill', t('logReset')), forget = btn('ml-pill', t('logForget'));
+    row2.appendChild(reset); row2.appendChild(forget);
+    ui.sheet.appendChild(row1); ui.sheet.appendChild(note); ui.sheet.appendChild(pre);
+    ui.sheet.appendChild(el('div', 'ml-plog-hint', t('logRecoverHint')));
+    ui.sheet.appendChild(row2);
+    var text = '';
+    function run() {
+      pre.textContent = t('logBusy');
+      Plog.read().then(function (r) {
+        text = Plog.fmt(r.entries);
+        pre.textContent = text || t('logEmpty');
+        note.textContent = t('logLoadFailed'); note.hidden = r.ok;
+        pre.scrollTop = pre.scrollHeight;
+      });
+    }
+    onBtn.addEventListener('click', function () { Plog.setOn(!Plog.isOn()); onBtn.textContent = t(Plog.isOn() ? 'logOn' : 'logOff'); });
+    again.addEventListener('click', function () { Plog.flush(); setTimeout(run, 300); });
+    copy.addEventListener('click', function () {
+      ML.copyPlain(text || pre.textContent).then(function () { toast(t('logCopied')); }, function () {
+        try { var rg = document.createRange(); rg.selectNodeContents(pre); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); } catch (e) { /* Auswahl ist nur eine Hilfe */ }
+      });
+    });
+    clr.addEventListener('click', function () { Plog.clear().then(function () { toast(t('logCleared')); run(); }, function () { toast(t('logResetFailed')); }); });
+    reset.addEventListener('click', function () {
+      ML.dlog('Wiedergabe zurücksetzen (von Hand)');
+      try { OFFPLAY.stop(); } catch (e) { /* nichts lokal */ }
+      withSession(function (s) { return sessionCall(s, 'Playing/Stop'); }).then(function () { toast(t('logResetDone')); Player.kick(); }, function () { toast(t('logResetFailed')); });
+    });
+    forget.addEventListener('click', function () {
+      ML.dlog('Weiter-hören-Stand gelöscht (von Hand)');
+      Resume.clear().then(function () { toast(t('logForgot')); Player.repaint(); }, function () { toast(t('logResetFailed')); });
+    });
+    run();
+    return ui;
+  }
   /* ---------- Offline-Speicher (IndexedDB im Browser des Geräts; gemeinsam für die Spotify-Ansicht und die Offline-App) ---------- */
   // Speichern: tracks (Metadaten), blobs (Audiodatei), covers (Bild), colls (Alben/Playlists/Mixe, die geladen wurden).
   // Ein Titel gehört zu null oder mehr Sammlungen (colls) und ist ggf. einzeln geladen (explicit). Er wird erst gelöscht,
@@ -2065,16 +2278,20 @@
 
   // Spielt die Titel ab dem Index start; sehr lange Listen werden ab start nachgeladen.
   // opts.positionTicks: Startposition im ersten Titel (Geraete-Wechsel).
+  var playGen = 0;   // zaehlt jeden Start; Wiederholungen aelterer Starts (z. B. Weiter hoeren) brechen ab, sobald ein neuer Start dazukommt
+  function playGeneration() { return playGen; }
   function playIds(ids, start, opts) {
     ids = (ids || []).filter(function (id) { return ID_RE.test(id); });
     opts = opts || {};
     if (!ids.length) return Promise.resolve();
     start = clamp(start || 0, 0, ids.length - 1);
+    var myGen = ++playGen;
+    ML.dlog('Abspielen: ' + ids.length + ' Titel ab Nr. ' + (start + 1) + ' (' + ids[start] + ')' + (opts.quiet ? ' [still]' : '') + (opts.positionTicks > 0 ? ' ab ' + Math.round(opts.positionTicks / 1e7) + ' s' : '') + (Net.offline() ? ' [offline]' : ''));
     // Ohne Verbindung spielen die geladenen Titel vom Gerät; mit Verbindung ersetzt die Serverwiedergabe die lokale.
     if (typeof OFFPLAY !== 'undefined') {
       if (Net.offline()) {
         var loc = OFFPLAY.offlineIds(ids, start);
-        if (!loc.ids.length) { toast(t('offNotAvail')); return Promise.resolve(false); }
+        if (!loc.ids.length) { ML.dlog('Offline: Titel nicht geladen'); toast(t('offNotAvail')); return Promise.resolve(false); }
         return OFFPLAY.startIds(loc.ids, loc.start, { name: opts.name || '', ctx: opts.ctx || '' }).then(function (ok) { clearPending(); return ok; });
       }
       OFFPLAY.stop();
@@ -2090,10 +2307,15 @@
       head = tail.slice(0, PLAY_CHUNK); startIndex = 0;
       rest = ML.chunk(tail.slice(PLAY_CHUNK), PLAY_CHUNK);
     }
-    return withSession(function (s) {
+    // Bis der neue Titel in der Sitzung steht, zeigt der Server noch den alten: das darf den gemerkten Stand nicht ueberschreiben.
+    try { Resume.expect(head[startIndex]); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ }
+    function playNow(s) {
       var first = { playCommand: 'PlayNow', itemIds: head.join(','), startIndex: startIndex };
       if (opts.positionTicks > 0) first.startPositionTicks = Math.round(opts.positionTicks);
-      return sessionCall(s, 'Playing', first).then(function () {
+      return sessionCall(s, 'Playing', first);
+    }
+    return withSession(function (s) {
+      return playNow(s).then(function () {
         if (!rest.length) return null;
         return waitForPlaying(head[startIndex], 16).then(function () {
           return rest.reduce(function (p, part) {
@@ -2106,11 +2328,23 @@
       if (!opts.quiet && !remoteNow() && Player.verifyStarted) {
         var firstId = head[startIndex];
         Player.verifyStarted(firstId, 10000).then(function (ok) {
-          if (!ok && !Net.offline()) { ML.dlog('Titel startet nicht: ' + firstId); toast(t('playNoStart')); }
+          if (ok) { ML.dlog('Titel läuft: ' + firstId); return null; }
+          if (Net.offline() || myGen !== playGen) return null;
+          // Der Web-Client hat den Befehl nicht ausgefuehrt (z. B. haengt noch der vorige, nicht abspielbare Titel): Sitzung stoppen, neu starten.
+          ML.dlog('Titel startet nicht: ' + firstId + ' - Sitzung wird gestoppt, zweiter Start');
+          return withSession(function (s) {
+            return sessionCall(s, 'Playing/Stop').then(null, function () { /* war schon still */ }).then(function () {
+              return new Promise(function (r) { setTimeout(r, 900); });
+            }).then(function () { if (myGen !== playGen) return null; return playNow(s); });
+          }).then(function () { return myGen === playGen ? Player.verifyStarted(firstId, 10000) : true; }, function () { return false; }).then(function (ok2) {
+            if (ok2) { ML.dlog('Titel läuft nach zweitem Start: ' + firstId); return; }
+            ML.dlog('Titel startet auch nach zweitem Start nicht: ' + firstId);
+            if (!Net.offline() && myGen === playGen) toast(t('playNoStart'));
+          });
         });
       }
       return true;
-    }, function (e) { ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
+    }, function (e) { try { Resume.expect(''); } catch (e2) { /* egal */ } ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
   }
   function remoteNow() { try { return !!(typeof Player !== 'undefined' && Player && Player.targetId && Player.targetId()); } catch (e) { return false; } }
 
@@ -4330,7 +4564,8 @@
         { icon: 'home', label: t('jellyfinHome'), run: function () { goJellyfin('#/home'); } },
         { hidden: !me.admin, icon: 'info', label: t('dashboardLbl'), run: function () { go('#/dashboard'); } },
         { icon: 'person', label: t('settingsLbl'), run: function () { go('#/mypreferencesmenu'); } },
-        { icon: 'info', label: ML.T('diagTitle'), run: function () { ML.showDiag(); } }
+        { icon: 'info', label: ML.T('diagTitle'), run: function () { ML.showDiag(); } },
+        { icon: 'info', label: t('logMenu'), run: openLog }
       ]);
     });
   }
@@ -6938,8 +7173,8 @@
      ein Tipp startet genau dort, wo man aufgehört hat - Playlist, Album, Mix, einzelner Titel oder Hörbuch. */
   (function () {
     var extra = {
-      de: { resumeFailed: 'Fortsetzen hat nicht geklappt. Tippe noch einmal auf Play.' },
-      en: { resumeFailed: 'Could not resume. Tap play to try again.' }
+      de: { resumeFailed: 'Fortsetzen hat nicht geklappt. Tippe noch einmal auf Play.', resumeSkipped: 'Dieser Titel lässt sich nicht abspielen. Weiter hören beginnt jetzt beim nächsten Titel.', resumeGone: 'Dieser Titel lässt sich nicht abspielen. Der gemerkte Stand wurde entfernt.' },
+      en: { resumeFailed: 'Could not resume. Tap play to try again.', resumeSkipped: 'This track cannot be played. Resume now starts at the next track.', resumeGone: 'This track cannot be played. The remembered position was removed.' }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
   })();
@@ -6947,11 +7182,12 @@
   var Resume = (function () {
     var KEY = 'resume', MAX_IDS = 600, SAVE_EVERY = 20000;
     var cur = null, loadP = null;
+    var expectId = '', expectUntil = 0;
     var lastSig = '', lastPaused = null, lastSaveAt = 0, lastSaved = '', want = null, timer = null, hooked = false;
 
     function valid(v) { return !!(v && typeof v === 'object' && typeof v.ids === 'string' && v.ids.length >= 32 && typeof v.i === 'number'); }
     function load(force) {
-      if (!loadP || force) loadP = Store.get(KEY, null, !!force).then(function (v) { cur = valid(v) ? v : null; return cur; }, function () { return cur; });
+      if (!loadP || force) loadP = Store.get(KEY, null, !!force).then(function (v) { cur = valid(v) ? v : null; ML.dlog('Weiter hoeren: Stand ' + (cur ? 'gelesen (Nr. ' + (cur.i + 1) + ', ' + String(cur.title || '').slice(0, 24) + ', Fehler ' + (cur.fails || 0) + ')' : 'leer')); return cur; }, function () { ML.dlog('Weiter hoeren: Stand nicht lesbar'); return cur; });
       return loadP;
     }
     function idList(v) { return String(v.ids || '').split(',').filter(function (x) { return ID_RE.test(x); }); }
@@ -6995,11 +7231,17 @@
     // (leicht verzögert), sonst höchstens alle 20 Sekunden.
     function note(s) {
       if (!s || !s.ids || !s.ids.length) return;
+      // Nach einem neuen Start zeigt die Sitzung kurz noch den vorigen Titel; dieser Zustand wird nicht gemerkt.
+      if (expectId) {
+        if (nid(s.ids[clamp(s.i, 0, s.ids.length - 1)]) === expectId) expectId = '';
+        else if (Date.now() < expectUntil) return;
+        else expectId = '';
+      }
       want = s;
       var sig = s.ids.length + '|' + s.ids[clamp(s.i, 0, s.ids.length - 1)] + '|' + s.ctx;
       var changed = sig !== lastSig || s.paused !== lastPaused;
       lastSig = sig; lastPaused = s.paused;
-      if (changed) { clearTimeout(timer); timer = setTimeout(function () { save(false); }, 1500); return; }
+      if (changed) { clearTimeout(timer); timer = setTimeout(function () { ML.dlog('Merken: Titel ' + s.ids[clamp(s.i, 0, s.ids.length - 1)] + ' (Nr. ' + (clamp(s.i, 0, s.ids.length - 1) + 1) + '/' + s.ids.length + ')' + (s.paused ? ' pausiert' : '')); save(false); }, 1500); return; }
       if (!s.paused && Date.now() - lastSaveAt >= SAVE_EVERY && !timer) timer = setTimeout(function () { save(false); }, 0);
     }
     // Beim Schließen der Seite: letzter Stand lokal und, wenn möglich, per sendBeacon zum Server
@@ -7017,6 +7259,9 @@
         if (document.hidden) { if (want) { flush(); save(true); } }
       });
     }
+    // Ein neuer Start laeuft: bis dieser Titel in der Sitzung steht, wird der Stand der Sitzung nicht gemerkt.
+    function starting() { return !running && !!expectId && Date.now() < expectUntil; }
+    function expect(id) { expectId = nid(id || ''); expectUntil = Date.now() + 15000; clearTimeout(timer); timer = null; }
     function clear() {
       want = null; cur = null; loadP = Promise.resolve(null); lastSaved = '';
       return Store.set(KEY, null);
@@ -7058,16 +7303,62 @@
       }).then(null, function () { /* Position ist nur eine Zugabe */ });
     }
     // Ein Versuch: Sitzung abwarten, Warteschlange starten, pruefen, dass der Titel wirklich laeuft. Bis zu drei Versuche.
-    function attempt(v, q, pos, n) {
-      return readySession(n === 0 ? 8 : 4).then(function () {
-        return playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '', quiet: true });
+    // Startet der Benutzer waehrenddessen etwas anderes (playGen zaehlt jeden Start), bricht Weiter hoeren ab und mischt sich nicht mehr ein.
+    // Ab dem zweiten Versuch wird die Sitzung vorher gestoppt: ein haengender Titel im Web-Client blockiert sonst jeden weiteren Befehl.
+    function attempt(v, q, pos, n, ctl) {
+      function gone() { return playGeneration() !== ctl.gen; }
+      var first = n > 0 ? withSession(function (s) { return sessionCall(s, 'Playing/Stop'); }).then(function () { return wait(900); }, function () { /* kein Stopp noetig */ }) : Promise.resolve();
+      return first.then(function () { return readySession(n === 0 ? 8 : 4); }).then(function () {
+        if (gone()) return 'cancelled';
+        ML.dlog('Fortsetzen: Versuch ' + (n + 1) + ' (' + q.ids[q.i] + ' ab ' + Math.round(pos) + ' s)');
+        var pr = playIds(q.ids, q.i, { positionTicks: pos * 1e7, ctx: v.ctx || '', name: v.name || '', quiet: true });
+        ctl.gen = playGeneration();
+        return pr;
       }).then(function (ok) {
-        if (ok === false) return false;
+        if (ok === 'cancelled') return 'cancelled';
+        if (ok === false) return 'cmdfail';   // der Befehl kam nicht an (Netz, Sitzung): liegt nicht am Titel
         return waitForPlaying(q.ids[q.i], 10);
       }).then(function (playing) {
+        if (playing === 'cancelled' || playing === 'cmdfail') return playing;
         if (playing) return fixPosition(pos).then(function () { return true; });
-        if (n >= 2) return false;
-        return wait(1200).then(function () { return attempt(v, q, pos, n + 1); });
+        if (n >= 2) return 'noplay';   // Befehl kam an, der Titel laeuft aber nicht
+        if (gone()) return 'cancelled';
+        return wait(1200).then(function () { return gone() ? 'cancelled' : attempt(v, q, pos, n + 1, ctl); });
+      });
+    }
+    // Schlaegt Weiter hoeren zweimal hintereinander fuer denselben Titel fehl, wird er uebersprungen (sonst bleibt der Stand an einem
+    // nicht abspielbaren Titel haengen und die Leiste bietet ihn immer wieder an).
+    function failed(v) {
+      var base = cur && cur.ids === v.ids && cur.i === v.i ? cur : v;
+      var n = (base.fails || 0) + 1;
+      var rec = {}; Object.keys(base).forEach(function (k) { rec[k] = base[k]; });
+      if (n < 2) {
+        rec.fails = n; rec.ts = Date.now();
+        cur = rec; loadP = Promise.resolve(rec);
+        ML.dlog('Fortsetzen fehlgeschlagen (1. Mal fuer diesen Titel)');
+        Store.set(KEY, rec).then(null, function () { /* naechstes Mal */ });
+        toast(t('resumeFailed'));
+        return Promise.resolve();
+      }
+      var list = idList(rec), nextAt = rec.i + 1;
+      if (nextAt >= list.length) {
+        ML.dlog('Fortsetzen fehlgeschlagen (2. Mal), kein weiterer Titel: Stand entfernt');
+        toast(t('resumeGone'));
+        return clear();
+      }
+      return call('GET', 'Items', { Ids: list[nextAt], UserId: uid(), Fields: '' }).then(function (r) {
+        var it = r && r.Items && r.Items[0];
+        if (!it) throw new Error('weg');
+        rec.i = nextAt; rec.pos = 0; rec.dur = 0; rec.fails = 0; rec.ts = Date.now();
+        rec.title = it.Name || ''; rec.artist = (it.Artists && it.Artists[0]) || it.AlbumArtist || ''; rec.album = it.Album || ''; rec.cid = nid(it.AlbumId || it.Id);
+        cur = rec; loadP = Promise.resolve(rec); lastSaved = JSON.stringify(rec);
+        ML.dlog('Fortsetzen fehlgeschlagen (2. Mal): Titel uebersprungen, weiter mit ' + list[nextAt]);
+        toast(t('resumeSkipped'));
+        return Store.set(KEY, rec).then(null, function () { lastSaved = ''; });
+      }, function () {
+        ML.dlog('Fortsetzen fehlgeschlagen (2. Mal), naechster Titel nicht lesbar: Stand entfernt');
+        toast(t('resumeGone'));
+        return clear();
       });
     }
     var running = null;
@@ -7077,11 +7368,17 @@
       if (!ids.length) return Promise.resolve(false);
       var pos = v.pos || 0;
       if (v.dur && pos > v.dur - 5) pos = 0;   // am Ende des Titels beginnt er wieder von vorn
-      running = fullQueue(v, ids).then(function (q) { return attempt(v, q, pos, 0); }).then(null, function () { return false; }).then(function (ok) {
-        running = null; setBusy(false);
-        if (!ok) toast(t('resumeFailed'));
+      var ctl = { gen: playGeneration() };
+      ML.dlog('Fortsetzen: Start (' + ids.length + ' Titel, Nr. ' + (clamp(v.i, 0, ids.length - 1) + 1) + ', ' + String(v.title || '').slice(0, 30) + ')');
+      running = fullQueue(v, ids).then(function (q) { return attempt(v, q, pos, 0, ctl); }).then(null, function (e) { ML.dlog('Fortsetzen: Fehler ' + (e && (e.message || e.status))); return false; }).then(function (ok) {
+        running = null; expectId = ''; setBusy(false);
+        if (ok === 'cancelled') { ML.dlog('Fortsetzen abgebrochen: es wurde etwas anderes gestartet'); repaint(); return false; }
+        if (ok === true) { ML.dlog('Fortsetzen: Titel laeuft'); if (cur && cur.fails) { cur.fails = 0; } repaint(); return true; }
+        var done;
+        if (ok === 'noplay' && !Net.offline()) done = failed(v);
+        else { ML.dlog('Fortsetzen fehlgeschlagen (' + (ok === 'cmdfail' ? 'Befehl kam nicht an' : 'Fehler oder offline') + ')'); toast(t('resumeFailed')); done = Promise.resolve(); }
         repaint();
-        return ok;
+        return Promise.resolve(done).then(function () { repaint(); return false; });
       });
       setBusy(true);   // erst jetzt gilt "laeuft": der Player zeigt den Ladekreis
       return running;
@@ -7117,7 +7414,7 @@
       if (!document.hidden && started && !running && Date.now() - lastRefresh > 15000) refresh();
     });
     window.addEventListener('online', function () { if (started && !running) refresh(); });
-    return { load: load, refresh: refresh, note: note, flush: flush, save: save, init: init, play: play, clear: clear, ghost: ghost, busy: function () { return !!running; }, get: function () { return cur; }, hook: hook };
+    return { starting: starting, expect: expect, load: load, refresh: refresh, note: note, flush: flush, save: save, init: init, play: play, clear: clear, ghost: ghost, busy: function () { return !!running; }, get: function () { return cur; }, hook: hook };
   })();
   /* ---------- Version 2.0: Intelligente Playlists, Genres, Statistik, ähnliche Künstler, Einschlaf-Timer ----------
      Alles läuft im Browser über Jellyfins offizielle Schnittstellen (Items, Genres, Artists/{id}/Similar); die Regeln der intelligenten
@@ -8656,7 +8953,8 @@
         var byId = {}; all.forEach(function (x) { byId[x.id] = x; });
         var list = [], seen = {}, startId = start >= 0 && ids[start] ? nid(ids[start]) : '';
         ids.forEach(function (id) { var k = nid(id), m = byId[k]; if (m && !seen[k]) { seen[k] = 1; list.push(m); } });
-        if (!list.length) { toast(t('offNotAvail')); return false; }
+        if (!list.length) { ML.dlog('Lokal: kein Titel auf dem Geraet'); toast(t('offNotAvail')); return false; }
+        ML.dlog('Lokal: Start mit ' + list.length + ' Titeln');
         var first = 0;
         if (start < 0) first = Math.floor(Math.random() * list.length);
         else if (startId) { for (var i = 0; i < list.length; i++) if (list[i].id === startId) { first = i; break; } }
@@ -8716,6 +9014,7 @@
     function jump(i) { if (!active || i < 0 || i >= P.order.length) return; P.idx = i; playCurrent(); }
     function stop() {
       if (!active) return;
+      ML.dlog('Lokal: Wiedergabe beendet');
       active = false; tok++;
       if (aud) { aud.pause(); aud.removeAttribute('src'); try { aud.load(); } catch (e) { /* egal */ } }
       if (P.url) { URL.revokeObjectURL(P.url); P.url = ''; }
@@ -10328,7 +10627,7 @@
     var ghostFor = '', ghostBarFor = '';
     function ghostRec() {
       if (P.item || P.targetId || !running || !P.polled || OFFPLAY.active() || Net.offline()) return null;
-      try { return Resume.ghost(); } catch (e) { return null; }
+      try { if (Resume.starting()) return null; return Resume.ghost(); } catch (e) { return null; }
     }
     function ghostOn() { return !!(mini && mini.classList.contains('ml-last')); }
     function resumeGhost() { var g = ghostRec(); if (g && !Resume.busy()) Resume.play(g); }
@@ -10581,7 +10880,7 @@
       if (!np) {
         gapSince = 0;
         ctxSig = ''; setCtx('');
-        if (P.item) { P.item = null; P.full = null; P.lyrics = undefined; lastItemId = ''; heroCoverId = ''; extrasFor = ''; markPlaying(); }
+        if (P.item) { ML.dlog('Titel: Sitzung meldet nichts mehr (vorher ' + nid(P.item.Id) + ')'); P.item = null; P.full = null; P.lyrics = undefined; lastItemId = ''; heroCoverId = ''; extrasFor = ''; markPlaying(); }
         P.queue = [];
         paint();
         return;
@@ -10590,6 +10889,7 @@
       var isLocal = s.Id === 'local';
       if (!changed && P.item && P.item.__local !== np.__local) changed = true;
       var ps = s.PlayState || {};
+      if (changed) ML.dlog('Titel: ' + nid(np.Id) + ' ' + String(np.Name || '').slice(0, 30) + ' | ' + (isLocal ? 'lokal' : 'Sitzung ' + String(s.Id || '').slice(0, 6) + (s.DeviceId && s.DeviceId === thisDeviceId() ? ' (dieses Geraet)' : ' (' + String(s.DeviceName || '?').slice(0, 14) + ')')) + (ps && ps.IsPaused ? ' | pausiert' : ''));
       P.session = s; P.item = np;
       if (pendingPause && Date.now() < pendingPause.until) {
         if (!!ps.IsPaused === pendingPause.want) pendingPause = null; else ps = Object.assign({}, ps, { IsPaused: pendingPause.want });
@@ -10702,6 +11002,7 @@
       var name = '';
       try { var d = ctxDisplay(P.full || P.item); name = d && d.name ? d.name : ''; } catch (e) { name = ''; }
       handingOver = true;
+      ML.dlog('Uebergabe an lokale Wiedergabe: ' + curId + ' ab ' + Math.round(pos) + ' s');
       OFFPLAY.startIds(ids, ids.indexOf(curId), { name: name, ctx: P.ctxId || '', positionSec: pos, paused: paused, repeat: P.repeat }).then(function (ok) {
         handingOver = false;
         if (ok) toast(t('offHandover'));
@@ -11264,11 +11565,11 @@
 
   ML.app = {
     route: onRoute,
-    diagExtra: function () { try { return Player.diag(); } catch (e) { return ['Player: Fehler ' + e]; } },
+    diagExtra: function () { var L = []; try { L = Player.diag(); } catch (e) { L = ['Player: Fehler ' + e]; } try { var g = Resume.get(); L.push('Protokoll: Aufzeichnen=' + Plog.isOn() + ' ausstehend=' + Plog.pending() + ' | Weiter hoeren: ' + (g ? 'Nr. ' + (g.i + 1) + ' Fehler ' + (g.fails || 0) : 'leer')); } catch (e2) { /* Zugabe */ } return L; },
     ensure: ensureHealthy,
     layout: layout,
     forceLeave: forceLeave,
-    store: Store, resume: Resume, sleep: Sleep, smart: Smart, genres: Genres, stats: Stats, resumeSave: function () { try { Resume.flush(); } catch (e) { /* ignorieren */ } }, eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
+    store: Store, resume: Resume, plog: Plog, openLog: openLog, sleep: Sleep, smart: Smart, genres: Genres, stats: Stats, resumeSave: function () { try { Resume.flush(); } catch (e) { /* ignorieren */ } }, eq: EQ, off: OFF, offdb: MLOff, offplay: OFFPLAY, net: Net, taste: Taste,
     addToPlaylist: function (ids) { addToPlaylist(ids); },
     cats: { itemCat: function (id) { return itemCat(id); }, onlyMusic: function (items) { return onlyMusic(items); }, loadSongMix: function (id, n) { return loadSongMix(id, n); }, songRadio: function (tr) { return songRadio(tr); } },
     spAuto: function () { spAutoStarted = false; spAutoRun(); }
