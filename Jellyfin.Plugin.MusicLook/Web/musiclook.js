@@ -759,11 +759,39 @@
     });
   }
 
+  function idTag(id) { id = String(id || ''); return id ? id.slice(0, 4) + '..' + id.length + '..' + id.slice(-3) : '-'; }
+  // Nach einem Konto-Wechsel meldet die Android-App den Steuerkanal (WebSocket) manchmal unter einer anderen Geraete-Kennung als die Anfragen des
+  // Web-Clients (Server: Kennung aus dem Geraete-Eintrag, kein Header am Socket). Die Schwester-Sitzung (gleiche App, gleiches Geraet, Kennung beginnt
+  // gleich) hat dann den Kanal: Befehle gehen dorthin (Id), der Zustand (Titel, Position) bleibt der der eigenen Sitzung. Rueckfall: Notweg.
+  var sib = { own: '', id: '', at: 0 };
+  function withSibling(s, me) {
+    function merged(id) { var m = {}; for (var k in s) m[k] = s[k]; m.Id = id; m.OwnId = s.Id; m.SupportsRemoteControl = true; m.SupportsMediaControl = true; return m; }
+    if (sib.own === s.Id && Date.now() - sib.at < 60000) return Promise.resolve(sib.id ? merged(sib.id) : s);
+    function done(id) { sib = { own: s.Id, id: id, at: Date.now() }; if (id) dlog('Fernsteuerung ueber Schwester-Sitzung ' + id.slice(0, 6) + ' (eigene ' + String(s.Id).slice(0, 6) + ', Kennung ' + idTag(s.DeviceId) + ')'); return id ? merged(id) : s; }
+    function pick(all) {
+      return (all || []).filter(function (x) {
+        return x.Id !== s.Id && nid(x.UserId) === me && x.Client === s.Client && x.DeviceName === s.DeviceName && x.DeviceId && s.DeviceId &&
+          (x.DeviceId.indexOf(s.DeviceId) === 0 || s.DeviceId.indexOf(x.DeviceId) === 0);
+      }).sort(function (a, b) { return String(b.LastActivityDate || '') < String(a.LastActivityDate || '') ? -1 : 1; }).slice(0, 3);
+    }
+    return call('GET', 'Sessions').then(function (all) {
+      var cand = pick(all), ready = cand.filter(function (x) { return x.SupportsRemoteControl !== false; })[0];
+      if (ready) return done(ready.Id);
+      var cp = s.Capabilities || {}, body = { PlayableMediaTypes: cp.PlayableMediaTypes || ['Audio', 'Video'], SupportedCommands: cp.SupportedCommands || [], SupportsMediaControl: true, SupportsPersistentIdentifier: false };
+      return Promise.all(cand.map(function (x) { return call('POST', 'Sessions/Capabilities/Full', { id: x.Id }, body).catch(function () { /* naechste */ }); })).then(function () {
+        return call('GET', 'Sessions');
+      }).then(function (again) {
+        var ok = pick(again).filter(function (x) { return x.SupportsRemoteControl !== false; })[0];
+        return done(ok ? ok.Id : '');
+      });
+    }).catch(function () { return s; });
+  }
   function mySession() {
     var c = client(), me = nid(uid());
     return call('GET', 'Sessions', { deviceId: c.deviceId() }).then(function (r) {
       var list = (r || []).filter(function (s) { return nid(s.UserId) === me; });
-      return list.filter(function (s) { return s.SupportsRemoteControl !== false; })[0] || list[0] || null;
+      var s = list.filter(function (x) { return x.SupportsRemoteControl !== false; })[0] || list[0] || null;
+      return s && s.SupportsRemoteControl === false ? withSibling(s, me) : s;
     });
   }
 
@@ -1008,7 +1036,7 @@
     if (!c) { add('ApiClient: FEHLT'); return Promise.resolve(L.concat(['', 'Protokoll:'], dlogBuf).join('\n')); }
     var here = '';
     try { here = c.deviceId(); } catch (e) { here = ''; }
-    add('Client: ' + (c.appName ? c.appName() : '?') + ' ' + (c.appVersion ? c.appVersion() : '?') + ' | Geraet "' + (c.deviceName ? c.deviceName() : '?') + '" Kennung ' + String(here).slice(0, 8) + '… | WebSocket ' + (typeof c.isWebSocketOpen === 'function' ? (c.isWebSocketOpen() ? 'offen' : 'ZU') : '?') + ' | angemeldet ' + (uid() ? 'ja' : 'NEIN'));
+    add('Client: ' + (c.appName ? c.appName() : '?') + ' ' + (c.appVersion ? c.appVersion() : '?') + ' | Geraet "' + (c.deviceName ? c.deviceName() : '?') + '" Kennung ' + String(here).slice(0, 8) + '… | Kennung-Laenge ' + String(here).length + ' | angemeldet ' + (uid() ? 'ja' : 'NEIN'));
     return Promise.all([
       ping(c.getUrl('System/Info/Public')), ping(c.getUrl('System/Info/Public')), ping(c.getUrl('System/Info/Public')),
       call('GET', 'Sessions', { ControllableByUserId: uid() }).then(function (r) { return r || []; }, function (e) { return 'Fehler ' + (e && e.status); }),
@@ -1033,46 +1061,6 @@
       return L.join('\n');
     });
   }
-  // Die Fernsteuerung (Abspielbefehle von diesem Plugin, Jellyfin-Oberflaeche, anderen Geraeten) laeuft ueber den WebSocket des Web-Clients.
-  // In der Android-App wird er beim Wechsel in den Hintergrund oft stillgelegt; der Server meldet dann "SupportsRemoteControl: false", und
-  // Abspielbefehle werden angenommen, aber nie ausgefuehrt. Hier wird er geprueft und bei Bedarf neu aufgebaut (nur oeffentliche Methoden des ApiClient).
-  var lastHeal = 0;
-  function socketState() {
-    try { var c = client(); return c && typeof c.isWebSocketOpen === 'function' ? (c.isWebSocketOpen() ? 'offen' : 'zu') : '?'; } catch (e) { return '?'; }
-  }
-  function healSocket(why, force) {
-    var c = client();
-    if (!c || typeof c.ensureWebSocket !== 'function') return false;
-    var now = Date.now();
-    if (now - lastHeal < 8000) return false;
-    var st = socketState();
-    if (st === 'offen' && !force) return false;
-    lastHeal = now;
-    dlog('WebSocket (' + why + '): ' + st + ' -> neu verbinden');
-    try {
-      if (st === 'offen' && typeof c.closeWebSocket === 'function') {
-        c.closeWebSocket();
-        setTimeout(function () { try { c.ensureWebSocket(); } catch (e) { dlog('WebSocket Fehler: ' + e); } }, 600);
-      } else c.ensureWebSocket();
-    } catch (e) { dlog('WebSocket Fehler: ' + e); }
-    return true;
-  }
-  var lastRemoteCheck = 0;
-  function checkRemote(why) {
-    var now = Date.now();
-    if (now - lastRemoteCheck < 10000 || !client() || !uid()) return;
-    lastRemoteCheck = now;
-    setTimeout(function () {
-      if (socketState() === 'zu') healSocket(why, false);
-      mySession().then(function (s) {
-        if (s && s.SupportsRemoteControl === false) healSocket(why + ', Server meldet keine Fernsteuerung', true);
-      }, function () { /* offline: spaeter */ });
-    }, 1500);
-  }
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkRemote('Seite sichtbar'); });
-  window.addEventListener('pageshow', function () { checkRemote('pageshow'); });
-  window.addEventListener('online', function () { checkRemote('online'); });
-
   function copyPlain(text) {
     if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) return navigator.clipboard.writeText(text);
     return new Promise(function (resolve, reject) {
@@ -1155,7 +1143,7 @@
     refresh: function () { updateContext(); },
     forceMusic: function (on) { musicOn = null; setMusic(!!on); },
     uncloak: uncloak,
-    dlog: dlog, dlogSink: dlogSink, dlogClean: dlogClean, copyPlain: copyPlain, healSocket: healSocket, socketState: socketState, checkRemote: checkRemote, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
+    dlog: dlog, dlogSink: dlogSink, dlogClean: dlogClean, copyPlain: copyPlain, idTag: idTag, showDiag: showDiag, diagReport: diagReport, scriptVersion: scriptVersion
   };
   window.MusicLook = api;
   loadKnownMusic();

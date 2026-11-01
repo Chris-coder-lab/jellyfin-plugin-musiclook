@@ -159,7 +159,7 @@
       addSongsTitle: 'Titel hinzufügen', searchSongsPh: 'Titel, Alben oder Künstler suchen', added: 'Hinzugefügt', addFailed: 'Hinzufügen fehlgeschlagen',
       addToTitle: 'Zu Playlist hinzufügen', addedTo: 'Zu „{0}“ hinzugefügt', playlistCreated: 'Playlist „{0}“ erstellt', createFailed: 'Erstellen fehlgeschlagen',
       newPlaylistPh: 'Name der neuen Playlist', createPlaylist: 'Erstellen', toJam: 'Zur Jam-Warteschlange', jamAdded: 'Zur Jam hinzugefügt', jamFailed: 'Jam: Aktion fehlgeschlagen',
-      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoSocket: 'Dieses Gerät ist gerade nicht mit dem Server verbunden (keine Fernsteuerung). Die Verbindung wird neu aufgebaut – bitte gleich noch einmal tippen oder die App kurz neu öffnen.', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
+      queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
       searchPh: 'Was möchtest du hören?', searchHint: 'Suche nach Titeln, Alben, Künstlern und Playlists.', noResults: 'Keine Treffer für „{0}“.',
       loadMore: 'Mehr laden', libSortRecent: 'Zuletzt', libSortAlpha: 'A–Z', libSortHint: 'Sortierung und Ansicht', libPlaylists: 'Playlists', libAlbums: 'Alben', libArtists: 'Künstler', yourLibrary: 'Deine Bibliothek',
@@ -203,7 +203,7 @@
       addSongsTitle: 'Add tracks', searchSongsPh: 'Search tracks, albums or artists', added: 'Added', addFailed: 'Could not add',
       addToTitle: 'Add to playlist', addedTo: 'Added to "{0}"', playlistCreated: 'Playlist "{0}" created', createFailed: 'Could not create',
       newPlaylistPh: 'Name of the new playlist', createPlaylist: 'Create', toJam: 'Add to Jam queue', jamAdded: 'Added to the Jam', jamFailed: 'Jam: action failed',
-      queued: 'Added to queue', playFailed: 'Playback could not be started', playNoSocket: 'This device is not connected to the server right now (no remote control). The connection is being re-established – tap again in a moment or reopen the app.', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
+      queued: 'Added to queue', playFailed: 'Playback could not be started', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
       searchPh: 'What do you want to listen to?', searchHint: 'Search for tracks, albums, artists and playlists.', noResults: 'No results for "{0}".',
       loadMore: 'Load more', libSortRecent: 'Recents', libSortAlpha: 'A–Z', libSortHint: 'Sort order and view', libPlaylists: 'Playlists', libAlbums: 'Albums', libArtists: 'Artists', yourLibrary: 'Your library',
@@ -2241,10 +2241,9 @@
       // Direkt nach dem Oeffnen der App (oder bei kurz gestoerter Verbindung) meldet die Sitzung noch keine Fernsteuerung: dann wartet der Befehl
       // bis zu 6 Sekunden, statt ins Leere zu gehen (der Server nimmt ihn an, das Geraet fuehrt ihn aber nicht aus).
       if (!s || s.SupportsRemoteControl !== false) return s;
-      if (Date.now() - noRemoteAt < 45000) { ML.healSocket('Sitzung ohne Fernsteuerung', true); return s; }   // eben erst festgestellt: nicht noch einmal warten
+      if (Date.now() - noRemoteAt < 45000) return s;   // eben erst festgestellt: nicht noch einmal warten
       var tries = 4;
-      ML.dlog('Sitzung ' + String(s.Id || '').slice(0, 6) + ' meldet keine Fernsteuerung, WebSocket ' + ML.socketState());
-      ML.healSocket('Sitzung ohne Fernsteuerung', true);
+      ML.dlog('Sitzung ' + String(s.Id || '').slice(0, 6) + ' meldet keine Fernsteuerung');
       return (function again() {
         return new Promise(function (r) { setTimeout(r, 750); }).then(mySession).then(function (n) {
           if (n && n.SupportsRemoteControl !== false) return n;
@@ -2316,7 +2315,7 @@
     // Bis der neue Titel in der Sitzung steht, zeigt der Server noch den alten: das darf den gemerkten Stand nicht ueberschreiben.
     try { Resume.expect(head[startIndex]); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ }
     function playNow(s) {
-      ML.dlog('Sitzung: ' + String(s.Id || '').slice(0, 6) + (s.remote ? ' (anderes Geraet)' : '') + ' Fernsteuerung=' + s.SupportsRemoteControl + ' WebSocket=' + ML.socketState());
+      ML.dlog('Sitzung: ' + String(s.Id || '').slice(0, 6) + (s.remote ? ' (anderes Geraet)' : '') + ' Fernsteuerung=' + s.SupportsRemoteControl + (s.OwnId ? ' (eigene ' + String(s.OwnId).slice(0, 6) + ')' : '') + ' Kennung ' + ML.idTag(ML.client().deviceId()) + ' / ' + ML.idTag(s.DeviceId));
       var first = { playCommand: 'PlayNow', itemIds: head.join(','), startIndex: startIndex };
       if (opts.positionTicks > 0) first.startPositionTicks = Math.round(opts.positionTicks);
       return sessionCall(s, 'Playing', first);
@@ -2335,7 +2334,7 @@
     }
     return withSession(function (s) {
       // Ohne Fernsteuerung kommt der Befehl nie an: dann spielt das Plugin den Titel selbst (direkt vom Server, auf diesem Geraet).
-      if (!s.remote && s.SupportsRemoteControl === false && canStream()) return streamIt('Sitzung ' + String(s.Id || '').slice(0, 6) + ' ohne Fernsteuerung, WebSocket ' + ML.socketState());
+      if (!s.remote && s.SupportsRemoteControl === false && canStream()) return streamIt('Sitzung ' + String(s.Id || '').slice(0, 6) + ' ohne Fernsteuerung');
       return playNow(s).then(function () {
         if (!rest.length) return null;
         return waitForPlaying(head[startIndex], 16).then(function () {
@@ -2367,14 +2366,13 @@
             try { Player.finishRelease(false); } catch (e0) { /* nichts freizugeben */ }
             if (!Net.offline() && myGen === playGen) {
               var ja = document.querySelector('audio.mediaPlayerAudio');
-              ML.dlog('Audio-Element: ' + (ja ? (ja.paused ? 'pausiert' : 'spielt') + ', Fehler ' + (ja.error ? ja.error.code : '-') + ', Quelle ' + (ja.currentSrc ? 'ja' : 'leer') : 'fehlt') + ' | WebSocket ' + ML.socketState());
+              ML.dlog('Audio-Element: ' + (ja ? (ja.paused ? 'pausiert' : 'spielt') + ', Fehler ' + (ja.error ? ja.error.code : '-') + ', Quelle ' + (ja.currentSrc ? 'ja' : 'leer') : 'fehlt'));
               mySession().then(function (ms) {
                 if (!ms) { ML.dlog('Sitzung dieses Geraets: nicht gefunden'); return; }
                 var age = ms.LastActivityDate ? Math.round((Date.now() - Date.parse(ms.LastActivityDate)) / 1000) : '?';
                 ML.dlog('Sitzung dieses Geraets: Fernsteuerung=' + ms.SupportsRemoteControl + ' | spielt=' + (ms.NowPlayingItem ? nid(ms.NowPlayingItem.Id) : '-') + ' | letzte Aktivitaet vor ' + age + ' s | ' + String(ms.Client || '?').slice(0, 20) + ' ' + String(ms.ApplicationVersion || '').slice(0, 10));
               }, function () { /* nur Protokoll */ });
-              ML.healSocket('Titel startet nicht', true);
-              toast(t(ML.socketState() === 'offen' ? 'playNoStart' : 'playNoSocket'));
+              toast(t('playNoStart'));
             }
           });
         });
@@ -7331,8 +7329,8 @@
       if (remote) return Promise.resolve({ Id: remote, remote: true });
       return mySession().then(function (s) { return s; }, function () { return null; }).then(function (s) {
         if (s && s.SupportsRemoteControl !== false) { sessCache = { at: Date.now(), s: s }; return s; }
-        if (tries <= 0) { noRemoteAt = Date.now(); ML.dlog('Fortsetzen: Sitzung bleibt ohne Fernsteuerung (WebSocket ' + ML.socketState() + ')'); return s; }
-        if (tries === 5 || tries === 3) { ML.dlog('Fortsetzen: warte auf Fernsteuerung (WebSocket ' + ML.socketState() + ')'); ML.healSocket('Weiter hoeren', true); }
+        if (tries <= 0) { noRemoteAt = Date.now(); ML.dlog('Fortsetzen: Sitzung bleibt ohne Fernsteuerung'); return s; }
+        if (tries === 5 || tries === 3) ML.dlog('Fortsetzen: warte auf Fernsteuerung');
         return wait(800).then(function () { return readySession(tries - 1); });
       });
     }
@@ -9149,8 +9147,8 @@
        damit Wiedergabezaehler, "zuletzt gehoert" und Weiter hoeren stimmen. */
     function streamUrl(tr, transcode) {
       var c = ML.client(), id = tr.id;
-      if (!transcode) return c.getUrl('Audio/' + id + '/stream', { static: true, UserId: uid(), DeviceId: c.deviceId(), MediaSourceId: id, api_key: c.accessToken() });
-      return c.getUrl('Audio/' + id + '/universal', { UserId: uid(), DeviceId: c.deviceId(), MaxStreamingBitrate: 320000, Container: 'mp3', TranscodingContainer: 'mp3', TranscodingProtocol: 'http', AudioCodec: 'mp3', api_key: c.accessToken() });
+      if (!transcode) return c.getUrl('Audio/' + id + '/stream', { static: true, UserId: uid(), DeviceId: c.deviceId(), MediaSourceId: id, ApiKey: c.accessToken() });
+      return c.getUrl('Audio/' + id + '/universal', { UserId: uid(), DeviceId: c.deviceId(), MaxStreamingBitrate: 320000, Container: 'mp3', TranscodingContainer: 'mp3', TranscodingProtocol: 'http', AudioCodec: 'mp3', ApiKey: c.accessToken() });
     }
     function trackOfServerItem(it) {
       var id = nid(it.Id);
@@ -9376,7 +9374,7 @@
           }).sort(function (a, b) { return String(b.LastActivityDate || '') < String(a.LastActivityDate || '') ? -1 : 1; })[0];
           if (other) { setTarget(other.Id, deviceLabel(other), true); return other; }
         }
-        return mine;
+        return mine || mySession().then(function (m) { return m && m.OwnId ? m : null; }, function () { return null; });   // Schwester-Sitzung: Server blendet die eigene Sitzung aus
       });
     }
 
