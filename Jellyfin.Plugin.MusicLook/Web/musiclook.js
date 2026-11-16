@@ -786,11 +786,20 @@
       });
     }).catch(function () { return s; });
   }
+  // Fuehrt der Server mehrere Sitzungen mit der Kennung dieses Geraets, muessen Befehle und Anzeige dieselbe nehmen: zuerst fernsteuerbar,
+  // dann der Client-Name dieser Seite, dann die zuletzt aktive.
+  function pickSession(list) {
+    var c = client(), app = c && c.appName ? c.appName() : '';
+    function rank(s) { return (s.SupportsRemoteControl !== false ? 2 : 0) + (app && s.Client === app ? 1 : 0); }
+    return list.slice().sort(function (a, b) {
+      return rank(b) - rank(a) || (String(b.LastActivityDate || '') < String(a.LastActivityDate || '') ? -1 : 1);
+    })[0] || null;
+  }
   function mySession() {
     var c = client(), me = nid(uid());
     return call('GET', 'Sessions', { deviceId: c.deviceId() }).then(function (r) {
       var list = (r || []).filter(function (s) { return nid(s.UserId) === me; });
-      var s = list.filter(function (x) { return x.SupportsRemoteControl !== false; })[0] || list[0] || null;
+      var s = pickSession(list);
       return s && s.SupportsRemoteControl === false ? withSibling(s, me) : s;
     });
   }
@@ -1138,7 +1147,7 @@
     config: function () { return config; }, whenConfig: whenConfig,
     route: function () { return routeInfo; },
     isMusic: function () { return musicOn; },
-    jamAddIds: jamAddIds, mySession: mySession,
+    jamAddIds: jamAddIds, mySession: mySession, pickSession: pickSession,
     jamState: function () { return { code: jam.code, state: jam.state }; },
     refresh: function () { updateContext(); },
     forceMusic: function (on) { musicOn = null; setMusic(!!on); },

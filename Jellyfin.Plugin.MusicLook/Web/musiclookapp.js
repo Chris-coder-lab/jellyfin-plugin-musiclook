@@ -143,7 +143,7 @@
       mShare: 'Teilen', mAddHere: 'Zu dieser Playlist hinzufügen', mEdit: 'Playlist bearbeiten', mDetails: 'Name und Details', mCover: 'Cover ändern',
       mDelete: 'Playlist löschen', mDownload: 'Herunterladen', mQueue: 'Zur Warteschlange hinzufügen', mAddOther: 'Zu einer anderen Playlist hinzufügen',
       mInvite: 'Mitwirkende einladen', mJam: 'Jam starten', mLeave: 'Aus meiner Bibliothek entfernen', mPrivate: 'Auf privat umstellen', mPublic: 'Öffentlich machen',
-      mAddToPlaylist: 'Zu Playlist hinzufügen', mRemoveFromPlaylist: 'Aus dieser Playlist entfernen', mAlbum: 'Album anzeigen', mArtist: 'Künstler*in aufrufen',
+      mAddToPlaylist: 'Zu Playlist hinzufügen', mEditMeta: 'Metadaten bearbeiten', mDeleteFile: 'Datei löschen', delFileTitle: 'Datei löschen?', delFileText: '„{0}“ wird vom Server gelöscht, auch die Datei auf der Festplatte. Das lässt sich nicht rückgängig machen.', delAlbumText: 'Das Album „{0}“ wird mit allen Titeln vom Server gelöscht, auch die Dateien auf der Festplatte. Das lässt sich nicht rückgängig machen.', delFileDone: 'Gelöscht', delNoRight: 'Keine Berechtigung, diesen Eintrag zu löschen', editSaved: 'Gespeichert', editNoImg: 'Bild entfernen', fArtists: 'Künstler (mehrere mit ; trennen)', fAlbum: 'Album', fAlbumArtists: 'Album-Künstler (mehrere mit ; trennen)', fIndex: 'Titelnummer', fDisc: 'CD-Nummer', fYear: 'Jahr', fGenres: 'Genres (mehrere mit ; trennen)', mRemoveFromPlaylist: 'Aus dieser Playlist entfernen', mAlbum: 'Album anzeigen', mArtist: 'Künstler*in aufrufen',
       mSpeed: 'Geschwindigkeit ändern', mRadio: 'Zum Song-Radio', mInfo: 'Songinfos', mUnlike: 'Aus Lieblingssongs entfernen', mLike: 'Zu Lieblingssongs hinzufügen',
       mClassic: 'Klassische Ansicht', mSpotify: 'Spotify-Ansicht', mNewPlaylist: 'Neue Playlist erstellen',
       copyLink: 'Link kopieren', linkCopied: 'Link kopiert', shareNative: 'Teilen …', shareQr: 'QR-Code anzeigen', shareQrHide: 'QR-Code ausblenden', shareQrHint: 'Die andere Person scannt den Code mit der Handy-Kamera. Der Link öffnet die Jellyfin-Webseite im Browser (Anmeldung nötig).', shareQrFail: 'Der Link ist für einen QR-Code zu lang.',
@@ -157,7 +157,7 @@
       dlStart: 'ZIP herunterladen', dlStarted: 'Download gestartet',
       editTitle: 'Playlist bearbeiten', moveUp: 'Nach oben', moveDown: 'Nach unten', removeTrack: 'Entfernen', editFailed: 'Änderung fehlgeschlagen',
       addSongsTitle: 'Titel hinzufügen', searchSongsPh: 'Titel, Alben oder Künstler suchen', added: 'Hinzugefügt', addFailed: 'Hinzufügen fehlgeschlagen',
-      addToTitle: 'Zu Playlist hinzufügen', addedTo: 'Zu „{0}“ hinzugefügt', playlistCreated: 'Playlist „{0}“ erstellt', createFailed: 'Erstellen fehlgeschlagen',
+      addToTitle: 'Zu Playlist hinzufügen', addedTo: 'Zu „{0}“ hinzugefügt', wrongName: 'Falsche Aufnahmen', mWrong: 'Falsche Aufnahme merken', wrongHave: 'Steht schon in „{0}“', playlistCreated: 'Playlist „{0}“ erstellt', createFailed: 'Erstellen fehlgeschlagen',
       newPlaylistPh: 'Name der neuen Playlist', createPlaylist: 'Erstellen', toJam: 'Zur Jam-Warteschlange', jamAdded: 'Zur Jam hinzugefügt', jamFailed: 'Jam: Aktion fehlgeschlagen',
       queued: 'Zur Warteschlange hinzugefügt', playFailed: 'Wiedergabe konnte nicht gestartet werden', playNoStart: 'Der Titel startet nicht. Verbindung prüfen, App neu öffnen oder Diagnose im Menü ansehen.', left: 'Aus deiner Bibliothek entfernt', leaveFailed: 'Entfernen fehlgeschlagen',
       madePrivate: 'Playlist ist jetzt privat', madePublic: 'Playlist ist jetzt öffentlich', visibilityFailed: 'Umstellen fehlgeschlagen',
@@ -187,7 +187,7 @@
       mShare: 'Share', mAddHere: 'Add to this playlist', mEdit: 'Edit playlist', mDetails: 'Name and details', mCover: 'Change cover',
       mDelete: 'Delete playlist', mDownload: 'Download', mQueue: 'Add to queue', mAddOther: 'Add to another playlist',
       mInvite: 'Invite collaborators', mJam: 'Start a Jam', mLeave: 'Remove from my library', mPrivate: 'Make private', mPublic: 'Make public',
-      mAddToPlaylist: 'Add to playlist', mRemoveFromPlaylist: 'Remove from this playlist', mAlbum: 'Go to album', mArtist: 'Go to artist',
+      mAddToPlaylist: 'Add to playlist', mEditMeta: 'Edit metadata', mDeleteFile: 'Delete file', delFileTitle: 'Delete file?', delFileText: '"{0}" will be deleted from the server, including the file on disk. This cannot be undone.', delAlbumText: 'The album "{0}" and all its tracks will be deleted from the server, including the files on disk. This cannot be undone.', delFileDone: 'Deleted', delNoRight: 'No permission to delete this item', editSaved: 'Saved', editNoImg: 'Remove image', fArtists: 'Artists (separate with ;)', fAlbum: 'Album', fAlbumArtists: 'Album artists (separate with ;)', fIndex: 'Track number', fDisc: 'Disc number', fYear: 'Year', fGenres: 'Genres (separate with ;)', mRemoveFromPlaylist: 'Remove from this playlist', mAlbum: 'Go to album', mArtist: 'Go to artist',
       mSpeed: 'Change speed', mRadio: 'Go to song radio', mInfo: 'Song info', mUnlike: 'Remove from Liked Songs', mLike: 'Add to Liked Songs',
       mClassic: 'Classic view', mSpotify: 'Spotify view', mNewPlaylist: 'Create new playlist',
       copyLink: 'Copy link', linkCopied: 'Link copied', shareNative: 'Share …', shareQr: 'Show QR code', shareQrHide: 'Hide QR code', shareQrHint: 'The other person scans the code with their phone camera. The link opens the Jellyfin web page in the browser (sign-in required).', shareQrFail: 'The link is too long for a QR code.',
@@ -201,7 +201,7 @@
       dlStart: 'Download ZIP', dlStarted: 'Download started',
       editTitle: 'Edit playlist', moveUp: 'Move up', moveDown: 'Move down', removeTrack: 'Remove', editFailed: 'Change failed',
       addSongsTitle: 'Add tracks', searchSongsPh: 'Search tracks, albums or artists', added: 'Added', addFailed: 'Could not add',
-      addToTitle: 'Add to playlist', addedTo: 'Added to "{0}"', playlistCreated: 'Playlist "{0}" created', createFailed: 'Could not create',
+      addToTitle: 'Add to playlist', addedTo: 'Added to "{0}"', wrongName: 'Wrong recordings', mWrong: 'Mark as wrong recording', wrongHave: 'Already in "{0}"', playlistCreated: 'Playlist "{0}" created', createFailed: 'Could not create',
       newPlaylistPh: 'Name of the new playlist', createPlaylist: 'Create', toJam: 'Add to Jam queue', jamAdded: 'Added to the Jam', jamFailed: 'Jam: action failed',
       queued: 'Added to queue', playFailed: 'Playback could not be started', playNoStart: 'The track does not start. Check the connection, reopen the app or see Diagnostics in the menu.', left: 'Removed from your library', leaveFailed: 'Could not remove',
       madePrivate: 'Playlist is now private', madePublic: 'Playlist is now public', visibilityFailed: 'Could not change',
@@ -1092,7 +1092,9 @@
       g.onsuccess = function () {
         var rec = g.result;
         if (!rec) return;
-        if (collKey) rec.colls = (rec.colls || []).filter(function (c) { return c !== collKey; }); else rec.explicit = false;
+        if (collKey === true) rec.colls = [];   // ganz entfernen, auch wenn der Titel ueber Listen geladen wurde
+        else if (collKey) rec.colls = (rec.colls || []).filter(function (c) { return c !== collKey; });
+        if (!collKey || collKey === true) rec.explicit = false;
         if (!rec.colls.length && !rec.explicit) {
           ts.delete(rec.id); t.objectStore('blobs').delete(rec.id);
           if (rec.coverKey) dropCoverIfUnused(t, rec.coverKey, rec.id);
@@ -1133,8 +1135,8 @@
         };
       });
     }
-    function removeTrack(id) {
-      return run(['tracks', 'blobs', 'covers'], 'readwrite', function (t) { unlink(t, id, null); });
+    function removeTrack(id, all) {
+      return run(['tracks', 'blobs', 'covers'], 'readwrite', function (t) { unlink(t, id, all ? true : null); });
     }
     // Entfernt Titel aus einer Sammlung (z. B. wenn sie in der Playlist nicht mehr vorkommen).
     function dropFromColl(ids, key) {
@@ -2748,6 +2750,24 @@
     }, function () { list.textContent = ''; list.appendChild(el('div', 'ml-sheet-note', t('loadFailed'))); });
   }
 
+  /* ---------- Falsche Aufnahme: Titel mit richtigem Namen, aber anderem Ton, in die Playlist "Falsche Aufnahmen" legen (wird beim ersten Mal angelegt) ---------- */
+  function markWrongRecording(ids) {
+    ids = (ids || []).filter(function (id) { return ID_RE.test(id); });
+    if (!ids.length) return;
+    var name = t('wrongName');
+    loadPlaylists(true).then(function (all) {
+      var pl = all.filter(function (p) { return p.info.canEdit && p.item.Name === name; })[0];
+      if (!pl) return createPlaylistWith(name, ids).then(function () { toast(t('addedTo', name)); });
+      return spPlaylistIds(pl.id).then(function (have) {
+        var inList = {};
+        have.forEach(function (id) { inList[id] = 1; });
+        var add = ids.filter(function (id) { return !inList[nid(id)]; });
+        if (!add.length) { toast(t('wrongHave', name)); return null; }
+        return addToPlaylistIds(pl.id, add).then(function () { invalidatePlaylists(pl.id); toast(t('addedTo', name)); });
+      });
+    }).catch(function () { toast(t('addFailed')); });
+  }
+
   /* ---------- Titel zu einer Playlist (oder zu den Lieblingssongs) hinzufuegen (Suche) ---------- */
   // target: Playlist { id, item } oder { liked: true } fuer die Lieblingssongs (Herz).
   function openAddSongs(target, onChanged) {
@@ -3724,7 +3744,7 @@
     function cancel(key) { var j = jobs[key]; if (!j) return; j.cancelled = true; try { j.ctrl.abort(); } catch (e) { /* egal */ } emit(); }
     function cancelAll() { Object.keys(jobs).forEach(cancel); }
     function removeColl(key) { cancel(key); return D.removeColl(key).then(function () { return load(true); }); }
-    function removeTrack(id) { return D.removeTrack(id).then(function () { return load(true); }); }
+    function removeTrack(id, all) { return D.removeTrack(id, all).then(function () { return load(true); }); }
     function clearAll() { cancelAll(); return D.clearAll().then(function () { return load(true); }); }
 
     // Zustand einer Sammlung: none | busy | partial | done
@@ -3962,6 +3982,7 @@
         openShare({ url: linkFor(track.AlbumId || track.Id), title: track.Name, subtitle: firstArtist(track), cover: itemImg(track, 120), note: t('shareLinkTrack') });
       } },
       { icon: 'playlist_add', label: t('mAddToPlaylist'), run: function () { addToPlaylist([track.Id]); } },
+      { icon: 'info', label: t('mWrong'), run: function () { markWrongRecording([track.Id]); } },
       { icon: liked ? 'heart' : 'heart_o', label: liked ? t('mUnlike') : t('mLike'), run: function () { toggleLike(track, ctx, index); } },
       { hidden: !inPlaylist, icon: 'remove', label: t('mRemoveFromPlaylist'), run: function () {
         call('DELETE', 'Playlists/' + ctx.pl.id + '/Items', { entryIds: track.PlaylistItemId }).then(function () {
@@ -3978,7 +3999,11 @@
       { icon: 'moon', label: t('sleepMenu'), run: function () { Sleep.open(); } },
       { hidden: !ML.config().jamEnabled, icon: 'group', label: t('mJam'), run: function () { jamWith([track.Id]); } },
       { hidden: !isMusicCat(catMemo[nid(track.Id)]), icon: 'radio', label: t('mRadio'), run: function () { songRadio(track); } },
-      { icon: 'info', label: t('mInfo'), run: function () { openSongInfo(track); } }
+      { icon: 'info', label: t('mInfo'), run: function () { openSongInfo(track); } },
+      editEntry(track, function () { if (ctx.reload) ctx.reload(); }),
+      deleteFileEntry(track, function () {
+        if (ctx.tracks && ctx.tracks[index] === track && ctx.renderTracks) { ctx.tracks.splice(index, 1); ctx.renderTracks(); } else if (ctx.reload) ctx.reload();
+      })
     ]);
   }
 
@@ -4143,8 +4168,96 @@
 
   var meCache = null;
   function loadMe() {
-    if (!meCache) meCache = call('GET', 'Users/' + uid()).then(function (u) { return { id: u.Id, name: u.Name, admin: !!(u.Policy && u.Policy.IsAdministrator) }; }, function () { meCache = null; return { id: uid(), name: '' }; });
+    if (!meCache) meCache = call('GET', 'Users/' + uid()).then(function (u) {
+      var po = u.Policy || {};
+      meNow = { admin: !!po.IsAdministrator, del: !!(po.EnableContentDeletion || (po.EnableContentDeletionFromFolders || []).length) };
+      return { id: u.Id, name: u.Name, admin: meNow.admin };
+    }, function () { meCache = null; return { id: uid(), name: '' }; });
     return meCache;
+  }
+
+  /* ---------- Metadaten bearbeiten, Bild ersetzen, Datei loeschen (Titel, Alben, Kuenstler) ----------
+     Der Server erlaubt Metadaten und Bilder nur Administratoren (POST Items/{id}, Items/{id}/Images/...), das Loeschen jedem mit Loeschrecht
+     fuer den Eintrag (DELETE Items/{id} loescht auch die Datei). meNow: Rechte des Kontos, fuer Menues ohne Warten lesbar. */
+  var meNow = { admin: false, del: false };
+  function editEntry(item, done) {
+    loadMe();
+    return { hidden: !meNow.admin, icon: 'edit', label: t('mEditMeta'), run: function () { openItemEdit(item.Id, done); } };
+  }
+  function deleteFileEntry(item, done) {
+    return { hidden: !meNow.del, icon: 'del', danger: true, label: t('mDeleteFile'), run: function () {
+      call('GET', 'Items/' + item.Id, { userId: uid() }).then(function (it) {
+        if (!it || !it.CanDelete) { toast(t('delNoRight')); return null; }
+        return confirmSheet(t('delFileTitle'), t(it.Type === 'MusicAlbum' ? 'delAlbumText' : 'delFileText', it.Name), t('mDeleteFile'), true).then(function (yes) {
+          return yes ? call('DELETE', 'Items/' + item.Id).then(function () { toast(t('delFileDone')); if (done) done(); }) : null;
+        });
+      }).catch(function () { toast(t('deleteFailed')); });
+    } };
+  }
+  function openItemEdit(id, done) {
+    call('GET', 'Items/' + id, { userId: uid() }).then(function (it) {
+      var pending = null, noImg = false, F = {};
+      var ui = makeSheet({ cls: 'ml-tall ml-edit-item', title: t('mEditMeta') });
+      sheetTitle(ui, t('mEditMeta'), it.Name);
+      var file = el('input');
+      file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+      var preview = el('button', 'ml-cover-edit');
+      preview.type = 'button';
+      preview.setAttribute('aria-label', t('chooseImage'));
+      function show(url) {
+        preview.textContent = '';
+        preview.appendChild(cover(url, 'ml-cover-edit-img'));
+        preview.appendChild(el('span', 'ml-cover-edit-badge')).appendChild(icon('camera'));
+      }
+      show(itemImg(it, 300));
+      preview.addEventListener('click', function () { file.click(); });
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        if (f) imageFileToJpeg(f).then(function (r) { pending = r.base64; noImg = false; show(r.preview); }, function () { toast(t('coverFailed')); });
+      });
+      var noB = btn('ml-pill ml-flat ml-edit-noimg', t('editNoImg'));
+      noB.addEventListener('click', function () { pending = null; noImg = true; show(null); });
+      var noRow = el('div', 'ml-sheet-note ml-center');
+      noRow.appendChild(noB);
+      add(ui.sheet, file, preview, noRow);
+      function names(a) { return (a || []).map(function (x) { return x.Name; }).join('; '); }
+      function listOf(v) { return v.split(';').map(function (x) { return x.trim(); }).filter(Boolean); }
+      function field(key, label, value, num) {
+        var inp = el('input', 'ml-field ml-field-box');
+        inp.type = 'text'; inp.value = value == null ? '' : String(value); inp.dataset.f = key;
+        if (num) inp.inputMode = 'numeric';
+        add(ui.sheet, el('label', 'ml-label', label), inp);
+        F[key] = inp;
+      }
+      var song = it.Type === 'Audio', artist = it.Type === 'MusicArtist';
+      field('name', t('nameLabel'), it.Name);
+      if (song) { field('artists', t('fArtists'), names(it.ArtistItems)); field('album', t('fAlbum'), it.Album); }
+      if (!artist) field('albumArtists', t('fAlbumArtists'), names(it.AlbumArtists));
+      if (song) { field('index', t('fIndex'), it.IndexNumber, true); field('disc', t('fDisc'), it.ParentIndexNumber, true); }
+      if (!artist) { field('year', t('fYear'), it.ProductionYear, true); field('genres', t('fGenres'), (it.Genres || []).join('; ')); }
+      function num(inp) { var n = parseInt(inp.value, 10); return isNaN(n) ? null : n; }
+      var row = el('div', 'ml-sheet-actions');
+      var no = btn('ml-pill ml-flat', t('cancel')), save = btn('ml-pill ml-primary', t('save'));
+      no.addEventListener('click', function () { ui.close(); });
+      save.addEventListener('click', function () {
+        if (!F.name.value.trim()) { F.name.focus(); return; }
+        save.disabled = true;
+        // Der Server uebernimmt den ganzen Eintrag: deshalb wird der vollstaendig gelesene Eintrag mit den geaenderten Feldern zurueckgeschickt.
+        it.Name = F.name.value.trim();
+        if (F.artists) { it.Artists = listOf(F.artists.value); it.ArtistItems = it.Artists.map(function (n) { return { Name: n }; }); }
+        if (F.album) it.Album = F.album.value.trim();
+        if (F.albumArtists) { it.AlbumArtists = listOf(F.albumArtists.value).map(function (n) { return { Name: n }; }); it.AlbumArtist = it.AlbumArtists.length ? it.AlbumArtists[0].Name : ''; }
+        if (F.index) { it.IndexNumber = num(F.index); it.ParentIndexNumber = num(F.disc); }
+        if (F.year) { it.ProductionYear = num(F.year); it.Genres = listOf(F.genres.value); }
+        var c = ML.client();
+        call('POST', 'Items/' + id, null, it).then(function () {
+          if (pending) return c.ajax({ type: 'POST', url: c.getUrl('Items/' + id + '/Images/Primary'), data: pending, contentType: 'image/jpeg' });
+          return noImg ? call('DELETE', 'Items/' + id + '/Images/Primary') : null;
+        }).then(function () { toast(t('editSaved')); ui.close(); if (done) done(); }, function () { save.disabled = false; toast(t('editFailed')); });
+      });
+      add(row, no, save);
+      ui.sheet.appendChild(row);
+    }, function () { toast(t('loadFailed')); });
   }
 
   /* ---------- Playlist-Menue ---------- */
@@ -4188,7 +4301,9 @@
         { icon: 'playlist_add', label: t('mAddToPlaylist'), run: function () { addToPlaylist(ids); } },
         { icon: 'queue', label: t('mQueue'), run: function () { queueIds(ids); } },
         { hidden: !jamOk, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } },
-        { hidden: !albumArtistItems(ctx.album).length, icon: 'person', label: t('mArtist'), run: function () { openArtist(albumArtistItems(ctx.album)); } }
+        { hidden: !albumArtistItems(ctx.album).length, icon: 'person', label: t('mArtist'), run: function () { openArtist(albumArtistItems(ctx.album)); } },
+        editEntry(ctx.album, function () { if (ctx.reload) ctx.reload(); }),
+        deleteFileEntry(ctx.album, leaveDetail)
       ];
     } else {
       var isMix = ctx.kind === 'mix' && ctx.mix, isSmart = isMix && ctx.mix.kind === 'smart', dyn = isMix && (ctx.mix.kind === 'smart' || ctx.mix.kind === 'genre');
@@ -5912,7 +6027,8 @@
       { icon: 'share', label: t('mShare'), run: function () { openShare({ url: linkFor(a.Id), title: a.Name, subtitle: t('artist'), cover: itemImg(a, 120), note: '' }); } },
       { hidden: !ids.length, icon: 'queue', label: t('mQueue'), run: function () { queueIds(ids); } },
       { hidden: !ids.length, icon: 'playlist_add', label: t('mAddToPlaylist'), run: function () { addToPlaylist(ids); } },
-      { hidden: !ids.length || !ML.config().jamEnabled, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } }
+      { hidden: !ids.length || !ML.config().jamEnabled, icon: 'group', label: t('mJam'), run: function () { jamWith(ids); } },
+      editEntry(a, function () { if (ctx.reload) ctx.reload(); })
     ]);
   }
 
@@ -6283,6 +6399,22 @@
     return o;
   }
   function spIsMissing(d) { return !d.id && !d.x; }
+  // Steht ein Titel in der Quelle als vorhanden, liegt aber nicht mehr in der Playlist (von Hand entfernt, z. B. falsche Aufnahme), gilt er wieder als
+  // fehlend. Die entfernte Datei wird gemerkt (d.no) und beim Abgleich nicht erneut vorgeschlagen. ids: Titel der Playlist (null = unbekannt, nichts tun)
+  function spReconcile(doc, ids) {
+    if (!doc || !ids) return doc;
+    var cur = {};
+    ids.forEach(function (id) { cur[nid(id)] = 1; });
+    doc.tracks.forEach(function (d) {
+      if (!d.id || d.x || cur[nid(d.id)]) return;
+      d.no = (d.no || []).concat(nid(d.id)).slice(-5);
+      d.id = '';
+    });
+    return doc;
+  }
+  function spLoadDocNow(pid) {
+    return Promise.all([spLoadDoc(pid), spPlaylistIds(pid).then(null, function () { return null; })]).then(function (r) { return spReconcile(r[0], r[1]); });
+  }
 
   // Playlist-Link bei Spotify lesen -> { name, description, cover, tracks, total } oder null
   function spReadLink(spId) {
@@ -6371,7 +6503,7 @@
     spLinkSave(spToSrc(d), item.Id).then(function () {
       d.id = item.Id; delete d.x;
       return spPlaylistIds(pid).then(function (ids) {
-        var job = ids.indexOf(nid(item.Id)) >= 0 ? Promise.resolve() : addToPlaylistIds(pid, [item.Id]);
+        var job = ids.indexOf(nid(item.Id)) >= 0 ? Promise.resolve() : addToPlaylistIds(pid, [item.Id]).then(function () { return spPlace(pid, doc, [item.Id]); });
         return job.then(function () { return spSrcSave(pid, doc); });
       });
     }).then(function () {
@@ -6431,6 +6563,28 @@
     return page(0);
   }
 
+  // Neu hinzugefuegte Titel (stehen am Ende der Playlist) hinter ihren Vorgaenger laut Quelle setzen; alle anderen Titel bleiben, wo sie sind.
+  function spPlace(pid, doc, newIds) {
+    var add = {}, order = [];
+    newIds.forEach(function (id) { add[nid(id)] = 1; });
+    doc.tracks.forEach(function (d) { if (d.id && !d.x) order.push(nid(d.id)); });
+    return spPlaylistEntries(pid).then(function (cur) {
+      var moves = [];
+      order.forEach(function (id, k) {
+        if (!add[id]) return;
+        var from = -1, pre = -1, q, j;
+        for (j = cur.length - 1; j >= 0 && from < 0; j--) if (cur[j].id === id) from = j;
+        if (from < 0) return;
+        for (q = k - 1; q >= 0 && pre < 0; q--) for (j = 0; j < cur.length; j++) if (j !== from && cur[j].id === order[q]) { pre = j; break; }
+        var to = pre < 0 ? 0 : pre + 1;
+        if (to === from) return;
+        moves.push({ eid: cur[from].eid, to: to });
+        cur.splice(to, 0, cur.splice(from, 1)[0]);
+      });
+      return moves.reduce(function (p, mv) { return p.then(function () { return call('POST', 'Playlists/' + pid + '/Items/' + mv.eid + '/Move/' + mv.to); }); }, Promise.resolve());
+    }).catch(function () { /* Titel ist drin, nur der Platz stimmt nicht */ });
+  }
+
   /* Pruefen: neue Quell-Titel zusammenfuehren, fehlende Titel mit der (aktuellen) Bibliothek abgleichen.
      Ist die Spotify-Liste vollstaendig lesbar (hoechstens 100 Titel), werden zusaetzlich Titel erkannt, die es bei Spotify nicht mehr gibt,
      und die Reihenfolge verglichen. opts: { force (Bibliothek neu laden), extra (zusaetzliche Titel), alive, auto (nur Treffer suchen) }
@@ -6438,7 +6592,7 @@
   function spCheck(pid, opts) {
     opts = opts || {};
     var alive = opts.alive || function () { return true; };
-    return spLoadDoc(pid).then(function (doc) {
+    return spLoadDocNow(pid).then(function (doc) {
       if (!doc) throw new Error('no source');
       var link = doc.sp ? spReadLink(doc.sp).then(function (p) { return p || null; }, function () { return null; }) : Promise.resolve(null);
       return Promise.all([link, spLinks().then(null, function () { return {}; })]).then(function (lr) {
@@ -6466,11 +6620,13 @@
           doc.tracks.forEach(function (d) { if (d.id) taken[nid(d.id)] = 1; });
           if (out.linked) out.moves = spOrderPlan(entries, spOrderTarget(doc, out.linked)).length;
           if (!lib) return out;
-          var res = SPCore.matchAll(src, SPCore.buildLib(lib.items), links);
+          var no = {};
+          doc.tracks.forEach(function (d) { (d.no || []).forEach(function (id) { no[id] = 1; }); });
+          var res = SPCore.matchAll(src, SPCore.buildLib(lib.items.filter(function (it) { return !no[nid(it.Id)]; })), links);
           var more = lib.capped ? spSearchMissing(res, alive) : Promise.resolve();
           return more.then(function () {
             res.forEach(function (m, k) {
-              if (!m.hit || m.dup || taken[nid(m.hit.Id)]) return;
+              if (!m.hit || m.dup || taken[nid(m.hit.Id)] || no[nid(m.hit.Id)]) return;
               taken[nid(m.hit.Id)] = 1;
               out.found.push({ i: idx[k], m: m, have: !!cur[nid(m.hit.Id)] });
             });
@@ -6491,7 +6647,7 @@
     (ignored || []).forEach(function (i) { doc.tracks[i].x = 1; });
     doc.at = Date.now();
     delete doc.partial;
-    var job = ids.length ? addToPlaylistIds(pid, ids) : Promise.resolve();
+    var job = ids.length ? addToPlaylistIds(pid, ids).then(function () { return extra && extra.linked ? null : spPlace(pid, doc, ids); }) : Promise.resolve();
     var rm = extra && extra.removeIdx && extra.removeIdx.length ? extra.removeIdx.slice().sort(function (a, b) { return a - b; }) : [];
     if (rm.length) {
       job = job.then(function () { return spPlaylistEntries(pid); }).then(function (entries) {
@@ -6891,7 +7047,7 @@
   /* ---------- Unter den Titeln einer importierten Playlist: Abgleich, Aktualisieren, Automatik ---------- */
   function spSection(host, pid, ctx) {
     if (Net.offline()) return;
-    spLoadDoc(pid).then(function (doc) {
+    spLoadDocNow(pid).then(function (doc) {
       if (!doc || !host.isConnected) return;
       var miss = doc.tracks.filter(spIsMissing);
       var have = doc.tracks.filter(function (d) { return d.id; }).length;
@@ -8251,7 +8407,7 @@
         offActive: 'Läuft gerade',
         offColls: 'Geladene Listen', offSingles: 'Einzelne Titel', offNone: 'Noch nichts geladen. Tippe bei einer Playlist, einem Album oder einem Titel auf den Download-Knopf.',
         offClearAll: 'Alle Downloads löschen', offClearTitle: 'Alle Downloads löschen?', offClearText: 'Alle geladenen Titel werden von diesem Gerät gelöscht. Auf dem Server bleibt alles erhalten.',
-        offPartial: '{0} von {1} geladen', offMenu: 'Downloads und Speicher', offResume: 'Download fortsetzen', offViaList: 'Heruntergeladen (über eine Liste)', offViaListHint: 'Dieser Titel gehört zu einer geladenen Liste. Entferne die Liste, um ihn zu löschen.'
+        offPartial: '{0} von {1} geladen', offMenu: 'Downloads und Speicher', offResume: 'Download fortsetzen'
       },
       en: {
         offTitle: 'Downloads', offDownload: 'Download', offDownloading: 'Downloading … {0}/{1}', offCancel: 'Cancel download',
@@ -8268,7 +8424,7 @@
         offActive: 'In progress',
         offColls: 'Downloaded lists', offSingles: 'Single tracks', offNone: 'Nothing downloaded yet. Tap the download button on a playlist, an album or a track.',
         offClearAll: 'Delete all downloads', offClearTitle: 'Delete all downloads?', offClearText: 'All downloaded tracks will be deleted from this device. Everything stays on the server.',
-        offPartial: '{0} of {1} downloaded', offMenu: 'Downloads and storage', offResume: 'Resume download', offViaList: 'Downloaded (via a list)', offViaListHint: 'This track belongs to a downloaded list. Remove the list to delete it.'
+        offPartial: '{0} of {1} downloaded', offMenu: 'Downloads and storage', offResume: 'Resume download'
       }
     };
     Object.keys(extra).forEach(function (l) { Object.keys(extra[l]).forEach(function (k) { STR[l][k] = extra[l][k]; }); });
@@ -8341,14 +8497,13 @@
 
   // Eintrag im Titelmenü
   function offTrackEntry(track) {
-    var has = OFF.has(track.Id), single = OFF.isSingle(track.Id);
-    var viaList = has && !single;   // nur als Teil einer geladenen Liste auf dem Gerät
+    var has = OFF.has(track.Id);
     return {
       hidden: !OFF.available(), icon: has ? 'download_done' : 'download_circle',
-      label: viaList ? t('offViaList') : has ? t('offRemoveTrack') : t('offDownloadTrack'),
+      label: has ? t('offRemoveTrack') : t('offDownloadTrack'),
       run: function () {
-        if (viaList) { toast(t('offViaListHint')); return; }
-        if (has) OFF.removeTrack(track.Id).then(function () { toast(t('offRemoved')); });
+        // Auch Titel aus einer geladenen Liste lassen sich einzeln entfernen; die Liste gilt dann als teilweise geladen und laedt ihn nicht von selbst nach.
+        if (has) OFF.removeTrack(track.Id, true).then(function () { toast(t('offRemoved')); });
         else { toast(t('offStarted', 1)); OFF.downloadTrack(track); }
       }
     };
@@ -9359,8 +9514,7 @@
       var here = thisDeviceId();
       if (!here) return mySession();
       return sessionsOfUser().then(function (list) {
-        var mine = list.filter(function (x) { return x.DeviceId === here; });
-        mine = mine.filter(function (x) { return x.SupportsRemoteControl !== false; })[0] || mine[0] || null;
+        var mine = ML.pickSession(list.filter(function (x) { return x.DeviceId === here; }));
         if (mine && mine.NowPlayingItem) { if (P.auto) setTarget(null); autoOff = false; return mine; }
         var cur = P.auto ? list.filter(function (x) { return x.Id === P.targetId; })[0] : null;
         if (cur && cur.NowPlayingItem) { autoMiss = 0; P.targetName = deviceLabel(cur); return cur; }
@@ -10994,12 +11148,13 @@
         var ids = [], seen = {};
         items.forEach(function (i) { var k = nid(i.Id); if (!have[k] && !seen[k] && ids.length < 25) { seen[k] = 1; ids.push(i.Id); } });
         // Nur anhaengen, wenn sich inzwischen nichts geaendert hat (anderer Titel, andere Warteschlange, Autoplay aus).
-        if (!ids.length || !autoplayOn() || !P.item || nid(P.item.Id) !== nid(seed) || (P.queue || []).length !== q.length) return;
+        if (!ids.length || !autoplayOn() || !P.item || nid(P.item.Id) !== nid(seed) || (P.queue || []).length !== q.length) { ML.dlog('Autoplay: nichts angehaengt (' + ids.length + ' passende Titel)'); return; }
         return sessionCall(s, 'Playing', { playCommand: 'PlayLast', itemIds: ids.join(',') }).then(function () {
+          ML.dlog('Autoplay: ' + ids.length + ' Titel angehaengt');
           ids.forEach(function (id) { autoAdded[nid(id)] = 1; });
           kick();
         });
-      }).then(function () { autoBusy = false; }, function () { autoBusy = false; autoKey = ''; autoRetryAt = Date.now() + 15000; });
+      }).then(function () { autoBusy = false; }, function () { ML.dlog('Autoplay: Anhaengen fehlgeschlagen'); autoBusy = false; autoKey = ''; autoRetryAt = Date.now() + 15000; });
     }
 
     // Rueckfall fuer das Ende der Wiedergabe: Hat das Anhaengen oben nicht geklappt (Sitzung nicht erreichbar, Seite war im Hintergrund,
@@ -11046,7 +11201,7 @@
       if (!np) {
         gapSince = 0;
         ctxSig = ''; setCtx('');
-        if (P.item) { ML.dlog('Titel: Sitzung meldet nichts mehr (vorher ' + nid(P.item.Id) + ')'); P.item = null; P.full = null; P.lyrics = undefined; lastItemId = ''; heroCoverId = ''; extrasFor = ''; markPlaying(); }
+        if (P.item) { ML.dlog('Titel: Sitzung meldet nichts mehr (vorher ' + nid(P.item.Id) + ', Nr. ' + (queueIndex() + 1) + '/' + (P.queue || []).length + ', Autoplay ' + (autoplayOn() ? 'an' : 'aus') + ')'); P.item = null; P.full = null; P.lyrics = undefined; lastItemId = ''; heroCoverId = ''; extrasFor = ''; markPlaying(); }
         P.queue = [];
         paint();
         return;
@@ -11628,6 +11783,7 @@
 
   function onRoute(route) {
     latestRoute = route;
+    if (route && route.kind !== 'none' && !Net.offline()) loadMe();   // Rechte fuer Bearbeiten/Loeschen frueh kennen (Menues lesen sie ohne Warten)
     ML.whenConfig(function (cfg) {
       if (latestRoute !== route) return;   // inzwischen weitergewechselt
       // Fuer Bibliotheksseiten zuerst die Bibliotheken kennen, damit Hoerbuch-/Podcast-Bibliotheken richtig erkannt werden.

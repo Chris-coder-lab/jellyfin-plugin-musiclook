@@ -38,6 +38,13 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.7
+- **Downloads einzeln entfernen:** „Download entfernen“ im Drei-Punkte-Menü jedes geladenen Titels, auch bei Titeln aus einer geladenen Liste.
+- **Datei löschen** (Titel, Alben; mit Löschrecht) und **Metadaten bearbeiten** samt Bild ersetzen/entfernen (Titel, Alben, Künstler; nur Administratoren) direkt im Menü.
+- **Spotify-Abgleich:** Ein von Hand aus der Playlist entfernter Titel gilt wieder als fehlend und wird neu gesucht; die entfernte Datei wird nicht erneut vorgeschlagen.
+- **Importierte Playlists:** Nachgeladene Titel (Verknüpfen, Jetzt aktualisieren, Automatik) kommen an den Platz laut Spotify-Quelle statt ans Ende; andere Titel bleiben unverändert.
+- **Falsche Aufnahmen:** „Falsche Aufnahme merken“ im Titelmenü legt den Titel in die Playlist „Falsche Aufnahmen“ (Name stimmt, Ton nicht), damit du siehst, was noch ersetzt werden muss.
+
 ## Neu in 2.6.1
 - **Fernsteuerung nach Konto-Wechsel:** Meldet die Android-App Weboberfläche und Steuerkanal unter verschiedenen Geräte-Kennungen (nach Abmelden und Anmelden mit einem anderen Konto), findet das Plugin die Schwester-Sitzung und steuert darüber. Sonst spielt der Notweg. Saubere Abhilfe: Gerät im Dashboard entfernen, in der App abmelden, App beenden, neu anmelden.
 - Kein WebSocket-Neuaufbau mehr (Jellyfin 12 lehnt `api_key` ab); der Notweg benutzt `ApiKey`.
@@ -114,7 +121,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.6.1.0 && git push origin v2.6.1.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.7.0.0 && git push origin v2.7.0.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren
