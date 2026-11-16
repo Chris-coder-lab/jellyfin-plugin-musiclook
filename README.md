@@ -38,6 +38,9 @@
 
 Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugin ist nicht von Spotify, es greift nur auf deine eigenen Musikdateien zu und kopiert keine Spotify-Inhalte (beim Import wird nur die Titelliste mit deiner Bibliothek abgeglichen).
 
+## Neu in 2.7.1
+- **Sofort-Anzeige:** Der angetippte Titel erscheint sofort im Mini-Player, ohne auf die Meldung der Sitzung zu warten.
+
 ## Neu in 2.7
 - **Downloads einzeln entfernen:** „Download entfernen“ im Drei-Punkte-Menü jedes geladenen Titels, auch bei Titeln aus einer geladenen Liste.
 - **Datei löschen** (Titel, Alben; mit Löschrecht) und **Metadaten bearbeiten** samt Bild ersetzen/entfernen (Titel, Alben, Künstler; nur Administratoren) direkt im Menü.
@@ -121,7 +124,7 @@ Alles Spotify-Ähnliche ist **nachgebaut für den eigenen Server** – das Plugi
 
 ## Bauen und veröffentlichen
 1. Ordner als GitHub-Repository `jellyfin-plugin-musiclook` hochladen.
-2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.7.0.0 && git push origin v2.7.0.0`.
+2. Neuen Tag mit **vier** Zahlen setzen und pushen, z. B. `git tag v2.7.1.0 && git push origin v2.7.1.0`.
 3. Der Workflow baut die ZIP, legt das Release an und trägt die neue Version selbst in `manifest.json` ein (Bot-Commit auf `main`). Vor dem nächsten Tag deshalb `git pull` ausführen.
 
 ## Installieren

@@ -2292,7 +2292,7 @@
     opts = opts || {};
     if (!ids.length) return Promise.resolve();
     start = clamp(start || 0, 0, ids.length - 1);
-    var myGen = ++playGen;
+    var myGen = ++playGen, t0 = Date.now();
     ML.dlog('Abspielen: ' + ids.length + ' Titel ab Nr. ' + (start + 1) + ' (' + ids[start] + ')' + (opts.quiet ? ' [still]' : '') + (opts.positionTicks > 0 ? ' ab ' + Math.round(opts.positionTicks / 1e7) + ' s' : '') + (Net.offline() ? ' [offline]' : ''));
     // Ohne Verbindung spielen die geladenen Titel vom Gerät; mit Verbindung ersetzt die Serverwiedergabe die lokale.
     if (typeof OFFPLAY !== 'undefined') {
@@ -2307,6 +2307,7 @@
     playIntent = opts.ctx ? { key: String(opts.ctx), ids: (ids.length <= PLAY_CHUNK ? ids : ids.slice(start)).slice() } : null;
     if (opts.ctx && typeof Recent !== 'undefined') Recent.note(opts.ctx);
     if (typeof Player !== 'undefined' && Player && Player.releaseAuto) Player.releaseAuto(true);   // das beobachtete Geraet wird erst gestoppt, wenn der Titel hier laeuft
+    if (opts.track && !remoteNow() && typeof Player !== 'undefined' && Player && Player.preview) Player.preview(opts.track);   // sofort anzeigen, nicht erst auf die Sitzung warten
     var head, startIndex, rest = [];
     if (ids.length <= PLAY_CHUNK) { head = ids; startIndex = start; }
     else {
@@ -2317,7 +2318,7 @@
     // Bis der neue Titel in der Sitzung steht, zeigt der Server noch den alten: das darf den gemerkten Stand nicht ueberschreiben.
     try { Resume.expect(head[startIndex]); } catch (e) { /* Weiterhoeren ist nur eine Zugabe */ }
     function playNow(s) {
-      ML.dlog('Sitzung: ' + String(s.Id || '').slice(0, 6) + (s.remote ? ' (anderes Geraet)' : '') + ' Fernsteuerung=' + s.SupportsRemoteControl + (s.OwnId ? ' (eigene ' + String(s.OwnId).slice(0, 6) + ')' : '') + ' Kennung ' + ML.idTag(ML.client().deviceId()) + ' / ' + ML.idTag(s.DeviceId));
+      ML.dlog('Sitzung: ' + String(s.Id || '').slice(0, 6) + (s.remote ? ' (anderes Geraet)' : '') + ' Fernsteuerung=' + s.SupportsRemoteControl + (s.OwnId ? ' (eigene ' + String(s.OwnId).slice(0, 6) + ')' : '') + ' Kennung ' + ML.idTag(ML.client().deviceId()) + ' / ' + ML.idTag(s.DeviceId) + ' | Befehl nach ' + (Date.now() - t0) + ' ms');
       var first = { playCommand: 'PlayNow', itemIds: head.join(','), startIndex: startIndex };
       if (opts.positionTicks > 0) first.startPositionTicks = Math.round(opts.positionTicks);
       return sessionCall(s, 'Playing', first);
@@ -2354,7 +2355,7 @@
       if (!streamed && !opts.quiet && !remoteNow() && Player.verifyStarted) {
         var firstId = head[startIndex];
         Player.verifyStarted(firstId, 10000).then(function (ok) {
-          if (ok) { ML.dlog('Titel läuft: ' + firstId); try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } return null; }
+          if (ok) { ML.dlog('Titel läuft: ' + firstId + ' nach ' + (Date.now() - t0) + ' ms'); try { Player.finishRelease(true); } catch (e0) { /* nichts freizugeben */ } return null; }
           if (Net.offline() || myGen !== playGen) { try { Player.finishRelease(false); } catch (e0) { /* egal */ } return null; }
           // Der Web-Client hat den Befehl nicht ausgefuehrt (z. B. haengt noch der vorige, nicht abspielbare Titel): Sitzung stoppen, neu starten.
           ML.dlog('Titel startet nicht: ' + firstId + ' - Sitzung wird gestoppt, zweiter Start');
@@ -2366,6 +2367,7 @@
             if (ok2) { ML.dlog('Titel läuft nach zweitem Start: ' + firstId); return; }
             ML.dlog('Titel startet auch nach zweitem Start nicht: ' + firstId);
             try { Player.finishRelease(false); } catch (e0) { /* nichts freizugeben */ }
+            if (myGen === playGen) Player.dropPreview();
             if (!Net.offline() && myGen === playGen) {
               var ja = document.querySelector('audio.mediaPlayerAudio');
               ML.dlog('Audio-Element: ' + (ja ? (ja.paused ? 'pausiert' : 'spielt') + ', Fehler ' + (ja.error ? ja.error.code : '-') + ', Quelle ' + (ja.currentSrc ? 'ja' : 'leer') : 'fehlt'));
@@ -2380,7 +2382,7 @@
         });
       }
       return true;
-    }, function (e) { try { Resume.expect(''); Player.finishRelease(false); } catch (e2) { /* egal */ } ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
+    }, function (e) { try { Resume.expect(''); Player.finishRelease(false); if (myGen === playGen) Player.dropPreview(); } catch (e2) { /* egal */ } ML.dlog('Abspielen fehlgeschlagen: ' + (e && (e.message || e.status))); if (!opts.quiet) toast(t('playFailed')); return false; });
   }
   function remoteNow() { try { return !!(typeof Player !== 'undefined' && Player && Player.targetId && Player.targetId()); } catch (e) { return false; } }
 
@@ -4055,7 +4057,7 @@
     heart.addEventListener('click', function (e) { e.stopPropagation(); toggleLike(track, ctx, i, heart); });
     row.appendChild(heart);
     row.appendChild(iconBtn('more_v', t('more'), 'ml-track-more', function () { trackMenu(track, ctx, i); }));
-    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx) }); }
+    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx), track: track }); }
     row.addEventListener('click', play);
     row.addEventListener('dblclick', play);
     row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); play(); } });
@@ -4101,7 +4103,7 @@
     }
     var more = iconBtn('more_v', t('more'), 'ml-track-more', function () { trackMenu(track, ctx, i); });
     row.appendChild(more);
-    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx) }); }
+    function play() { playIds(idsOf(ctx.tracks), i, { ctx: ctxKeyOf(ctx), track: track }); }
     row.addEventListener('click', play);
     row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); play(); } });
     return row;
@@ -11191,6 +11193,11 @@
     function applySession(s) {
       var np = s && s.NowPlayingItem;
       P.polled = true;
+      if (pv) {
+        if (np && nid(np.Id) === pv.id) pv = null;
+        else if (Date.now() < pv.until) return;   // Sitzung zeigt noch den alten Titel: Vorab-Anzeige bleibt
+        else dropPreview();
+      }
       if (np) gapSince = 0;
       else if (P.item) {
         if (nearEnd(8) && autoEnd()) return;   // letzter Titel ist zu Ende und nichts folgt
@@ -11206,7 +11213,7 @@
         paint();
         return;
       }
-      var changed = !P.item || nid(P.item.Id) !== nid(np.Id);
+      var changed = !P.item || P.item.__pv || nid(P.item.Id) !== nid(np.Id);
       var isLocal = s.Id === 'local';
       if (!changed && P.item && P.item.__local !== np.__local) changed = true;
       var ps = s.PlayState || {};
@@ -11437,13 +11444,29 @@
         (function look() {
           var a = document.querySelector('audio.mediaPlayerAudio');
           var np = P.session && P.session.NowPlayingItem;
-          if (OFFPLAY.active() || (P.item && nid(P.item.Id) === nid(itemId)) || (np && nid(np.Id) === nid(itemId)) || (a && !a.paused && nid(a.currentSrc || a.src || '').indexOf(nid(itemId)) >= 0)) { resolve(true); return; }
+          if (OFFPLAY.active() || (P.item && !P.item.__pv && nid(P.item.Id) === nid(itemId)) || (np && nid(np.Id) === nid(itemId)) || (a && !a.paused && nid(a.currentSrc || a.src || '').indexOf(nid(itemId)) >= 0)) { resolve(true); return; }
           if (Date.now() > until) { resolve(false); return; }
           setTimeout(look, 600);
         })();
       });
     }
+    // Angetippter Titel: wird sofort angezeigt, die Sitzung bestaetigt ihn erst 3-5 s spaeter (bis dahin bleibt die Anzeige stehen).
+    var pv = null;
+    function preview(track) {
+      if (!track || !ID_RE.test(nid(track.Id)) || Net.offline() || P.targetId) return;
+      if (P.item && nid(P.item.Id) === nid(track.Id)) return;
+      pv = { id: nid(track.Id), until: Date.now() + 30000 };
+      P.item = Object.assign({}, track, { __pv: true });
+      P.full = null; P.paused = false; P.pos = 0; P.at = Date.now(); P.dur = (track.RunTimeTicks || 0) / 1e7; P.queue = [];
+      paint(); markPlaying();
+    }
+    function dropPreview() {
+      if (!pv) return;
+      pv = null;
+      if (P.item && P.item.__pv) { P.item = null; P.full = null; paint(); markPlaying(); }
+    }
     return {
+      preview: preview, dropPreview: dropPreview,
       syncLocal: syncLocal, dropLocal: dropLocal, adoptLocal: adoptLocal,
       start: start, stop: stop, kick: kick, heartbeat: heartbeat, releaseAuto: releaseAuto, finishRelease: finishRelease, toggle: toggle, diag: diagLines, verifyStarted: verifyStarted,
       contextId: function (forMark) {

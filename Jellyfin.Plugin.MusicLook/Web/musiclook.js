@@ -957,7 +957,7 @@
       if (t && t !== window && (t.src || t.href)) dlog('Laden fehlgeschlagen: ' + String(t.src || t.href).split('?')[0].split('/').slice(-2).join('/'));
       else dlog('Fehler: ' + (e && e.message) + ' @' + String((e && e.filename) || '').split('/').pop() + ':' + (e && e.lineno));
     }, true);
-    window.addEventListener('unhandledrejection', function (e) { dlog('Abgelehnt: ' + String((e && e.reason && (e.reason.message || e.reason.status)) || (e && e.reason) || '?')); });
+    window.addEventListener('unhandledrejection', function (e) { dlog('Abgelehnt: ' + String((e && e.reason && (e.reason.message || e.reason.status)) || (e && e.reason) || '?') + (e && e.reason && e.reason.url ? ' ' + String(e.reason.url).replace(/^https?:\/\/[^/]+/, '').replace(/[0-9a-f]{32}/g, 'id').slice(0, 90) : '')); });
     window.addEventListener('hashchange', function () { dlog('Adresse: ' + location.hash.slice(0, 80)); });
     document.addEventListener('visibilitychange', function () { dlog(document.hidden ? 'Seite im Hintergrund' : 'Seite wieder sichtbar'); });
     window.addEventListener('pagehide', function (e) { dlog('pagehide' + (e && e.persisted ? ' (Cache)' : '')); });
